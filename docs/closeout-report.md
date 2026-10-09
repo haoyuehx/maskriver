@@ -29,7 +29,25 @@ MySQL 阻塞明确发生于新 datadir 的 `mysqld --initialize-insecure`：OS e
 - 保存补丁后只移除 Main 自己新增的诊断文件，再由 Native 回收：cleanup.state=complete，worktreeRemoved=true、branchRemoved=true；git worktree list 仅剩主工作树，pi-subagents 分支列表为空。
 - Main HEAD 未变、无自动 apply/merge/push 诊断补丁，上游143个文件（含 .git）哈希不变。
 
-该预检 agentLaunched=false、modelCalled=false、merged=false。单 go-db 模型调用与子会话/端到端收尾尚未实测，不与 Main allocator 预检混淆。
+该预检 agentLaunched=false、modelCalled=false、merged=false，证明的是 allocator/隔离/补丁/回收链，不是模型调用。
+
+## 单 go-db 模型冒烟：已尝试，被模型配额阻断
+
+用户在批准“设计并执行单 go-db 冒烟”后，Main 于 `d295c664f9fa8e37aab7b13fe5fd11578d8f889b` 上实际执行了一次 workflow（runId `9195e6c5-1516-456d-8b1a-155a3c298729`）。
+
+已证实的部分：
+
+- Worktree 分配成功且隔离正确：`/home/haoyue/Project/worktrees/maskriver/pi-worktree-9195e6c5-1516-456d-8b1a-155a3c298729-s0-0`，branch `pi-subagents/go-db-smoke-9195e6c-a37e-s0-t0`，baseCommit 正是冻结提交。
+- 子会话在正确 cwd 启动，并加载了该 worktree 内的 AGENTS.md 项目上下文，说明隔离与上下文注入生效。
+- 子 Agent 收到正确任务与绑定输出路径。
+
+未完成的部分与其原因：
+
+- 模型调用被 provider 拒绝：`provider=openai-codex, model=gpt-5.6-sol, stopReason=error, errorMessage="Codex error: The usage limit has been reached"`，`usage.totalTokens=0`，耗时约 2.5s。属于账号/模型配额限制，不是隔离、配置或任务问题，也不是代码缺陷。
+- 因此没有产生测试、补丁或子会话输出：handoff 记录 `changed=false`、`filesChanged=0`，输出文件未生成。
+- 框架把 worktree 保留下来（`cleanup.state=partial`，原因 `retained child resume requires managed worktree cwd`），`resumeDisposition=resumable`。这是既有的保留行为，不是泄漏；worktree 内容为 clean（与基线一致，无改动）。
+
+结论：Native 隔离、基线对齐、上下文注入、补丁通道已获真实证据；**“模型在隔离 worktree 内完成测试、产出补丁并回收”仍未被端到端证明**，当前唯一阻塞是该模型的用量配额。Main 按规则不自动更换模型。
 
 ## Git 与启动门禁
 
@@ -37,3 +55,12 @@ MySQL 阻塞明确发生于新 datadir 的 `mysqld --initialize-insecure`：OS e
 首次暂存 whitespace 检查发现原版 MPL 第38行尾随空格；因 shell 命令链边界错误，第一次 commit/push 先于自动内容筛查执行。已立即对该提交全部35个文件补查，没有凭证/数据/会话文件；两个驱动 LICENSE 与 module cache 原文逐字节一致。后续使用 set -e，.gitattributes 仅对这一份未改写的上游许可禁用 whitespace 检查，不放宽源码检查、不重写公开 Git 历史。
 最终补记提交前再次检查完整 index 的路径/内容：不提交 .local 数据库/诊断记录、认证/环境配置、Agent 会话、worktree/patch artifacts。模式扫描只是防误提交辅助，不宣称完整安全审计。
 M1-B 组件计划与环境门禁已准备；完整四 Agent 正式启动仍等待单 go-db 模型冒烟通过及用户正式授权，不能把 registry/config 存在当成模型调用验证。
+
+## 待处理清单（M1-B 前）
+
+1. **模型配额**：`openai-codex/gpt-5.6-sol` 返回用量上限；需配额恢复，或由用户决定是否批准替代模型映射。Main 不静默换模型。
+2. **单 go-db 冒烟重试**：配额恢复后重跑，取得模型调用、测试、补丁、回收四项端到端证据（用户已要求暂缓）。
+3. **遗留 worktree/分支**：`pi-worktree-9195e6c5-…-s0-0` 与分支 `pi-subagents/go-db-smoke-9195e6c-a37e-s0-t0` 按框架保留以待 resume；若不再 resume，需用户确认后走受控 discard，不强制清理。
+4. **MySQL 真实集成**：M1-B 首轮可不阻塞，但仍是最终 M1 验收门禁。
+5. **正式 M1-B 授权与 lane board**：四条 cwd/ref/SHA/门禁需在冒烟通过后由 Main 记录。
+6. **只读独立审查**：go-reviewer 已配置但未授权运行，属可选的第五个角色，不属于四个 writer。

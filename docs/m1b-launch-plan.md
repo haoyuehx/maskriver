@@ -1,6 +1,8 @@
 # M1-B 启动方案与单 go-db 模型冒烟设计
 
-本轮只准备，不运行四个正式迁移 Agent。单 go-db 模型冒烟也仅设计/静态验证；Main 的 Native allocator 预检不伪装成模型调用。
+本轮只准备，不运行四个正式迁移 Agent。单 go-db 模型冒烟已实际尝试一次，被 `openai-codex/gpt-5.6-sol` 的用量配额阻断（`The usage limit has been reached`，0 tokens）；隔离、基线、上下文、补丁通道已验证，模型在隔离 worktree 内的端到端完成仍未证明。用户已要求暂缓重试（详见 closeout-report.md）。
+
+冒烟验收要求 reviewer（`review.required`），因此通过后还需一次受授权的只读审查作为该 lane 的独立门禁。
 
 ## A. 冻结前置条件
 
