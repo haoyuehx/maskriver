@@ -1,0 +1,2 @@
+# Preserve the dependency's verbatim MPL text, including its original whitespace.
+docs/licenses/go-sql-driver-mysql-LICENSE -whitespace
