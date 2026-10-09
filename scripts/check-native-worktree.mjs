@@ -1,5 +1,5 @@
 // Main-only preflight for the installed pi-subagents 0.76.1 native allocator.
-// No model/agent launch, no upstream access, no merge/push. Not a fallback runner.
+// No model/agent launch and no merge/push. Not a fallback runner.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';

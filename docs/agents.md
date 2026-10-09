@@ -1,6 +1,6 @@
 # Multi-Agent 配置
 
-已检测当前环境 `pi-subagents` 可用：enable、list(capabilities)、models 管理查询成功；没有安装扩展，没有启动任何迁移子 Agent。
+已检测当前环境 `pi-subagents` 可用：enable、list(capabilities)、models 管理查询成功；没有安装扩展，也没有启动任何开发子 Agent。
 
 | 角色 | 精确 provider/model | 配置 |
 |---|---|---|
@@ -28,10 +28,10 @@ Main 的启动默认不覆盖恢复会话中已记录的模型；恢复会话时
 
 - 四个 writer 仅可编辑各自所有权文件，工具 read/grep/find/ls/bash/edit/write；没有 subagent 工具。
 - reviewer 仅 read/grep/find/ls，无 bash/edit/write；报告在回复返回，测试由 Main 或 go-verify 执行。
-- 当前是 M1-A 收尾/M1-B 准备，不启动四个正式 Worker；接口冻结 m1a-v1。单 go-db 冒烟方案见 m1b-launch-plan.md，未执行不宣称模型调用通过。
-- 根目录 `/home/haoyue/Project/worktrees`，仅 Native；实际 worktree 位于其 `maskriver/` 子目录，一份 cwd 一个 writer，只用 MaskRiver Git，不在 dbmask 创建工作树。分配失败停止，不降级共享 cwd。
-- 上游统一绝对路径 `/home/haoyue/Project/dbmask`；各任务的精确参考见 parallel-tasks.md，禁止 worktree 内 `../dbmask`。
-- Agent frontmatter 和 AGENTS 是协作限制，非 OS 文件沙箱。未来运行应隔离生产凭证和网络，将上游挂载为只读。
+- 当前是 M1-B 启动准备，不启动四个正式 Worker；接口冻结 m1a-v1。隔离冒烟与启动方案见 m1b-launch-plan.md；未实际执行的项目不得宣称已通过。
+- 根目录 `/home/haoyue/Project/worktrees`，仅 Native；实际 worktree 位于其 `maskriver/` 子目录，一份 cwd 一个 writer，只用 MaskRiver Git。分配失败停止，不降级共享 cwd。
+- 各任务的规范依据均为本仓库文档（contracts.md / architecture.md / test-plan.md）；不参照其他项目的实现，也不依赖其源码目录。
+- Agent frontmatter 和 AGENTS 是协作限制，非 OS 文件沙箱。运行前应隔离生产凭证并限制网络。
 - Main 负责调度、共享契约、整合、最终验收与发布；模型不可用时停止报告，不静默降级。
 
 ## Native 配置与分阶段门禁
@@ -45,4 +45,4 @@ SQLite 是首轮真实门禁；MySQL 可未验证但不能冒充通过，最终 
 
 管理工具创建 go-db 时未按传入项目 scope/cwd 落盘，曾写入用户级 agents 目录。
 该新文件已立即移入本项目 `.pi/agents/`，用户级临时定义已移除；其余定义直接写入项目。
-没有因此启动 Agent 或修改 dbmask。最终全部项目配置位于 MaskRiver。
+没有因此启动 Agent，也没有修改任何其他项目。最终全部项目配置位于 MaskRiver。

@@ -1,6 +1,7 @@
 # Integration test reservation
 
-Current executable tests are colocated with `cmd/maskriver` and `internal/config`.
-This directory will hold cross-module SQLite/MySQL integration and synthetic fixtures.
-No Python tests have been copied or executed, and no database integration tests exist yet.
+Current executable tests are colocated with `cmd/maskriver`, `internal/config`, `internal/testenv` and `pkg/contracts`.
+This directory will hold cross-module SQLite/MySQL integration tests and synthetic fixtures.
+
+No integration test exists yet: the database adapters are not implemented.
 See [test plan](../docs/test-plan.md). Never use real personal data or committed credentials.

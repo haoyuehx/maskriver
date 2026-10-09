@@ -5,8 +5,10 @@ A streaming, reliable data masking engine written in Go.
 面向 **2026 开放原子大赛 · 开源基础软件与解决方案赛道** 的独立 Go 项目。
 这是参赛研发目标，不代表已报名、入选或获官方背书。
 
-> 当前为 M1-A 接口与环境准备：可编译 CLI、共享契约、安全测试、SQLite 合成环境与迁移规划。
-> **尚不能连接数据库、扫描、脱敏或验证数据。** Streaming/reliable 是设计目标，非已验证的性能承诺。
+MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具，面向企业开发、测试与数据共享场景：自动发现敏感数据，提供安全、确定性的脱敏策略，支持 SQLite 与 MySQL，并提供数据完整性校验。
+
+> 当前阶段：可编译 CLI、冻结的共享契约、安全测试与 SQLite 合成环境。
+> **尚不能连接数据库、扫描、脱敏或验证数据。** Streaming/reliable 是设计目标，不是已验证的性能承诺。
 
 ## 快速开始
 
@@ -24,16 +26,17 @@ go build -o bin/maskriver ./cmd/maskriver
 `mask` 默认 Dry Run；即使传入 `--apply`，当前版本仍拒绝执行。
 直接运行编译后的二进制可观察原始退出码；`go run` 会包装子进程退出状态。
 
-## 路线图
+## 产品路线图
 
-- 第一阶段：敏感字段扫描、规则检测、脱敏策略、确定性持久映射、SQLite/MySQL、默认 Dry Run、完整性验证、CLI。
-- 第二阶段：中国本土敏感数据与格式保持、高性能有界流式并发、故障恢复/断点续跑、性能基准及可视化。
-- 当前状态：[Feature Matrix](docs/feature-matrix.md)。两驱动已引入供测试准备；业务数据库适配器尚未实现。
+- M1：敏感字段扫描、规则检测、脱敏策略引擎、确定性映射、SQLite/MySQL、默认 Dry Run、完整性校验、CLI。
+- M2：中文敏感数据治理与格式约束、有界流式并发、故障恢复与断点续跑、性能基准与可视化。
+- 当前状态：[Feature Matrix](docs/feature-matrix.md)。驱动已为测试环境引入；业务数据库适配器尚未实现。
+- 完整阶段划分见 [Roadmap](docs/roadmap.md)。
 
 ## 文档
 
-- [架构与模块契约](docs/architecture.md)
-- [迁移计划](docs/migration-plan.md)
+- [架构设计](docs/architecture.md)
+- [Roadmap](docs/roadmap.md)
 - [测试计划](docs/test-plan.md)
 - [协作与安全边界](AGENTS.md)
 - [Agent 与模型配置](docs/agents.md)
@@ -43,15 +46,13 @@ go build -o bin/maskriver ./cmd/maskriver
 - [四 Worker 任务](docs/parallel-tasks.md)、[worktree 预检](docs/worktree-preflight.md)
 - [收尾报告](docs/closeout-report.md)、[M1-B 冒烟与启动方案](docs/m1b-launch-plan.md)
 
-## 技术来源与许可
+## 来源与许可
 
-参考 [sealandseacat/dbmask](https://github.com/sealandseacat/dbmask) 的扫描 → 脱敏 → 验证工作流、规则策略与安全回归用例。
-分析基线：`7d8789ef4883a423ddba2f8934b95997d1aaf099`。
-MaskRiver 是独立初始化的仓库，不是 GitHub Fork，不共享上游 Git 历史；不逐行翻译 Python 实现。
-当前 Go 骨架为新写代码，未复制上游配置、字典数据、密钥或测试数据。
-
-MaskRiver 采用 [MIT](LICENSE)。上游 Copyright (c) 2026 Siyuan Feng，完整 MIT 文本保留在
-[docs/upstream-LICENSE](docs/upstream-LICENSE)。以后改编代码/文档/测试时须保留来源、署名与许可；独立仓库不免除这些义务。
+MaskRiver 采用 [MIT](LICENSE)。本项目独立研发：不是任何其他仓库的 Fork，不共享其 Git 历史，未复制其源码、词典、配置或测试数据。
+早期设计文档曾把 MIT 许可的 Python 项目 `dbmask`（Copyright (c) 2026 Siyuan Feng）作为先例参考；为免误述该参考、并保留其许可声明，其完整 MIT 文本保留在
+[docs/licenses/dbmask-MIT-LICENSE.txt](docs/licenses/dbmask-MIT-LICENSE.txt)。
+第三方依赖保留各自许可，详见 [来源与许可说明](docs/attribution.md)。
+若将来确实改编或复用第三方代码、文档或测试，必须先在该说明中保留其版权、许可与来源标注。
 
 ## 安全提示
 

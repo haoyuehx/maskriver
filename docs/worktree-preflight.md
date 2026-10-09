@@ -6,7 +6,6 @@
 - dedicated root：`/home/haoyue/Project/worktrees`
 - Native 实际叶：`/home/haoyue/Project/worktrees/maskriver/pi-worktree-<runId>-<index>`
 - provider：**native**，不使用 auto/Worktrunk，也不使用仓库内 `.local/worktrees/`。
-- 上游绝对路径 `/home/haoyue/Project/dbmask` 只读；不能在上游创建任何 worktree/branch。
 
 每个 writer 必须明确 `worktree:true` / `isolation:"worktree"`，验证返回路径、独占性、branch/baseCommit 和 git-common-dir。分配/配置失败即停止，不允许 `worktree:false`、共享主工作树或外部 CLI 替代。
 
@@ -49,7 +48,7 @@ node scripts/check-native-worktree.mjs --allocate
 版本被固定为 0.76.1；扩展/host 升级应先重新审查 API，禁止静默使用旧脚本。
 
 无参数检查：真实 loadConfig、provider、实际路径解析、配置优先级、非法仓库内路径拒绝及 worktrunk 冲突拒绝。
-`--allocate`：要求 clean main；Native 新建唯一 worktree/branch，检查共同 Git 根；仅在新工作树生成一个 Main 诊断测试，运行 Go 测试，Native 捕获补丁并验证与工作树一致；保存证据后只移除这一个诊断文件，再 Native 回收已干净工作树。无 Agent、无模型请求、无上游访问、无 merge/push。
+`--allocate`：要求 clean main；Native 新建唯一 worktree/branch，检查共同 Git 根；仅在新工作树生成一个 Main 诊断测试，运行 Go 测试，Native 捕获补丁并验证与工作树一致；保存证据后只移除这一个诊断文件，再 Native 回收已干净工作树。无 Agent、无模型请求、无 merge/push。
 证据在主仓库已忽略 `.local/main-native-probe-*/`，包含 setup、tests、diffs/patch、cleanup。出错保留状态，不强制删除未知改动。
 
 这证明 allocator/隔离/补丁/清理链，不证明模型调用；单 go-db 模型冒烟方案见 [m1b-launch-plan.md](m1b-launch-plan.md)。本轮结果见 [closeout-report.md](closeout-report.md)。

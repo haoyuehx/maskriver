@@ -8,7 +8,7 @@
 - 实际配置加载/优先级/非法路径拒绝预检通过；这不把旧 Pi 会话视作已热更新，执行模型 smoke 前需 reload/重启。
 - 五个 Agent 被 list 正确发现；models 的项目映射与指定值一致，doctor 显示 async 可用、active runs=0。
 - 单 go-db 冒烟脚本 `.pi/workflows/go-db-smoke.js` 仅准备，静态 validate 返回 ok=true。静态工具提示 dynamic-spawn-count，未来 runtime 必须限制 maxSubagentSpawnsPerRun=1；校验不证明实际模型调用。
-- 四正式 Worker 未启动，没有完整代码迁移；Native 预检由 Main 直接调用现有 allocator，不使用外部 Agent/CLI fallback。
+- 四正式 Worker 未启动，没有业务代码开发；Native 预检由 Main 直接调用现有 allocator，不使用外部 Agent/CLI fallback。
 
 ## 验证与边界
 
@@ -27,7 +27,7 @@ MySQL 阻塞明确发生于新 datadir 的 `mysqld --initialize-insecure`：OS e
 - Native 捕获并验证一个文件、12 行新增的补丁；SHA-256 `ca4fa3429d0b204a93f1d55a879a23de0cb40432781ebe5a7f0b5d42b6a5bbf6`。
 - 本地证据 `.local/main-native-probe-1791546842314/`：setup.json、tests.log、diffs.json、patches/task-0-main-preflight.patch、cleanup.json。证据不公开上传。
 - 保存补丁后只移除 Main 自己新增的诊断文件，再由 Native 回收：cleanup.state=complete，worktreeRemoved=true、branchRemoved=true；git worktree list 仅剩主工作树，pi-subagents 分支列表为空。
-- Main HEAD 未变、无自动 apply/merge/push 诊断补丁，上游143个文件（含 .git）哈希不变。
+- Main HEAD 未变、无自动 apply/merge/push 诊断补丁；仓库未引入外部仓库文件。
 
 该预检 agentLaunched=false、modelCalled=false、merged=false，证明的是 allocator/隔离/补丁/回收链，不是模型调用。
 
@@ -52,7 +52,7 @@ MySQL 阻塞明确发生于新 datadir 的 `mysqld --initialize-insecure`：OS e
 ## Git 与启动门禁
 
 共享基线提交 `816252a` 已推送 origin/main；后续仅补记本报告与许可证空白豁免，最终 local/remote HEAD 以交付命令对照为准（避免在提交内引用自身 SHA）。
-首次暂存 whitespace 检查发现原版 MPL 第38行尾随空格；因 shell 命令链边界错误，第一次 commit/push 先于自动内容筛查执行。已立即对该提交全部35个文件补查，没有凭证/数据/会话文件；两个驱动 LICENSE 与 module cache 原文逐字节一致。后续使用 set -e，.gitattributes 仅对这一份未改写的上游许可禁用 whitespace 检查，不放宽源码检查、不重写公开 Git 历史。
+首次暂存 whitespace 检查发现 MPL 许可原文第38行尾随空格；因 shell 命令链边界错误，第一次 commit/push 先于自动内容筛查执行。已立即对该提交全部35个文件补查，没有凭证/数据/会话文件；两个驱动 LICENSE 与 module cache 原文逐字节一致。后续使用 `set -e`，`.gitattributes` 仅对这一份未改写的第三方许可禁用 whitespace 检查，不放宽源码检查、不重写公开 Git 历史。
 最终补记提交前再次检查完整 index 的路径/内容：不提交 .local 数据库/诊断记录、认证/环境配置、Agent 会话、worktree/patch artifacts。模式扫描只是防误提交辅助，不宣称完整安全审计。
 M1-B 组件计划与环境门禁已准备；完整四 Agent 正式启动仍等待单 go-db 模型冒烟通过及用户正式授权，不能把 registry/config 存在当成模型调用验证。
 

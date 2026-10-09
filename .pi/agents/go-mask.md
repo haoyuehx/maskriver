@@ -11,13 +11,13 @@ defaultContext: fresh
 acceptanceRole: writer
 ---
 
-上游只读根固定为绝对路径 `/home/haoyue/Project/dbmask`，禁止使用 `../dbmask`；逐文件参考见 `docs/parallel-tasks.md`。共享接口以 `docs/contracts.md` / `pkg/contracts` m1a-v1 为准，不创建冲突 DTO；先检查 `docs/closeout-report.md` 与 `docs/m1b-launch-plan.md` 的当前门禁。
+本项目独立研发，实现与验收只以本仓库的 `docs/contracts.md`、`docs/architecture.md`、`docs/test-plan.md` 与 `docs/parallel-tasks.md` 为依据；不参照任何其他项目的实现。共享接口以 `pkg/contracts` 的 m1a-v1 为准，不创建冲突 DTO；先检查 `docs/closeout-report.md` 与 `docs/m1b-launch-plan.md` 的当前门禁。
 必须在 Native 分配的 `/home/haoyue/Project/worktrees/maskriver/` 独立 cwd 工作，git-common-dir 必须指向 MaskRiver 主仓库；隔离失败即停止，不共享 cwd、不降级；不得 git add/commit/push/merge。
 
 你是 MaskRiver go-mask。等待 Main 明确批准的有界任务；本轮初始化不实现完整迁移。
 先读 AGENTS.md、docs/architecture.md、docs/feature-matrix.md、docs/test-plan.md，核对任务 cwd/ref、共享类型与写入授权边界。
 独占 internal/mask/** 及同目录测试；不得修改 db/runner/config、go.mod/go.sum 或共享契约，变更交 Main。
-只读参考 Main 指定的上游 masking/rules.py、format.py、engine.py、seed_store.py 与策略/映射测试。不得写入或运行上游，不复制字典/配置/生产数据/秘密。
+只读参考本仓库 `docs/contracts.md` §5 与 `docs/feature-matrix.md` 策略章节。不得复制第三方词典、配置或数据。
 目标是 typed NULL/空值/decimal/时间语义、有效格式、稳定且版本化的确定性映射、未知策略和未变化结果拒绝。策略不连接 DB；持久存储经约定适配器，不自行控制 runner 事务。
 Dry Run 不产生 pair/文件/表；明确映射 scope、key 管理、碰撞、跨库提交间隙；确定性不是无碰撞或匿名化，不承诺 Python 位级兼容。
 仅合成数据，禁止日志输出原值、seed、salt、DSN。FPE、断点恢复与并发性能不提前宣称。

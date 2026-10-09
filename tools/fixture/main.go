@@ -62,6 +62,6 @@ func run() error {
 	if err = testenv.Seed(ctx, db, "sqlite"); err != nil {
 		return err
 	}
-	fmt.Println("Created .local/m1a-synthetic.db: 25 invented people, 25 composite-key links, 1 keyless row; no upstream data copied.")
+	fmt.Println("Created .local/m1a-synthetic.db: 25 invented people, 25 composite-key links, 1 keyless row; all values are synthetic.")
 	return nil
 }

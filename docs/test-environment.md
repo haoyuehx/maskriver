@@ -21,7 +21,7 @@ go run ./tools/fixture
 - keyless：1 行，只用于无主键限制测试。
 - 已测 count、NULL/empty、decimal/blob、FK 拒绝、事务 rollback、取消；SQLite 额外验证 mode=ro 写入失败与不存在文件不创建。
 
-没有复制上游数据、配置或敏感样本；本阶段不提供真实身份证、电话号码等可能碰撞真实身份的 fixture。
+没有复制任何第三方数据、配置或敏感样本；本阶段不提供真实身份证、电话号码等可能碰撞真实身份的 fixture。
 
 ## MySQL — 准备脚本完成，实例受阻，未通过验收
 

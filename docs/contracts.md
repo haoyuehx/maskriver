@@ -108,7 +108,7 @@ M1-B 先验证纯策略与内存原子映射；持久映射、key 轮换迁移�
 
 ## 6. scan / preview / apply / validate
 
-签名由 `Workflow` 定义；底层 opened Reader、Detector、策略 registry、映射及可选 Writer 由 Main 构造器注入，组件不自行管理上游或配置文件。
+签名由 `Workflow` 定义；底层已打开的 Reader、Detector、策略 registry、映射及可选 Writer 由 Main 构造器注入，组件不自行管理全局配置、连接生命周期或运行授权。
 
 | 操作 | 输入 | 输出/安全不变量 |
 |---|---|---|

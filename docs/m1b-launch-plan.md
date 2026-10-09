@@ -1,6 +1,6 @@
 # M1-B 启动方案与单 go-db 模型冒烟设计
 
-本轮只准备，不运行四个正式迁移 Agent。单 go-db 模型冒烟已实际尝试一次，被 `openai-codex/gpt-5.6-sol` 的用量配额阻断（`The usage limit has been reached`，0 tokens）；隔离、基线、上下文、补丁通道已验证，模型在隔离 worktree 内的端到端完成仍未证明。用户已要求暂缓重试（详见 closeout-report.md）。
+本轮只准备，不运行四个正式开发 Agent。单 go-db 隔离冒烟已实际尝试一次，被 `openai-codex/gpt-5.6-sol` 的用量配额阻断（`The usage limit has been reached`，0 tokens）；隔离、基线、上下文、补丁通道已验证，模型在隔离 worktree 内的端到端完成仍未证明。用户已要求暂缓重试（详见 closeout-report.md）。
 
 冒烟验收要求 reviewer（`review.required`），因此通过后还需一次受授权的只读审查作为该 lane 的独立门禁。
 
@@ -13,7 +13,7 @@
 
 ## B. 单 go-db 冒烟（无自动执行）
 
-已准备 `.pi/workflows/go-db-smoke.js`，仅一条 lane，模型 openai-codex/gpt-5.6-sol。启动需用户明确同意该小范围 smoke；不等于正式 migration go-db 任务。
+已准备 `.pi/workflows/go-db-smoke.js`，仅一条 lane，模型 openai-codex/gpt-5.6-sol。启动需用户明确同意该小范围 smoke；不等于正式的 go-db 组件开发任务。
 
 Main 的候选调用（本轮不执行）：
 
@@ -30,13 +30,13 @@ subagent({
 })
 ```
 
-启动前记录 main 的完整 SHA；运行期间不改变 main 基线。只允许创建 `internal/db/worktree_smoke_test.go`，断言冻结 APIRevision 并用新建 SQLite 合成临时库做极小测试；不写生产 adapter、不接 MySQL、不复制上游。
+启动前记录 main 的完整 SHA；运行期间不改变 main 基线。只允许创建 `internal/db/worktree_smoke_test.go`，断言冻结 APIRevision 并用新建 SQLite 合成临时库做极小测试；不写生产 adapter、不接 MySQL、不改动其他模块。
 
 ### 逐项验收与证据
 
 1. **隔离**：runtime 返回 native provider、唯一 worktree 路径、branch/baseCommit；worker 自检 cwd/common-dir；Main 再查 git worktree list。cwd 必须在 `/home/haoyue/Project/worktrees/maskriver/`，common-dir 必须是 MaskRiver `.git`，不能等于 main 或另一 lane。
 2. **模型调用**：runtime 终态、实际模型身份校验、token/usage 和 transcript 证明 openai-codex/gpt-5.6-sol 实际执行；不能以 worker 自述或 registry 存在冒充。凭证/会话不上传公开仓库。
-3. **最小写入**：只增加一个 smoke test，无上游/共享文件修改，无 git commit/push；Main 检查父仓库 HEAD/状态和 upstream hash。
+3. **最小写入**：只增加一个 smoke test，无共享文件修改，无 git commit/push；Main 检查父仓库 HEAD 与工作区状态。
 4. **真实测试**：worker gofmt/test/vet；runtime gate 再执行 go test/vet。SQLite 必须实测，MySQL SKIP 明示。模型/API/门禁失败则停止保留证据，不启动后续四 worker。
 5. **补丁保存**：读取实际 handoff manifest/outputReference，保存 diff 路径、base SHA、changed-files、patch SHA-256、测试日志；Main 校验 `git apply --check` 针对正确基线以及只包含 smoke 文件。捕获器可 staging，但子 Agent 不得 staging/commit。
 6. **不合并**：主分支不 git apply/merge/cherry-pick 冒烟补丁，不 push 诊断测试；补丁与会话仅保留已忽略的本地 artifact。
