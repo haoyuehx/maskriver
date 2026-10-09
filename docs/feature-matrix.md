@@ -10,6 +10,16 @@
 
 上游路径相对 `src/dbmask/`（测试路径另标）；M1 为第一阶段，M2 为第二阶段。
 
+## M1-A 准备状态（不是业务功能）
+
+| 项目 | 状态 | 证据/边界 |
+|---|---|---|
+| 共享 DTO/接口 m1a-v1 | 已实现 | pkg/contracts + 契约测试；不是完整引擎 |
+| 两个 database/sql 驱动版本锁定 | 已实现 | go.mod/go.sum、database-drivers.md |
+| SQLite 合成环境 | 已实现 | internal/testenv、tools/fixture；业务 adapter 未实现 |
+| MySQL 隔离环境 | 部分实现 | 脚本与 opt-in 测试已准备；初始化 Permission denied，未通过 |
+| 四 Worker 任务/隔离预检 | 部分实现 | 外部 Native 根已批准；实际 Main 预检证据见 closeout-report.md，单 go-db 模型冒烟仅设计，四 Worker 未启动 |
+
 ## 基础与连接
 
 | 功能 | 上游依据 / 实际范围 | 状态 | 目标/Owner |
@@ -97,7 +107,7 @@
 | PK 对齐逐值完整性验证 | validation/masking_completeness.py | 计划中 | M1/go-verify；增加双向键差异 |
 | 无键 heuristic、限量覆盖、strict 模式 | 同上 + result.py；部分路径仍 PASS，见 architecture | 计划中 | M1/go-verify；Go 严格门禁更保守 |
 | 测试数据忽略、采样上限、形状遮蔽 | validation/testdata.py, config.py | 计划中 | M1/go-verify；忽略策略须显式审核 |
-| 稳定公共库 API | runner.py 可调用；上游稳定 API 仍属路线图 | 未实现 | pkg 暂保留，待契约稳定 |
+| 稳定公共库 API | runner.py 可调用；上游稳定 API 仍属路线图 | 未实现 | pkg/contracts 仅内部协作开发冻结，非稳定外部 SDK |
 | Python 包/PyPI/Colab demo | 上游发布与演示路径 | 未实现 | 不移植语言专用渠道，后续 Go release/demo |
 
 ## 新增研发目标（非上游已交付能力）

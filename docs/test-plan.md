@@ -1,17 +1,30 @@
 # Test plan
 
+## M1-A 已存在的共享契约/环境测试
+
+- `pkg/contracts/contracts_test.go`：typed Value/NULL/精度/时间、fmt/JSON 遮蔽、无效 Plan 拒绝、报告 strict gate。
+- `internal/testenv/fixture_test.go`：SQLite 真实驱动与合成数据、约束/事务/只读/取消；MySQL 单独 opt-in，未启动时明确 SKIP。
+- `tools/fixture` 已生成 `.local/m1a-synthetic.db`，拒绝覆盖已有文件。
+- `python3 scripts/test_mysql.py` 尝试专用禁网 MySQL，但 mysqld 初始化 Permission denied；不是通过。
+- 冻结验收见 m1a-freeze-report.md；没有在上游运行测试。
+
 ## 已存在的骨架测试
 
 `cmd/maskriver/main_test.go` 覆盖 help/version、预留命令返回非零、默认 Dry Run、--apply 仍拒绝、显式 false、未知参数及多余位置参数。
 `internal/config/config_test.go` 覆盖零值只读与显式 Apply 意图。
-这些不是数据库行为测试；其他 internal 包目前只有注释，不表示功能测试通过。
+上述 CLI/config 用例不是数据库行为测试；db/detect/mask/verify/history 仍为占位包。新增 internal/testenv 仅做合成环境 driver smoke，不表示业务适配器功能通过。
 
 ```sh
-gofmt -w cmd internal
+gofmt -w cmd internal pkg tools
 go test ./...
 go vet ./...
 go build -o bin/maskriver ./cmd/maskriver
 ```
+
+## 分阶段门禁
+
+M1-B 首轮真实 SQLite 必须通过，MySQL 暂可 UNVERIFIED/SKIP；保留 MySQL 实现与真实集成用例，不把 Mock 当作 MySQL 通过。最终 M1 发布/功能验收前必须补齐真实 MySQL 集成。
+Native worktree 的 Main 预检不等于模型调用成功；单 go-db 模型冒烟按 m1b-launch-plan.md 单独验收，不自动合并。
 
 ## 第一阶段验收矩阵（尚未实现）
 

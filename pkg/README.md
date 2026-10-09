@@ -1,3 +1,5 @@
-# Public API reservation
+# Shared development contracts
 
-No stable exported library API yet. Keep implementation in `internal/` until contracts and compatibility policy are reviewed. Do not add speculative public interfaces in the scaffold.
+`pkg/contracts` is exclusively Main-owned. APIRevision `m1a-v1` freezes component DTOs and interfaces for the next worker wave; it is not a stable external SDK guarantee.
+See [contracts](../docs/contracts.md) and [parallel tasks](../docs/parallel-tasks.md).
+Workers must import these types, not duplicate or modify them. Implementations remain in `internal/`.

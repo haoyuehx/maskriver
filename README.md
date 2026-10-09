@@ -5,12 +5,12 @@ A streaming, reliable data masking engine written in Go.
 面向 **2026 开放原子大赛 · 开源基础软件与解决方案赛道** 的独立 Go 项目。
 这是参赛研发目标，不代表已报名、入选或获官方背书。
 
-> 当前为项目初始化骨架：可编译 CLI、基础安全测试、架构和迁移规划。
+> 当前为 M1-A 接口与环境准备：可编译 CLI、共享契约、安全测试、SQLite 合成环境与迁移规划。
 > **尚不能连接数据库、扫描、脱敏或验证数据。** Streaming/reliable 是设计目标，非已验证的性能承诺。
 
 ## 快速开始
 
-需要 Go 1.26.3 或更新版本；当前仅使用标准库。
+需要 Go 1.26.3 或更新版本；测试环境已锁定 SQLite/MySQL 驱动，CLI 仍为不执行数据库操作的骨架。
 
 ```sh
 go run ./cmd/maskriver --help
@@ -28,7 +28,7 @@ go build -o bin/maskriver ./cmd/maskriver
 
 - 第一阶段：敏感字段扫描、规则检测、脱敏策略、确定性持久映射、SQLite/MySQL、默认 Dry Run、完整性验证、CLI。
 - 第二阶段：中国本土敏感数据与格式保持、高性能有界流式并发、故障恢复/断点续跑、性能基准及可视化。
-- 当前状态：[Feature Matrix](docs/feature-matrix.md)。无数据库驱动和运行时外部依赖。
+- 当前状态：[Feature Matrix](docs/feature-matrix.md)。两驱动已引入供测试准备；业务数据库适配器尚未实现。
 
 ## 文档
 
@@ -38,6 +38,10 @@ go build -o bin/maskriver ./cmd/maskriver
 - [协作与安全边界](AGENTS.md)
 - [Agent 与模型配置](docs/agents.md)
 - [初始化验收记录](docs/bootstrap-validation.md)
+- [M1-A 共享契约](docs/contracts.md)、[冻结报告](docs/m1a-freeze-report.md)
+- [驱动决策](docs/database-drivers.md)、[测试环境](docs/test-environment.md)
+- [四 Worker 任务](docs/parallel-tasks.md)、[worktree 预检](docs/worktree-preflight.md)
+- [收尾报告](docs/closeout-report.md)、[M1-B 冒烟与启动方案](docs/m1b-launch-plan.md)
 
 ## 技术来源与许可
 

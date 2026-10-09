@@ -28,10 +28,18 @@ Main 的启动默认不覆盖恢复会话中已记录的模型；恢复会话时
 
 - 四个 writer 仅可编辑各自所有权文件，工具 read/grep/find/ls/bash/edit/write；没有 subagent 工具。
 - reviewer 仅 read/grep/find/ls，无 bash/edit/write；报告在回复返回，测试由 Main 或 go-verify 执行。
-- 本轮不启动。后续先完成 migration-plan 的前置清单、冻结接口，再授权有界任务。
-- 并发 writer 各用 MaskRiver 内 `.local/worktrees/` 的独立工作树，一份 cwd 一个 writer；不在 dbmask 创建工作树。
+- 当前是 M1-A 收尾/M1-B 准备，不启动四个正式 Worker；接口冻结 m1a-v1。单 go-db 冒烟方案见 m1b-launch-plan.md，未执行不宣称模型调用通过。
+- 根目录 `/home/haoyue/Project/worktrees`，仅 Native；实际 worktree 位于其 `maskriver/` 子目录，一份 cwd 一个 writer，只用 MaskRiver Git，不在 dbmask 创建工作树。分配失败停止，不降级共享 cwd。
+- 上游统一绝对路径 `/home/haoyue/Project/dbmask`；各任务的精确参考见 parallel-tasks.md，禁止 worktree 内 `../dbmask`。
 - Agent frontmatter 和 AGENTS 是协作限制，非 OS 文件沙箱。未来运行应隔离生产凭证和网络，将上游挂载为只读。
 - Main 负责调度、共享契约、整合、最终验收与发布；模型不可用时停止报告，不静默降级。
+
+## Native 配置与分阶段门禁
+
+已安装 pi-subagents 0.76.1 的 allocator 配置读取用户级 `~/.pi/agent/extensions/subagent/config.json`，不从项目 settings 的同名键读取。
+Main 将已知配置设为 worktreeProvider=native、worktreeBaseDir=/home/haoyue/Project/worktrees；这两个设置对该 Pi 用户生效，不含凭证。优先级和复核命令见 worktree-preflight.md。
+扩展初始化时 loadConfig，已有会话需 reload/重启后再执行模型冒烟；磁盘文件更新不等于旧会话热更新。
+SQLite 是首轮真实门禁；MySQL 可未验证但不能冒充通过，最终 M1 仍要求真实集成。
 
 ## 初始化路径异常记录
 

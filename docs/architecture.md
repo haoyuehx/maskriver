@@ -1,8 +1,8 @@
-# Architecture — 设计草案
+# Architecture — M1-A 契约基线与后续设计
 
 ## 状态与原则
 
-当前仅 CLI/安全选项骨架，以下架构均待实现；不能据此宣称支持数据库或流式处理。
+当前已有 CLI 骨架、Main-owned `pkg/contracts` 与合成驱动测试环境；业务适配器/引擎仍待实现。正式冻结接口以 [contracts.md](contracts.md) 为准，不可据此宣称已支持数据库业务或流式处理。
 Go 独立实现参考 dbmask 的行为契约，不复刻 SQLAlchemy/Click/Python 对象模型。
 第一阶段优先可验证的串行有界分页；第二阶段才引入高性能并发与恢复。
 
@@ -15,9 +15,9 @@ cmd/maskriver → config → runner
                          └─ history: reviewed decisions / audit (no raw values)
 ```
 
-`pkg/` 暂不发布 API；不提前引入框架或数据库驱动。
+`pkg/contracts` 是 Main 独占的开发协作 API，不承诺稳定外部 SDK；已锁定两个数据库驱动供合成环境及后续 adapter，未引入 CLI 框架。
 
-## 预定模块契约（语义草案，不是已存在的接口）
+## 模块设计意图（具体冻结签名/依赖以 contracts.md 为准）
 
 | 模块/Owner | 输入 → 输出 | 边界与错误语义 |
 |---|---|---|
@@ -30,8 +30,8 @@ cmd/maskriver → config → runner
 | history/Main | 位置/类型/版本、审核身份 → 可复用 Decision | pending 不自动批准；过期/类型变化失效；UNKNOWN 不缓存为安全 |
 | runner/Main | options、上述依赖 → RunReport | 唯一写入协调者；关闭资源、取消、错误传播；不得把部分完成汇总为成功 |
 
-共享概念由 Main 在迁移前审定：ColumnRef = database/schema/table/column；Value 必须区分 NULL、空串、bytes、decimal 与时间；Decision 必须携带抽样口径；Plan 固定配置/策略版本、扫描覆盖和允许修改列；Report 不保存明文键。
-依赖保持单向：runner 组合各模块，detect 可消费 db metadata 和 history；history 不反向依赖 detect 实现；基础 DTO 的归属在接口评审时确定，避免循环导入。
+共享概念已放入 Main 独占 `pkg/contracts`：ColumnRef/Value/Decision/Plan/Report、数据库/算法/验证接口；详见 contracts.md。
+依赖保持单向：runner 组合各模块；各组件只依赖 contracts，不横向导入具体实现。detect 接收 Main 注入的 metadata/sample/reviewed Decision，不自己查 db/history。
 
 ## 第一阶段执行模型
 
@@ -43,7 +43,7 @@ cmd/maskriver → config → runner
 6. 批次事务保证该批原子性，非整库原子性；返回已提交批次范围，失败不能称全局回滚。暂不自动重试已部分提交的全表，防止二次脱敏。
 7. 验证使用脱敏前源快照及固定 Plan，不重新扫描脱敏结果推断应验证哪些列。
 
-SQLite/MySQL 各自实现 `database/sql` 适配。候选驱动为 modernc.org/sqlite 与 github.com/go-sql-driver/mysql，**尚未引入或定版**；评估纯 Go/CGO、许可、decimal、时区、collation、标识符及事务语义后决定。
+SQLite/MySQL 计划各自实现 `database/sql` 适配。驱动已固定 modernc.org/sqlite v1.60.1（BSD-3-Clause）与 github.com/go-sql-driver/mysql v1.10.1（MPL-2.0），选择与约束见 database-drivers.md。仅 SQLite 合成 driver smoke 实际通过；MySQL 隔离实例权限受阻，业务 adapters 均未实现。
 
 ## 确定性与完整性
 
