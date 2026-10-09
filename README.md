@@ -36,6 +36,8 @@ go build -o bin/maskriver ./cmd/maskriver
 - [迁移计划](docs/migration-plan.md)
 - [测试计划](docs/test-plan.md)
 - [协作与安全边界](AGENTS.md)
+- [Agent 与模型配置](docs/agents.md)
+- [初始化验收记录](docs/bootstrap-validation.md)
 
 ## 技术来源与许可
 
