@@ -26,6 +26,29 @@ go build -o bin/maskriver ./cmd/maskriver
 `mask` 默认 Dry Run；即使传入 `--apply`，当前版本仍拒绝执行。
 直接运行编译后的二进制可观察原始退出码；`go run` 会包装子进程退出状态。
 
+## 四人跨平台协作
+
+Windows、Linux、macOS 成员各自 clone，认领 Issue，创建个人功能分支并提交 PR；不需要 Pi、原 Linux 工作树或个人 Agent 会话。模块责任及共享变更协调见 [AGENTS.md](AGENTS.md)。
+
+例如认领 #6 后，在自己的克隆中运行（PowerShell/终端均可）：
+
+```sh
+git switch -c feat/detect-rules
+git rev-parse HEAD
+# 仅在 internal/detect 中新增或修改 Go 源码及测试
+gofmt -w internal/detect
+go test -count=1 ./internal/detect
+go test ./...
+go vet ./...
+git add internal/detect
+git commit -m "feat: implement detection rules"
+git push -u origin feat/detect-rules
+```
+
+无仓库推送权限时推到个人 fork，再向本仓库创建 PR。#6 是纯内存任务，不依赖数据库或 MySQL。共享契约保持 `m1a-v1`；文档及其他模块修改先协调。
+
+PR 合并前完成代码评审与 Ubuntu/Windows CI（测试、格式、vet；Ubuntu 另跑 race 和隔离 MySQL fixture）。MySQL 缺环境明确 SKIP/UNVERIFIED，fixture 通过不等于业务适配器通过。详见 [测试环境](docs/test-environment.md)。
+
 ## 产品路线图
 
 - M1：敏感字段扫描、规则检测、脱敏策略引擎、确定性映射、SQLite/MySQL、默认 Dry Run、完整性校验、CLI。
@@ -39,12 +62,12 @@ go build -o bin/maskriver ./cmd/maskriver
 - [Roadmap](docs/roadmap.md)
 - [测试计划](docs/test-plan.md)
 - [协作与安全边界](AGENTS.md)
-- [Agent 与模型配置](docs/agents.md)
+- [成员职责与可选 AI 工具](docs/agents.md)
 - [初始化验收记录](docs/bootstrap-validation.md)
 - [M1-A 共享契约](docs/contracts.md)、[冻结报告](docs/m1a-freeze-report.md)
 - [驱动决策](docs/database-drivers.md)、[测试环境](docs/test-environment.md)
-- [四 Worker 任务](docs/parallel-tasks.md)、[worktree 预检](docs/worktree-preflight.md)
-- [收尾报告](docs/closeout-report.md)、[M1-B 冒烟与启动方案](docs/m1b-launch-plan.md)
+- [四模块开发任务](docs/parallel-tasks.md)、[可选工作树](docs/worktree-preflight.md)
+- [历史收尾报告](docs/closeout-report.md)、[M1-B 跨平台 PR 流程](docs/m1b-launch-plan.md)
 
 ## 来源与许可
 

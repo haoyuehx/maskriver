@@ -16,7 +16,12 @@ import (
 )
 
 func sqliteURL(path string, readOnly bool) string {
-	u := url.URL{Scheme: "file", Path: path}
+	// file URIs use forward slashes and /C:/... for Windows drive paths.
+	uriPath := filepath.ToSlash(path)
+	if filepath.VolumeName(path) != "" && !strings.HasPrefix(uriPath, "/") {
+		uriPath = "/" + uriPath
+	}
+	u := url.URL{Scheme: "file", Path: uriPath}
 	q := u.Query()
 	if readOnly {
 		q.Set("mode", "ro")
@@ -27,6 +32,33 @@ func sqliteURL(path string, readOnly bool) string {
 	u.RawQuery = q.Encode()
 	return u.String()
 }
+func TestSQLiteURL(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "synthetic space #?.db")
+	for _, readOnly := range []bool{false, true} {
+		u, err := url.Parse(sqliteURL(path, readOnly))
+		if err != nil {
+			t.Fatal("invalid fixture URI")
+		}
+		if u.Scheme != "file" || u.Host != "" || u.Fragment != "" || strings.Contains(u.Path, `\`) {
+			t.Fatal("fixture URI is not portable")
+		}
+		want := filepath.ToSlash(path)
+		if !strings.HasPrefix(want, "/") {
+			want = "/" + want
+		}
+		if u.Path != want {
+			t.Fatal("fixture URI changed path")
+		}
+		mode := "rwc"
+		if readOnly {
+			mode = "ro"
+		}
+		if u.Query().Get("mode") != mode || u.Query().Get("_pragma") != "foreign_keys(1)" {
+			t.Fatal("fixture URI lost safety options")
+		}
+	}
+}
+
 func TestSQLiteFixture(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -68,7 +100,7 @@ func TestSQLiteFixture(t *testing.T) {
 func TestMySQLFixture(t *testing.T) {
 	socket := os.Getenv("MASKRIVER_TEST_MYSQL_SOCKET")
 	if socket == "" {
-		t.Skip("isolated MySQL not started; run python3 scripts/test_mysql.py")
+		t.Skip("isolated MySQL not started; use Ubuntu CI or scripts/test_mysql_container.py (Linux)")
 	}
 	socket, err := filepath.Abs(socket)
 	if err != nil {

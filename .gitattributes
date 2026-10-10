@@ -1,2 +1,7 @@
+# gofmt emits LF on every platform; avoid Windows checkout CRLF false positives.
+*.go text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+
 # Preserve the dependency's verbatim MPL text, including its original whitespace.
 docs/licenses/go-sql-driver-mysql-LICENSE -whitespace

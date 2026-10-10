@@ -10,7 +10,8 @@ MaskRiver 的测试目标：证明组件在真实数据库上按其契约工作�
 - `cmd/maskriver/main_test.go`：help/version、占位命令返回非零、默认 Dry Run、`--apply` 仍拒绝、未知参数与多余位置参数。
 - `internal/config/config_test.go`：零值只读与显式 Apply 意图。
 - `tools/fixture`：生成 `.local/m1a-synthetic.db`，拒绝覆盖已有文件。
-- `scripts/test_mysql.py`：尝试启动专用禁网 MySQL；当前因宿主机权限失败，**不是通过**。
+- `scripts/test_mysql.py`：可选 POSIX 本机专用禁网 MySQL；历史宿主机权限失败不是通用开发阻塞。
+- `scripts/test_mysql_container.py`：Linux 开发机或 Ubuntu CI 中运行一次性禁网 MySQL 容器，复用私有 socket guard；仅测 fixture，不是适配器验收。
 
 `internal/{db,detect,mask,verify,history}` 目前仍为占位包。上述 CLI/config/testenv 用例**不是**业务功能测试。
 
@@ -21,12 +22,20 @@ go vet ./...
 go build -o bin/maskriver ./cmd/maskriver
 ```
 
+## 跨平台与统一 CI
+
+四位成员各自 clone、认领 Issue、开分支并提交 PR。纯内存模块可在 Windows/Linux/macOS 独立测试；不依赖本地 Agent smoke。共享测试环境变动由 Main 协调。
+
+`.github/workflows/ci.yml` 在 Ubuntu/Windows 执行格式检查、`go test -count=1 -v ./...` 和 `go vet ./...`，Ubuntu 另跑 race。MySQL fixture 单独在 Ubuntu 一次性禁网容器执行，失败即 CI 失败；普通测试无 MySQL 时明确 SKIP。macOS 可以本地测试，当前 CI 不宣称覆盖 macOS。
+
+PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，统一 CI 与评审完成后才能合并。本机不支持 race 可由 Ubuntu CI 补齐，不能记成本机通过。#5/#10 后续须将真实适配器全部用例接入隔离实例；fixture 绿灯不关闭 #10。
+
 ## 分阶段门禁
 
 - M1-B 首轮：真实 SQLite 必须通过；MySQL 可 `UNVERIFIED/SKIP`，但实现与真实集成用例必须交付。
 - 最终 M1 验收：真实 MySQL 集成必须通过。缺此项不得宣称 M1 完成。
 - Mock、编译通过、跳过都不能替代真实数据库验证。
-- 隔离工作树冒烟只证明工作树生命周期；它不是模型调用或业务功能的证据。
+- 工作树/模型诊断是可选工具检查，不是开发启动或业务验收门禁。
 
 ## 第一阶段验收矩阵（尚未实现）
 

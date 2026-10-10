@@ -1,24 +1,22 @@
 # M1-B 四个独立组件任务
 
-拓扑：multi-seam，四个无重叠的可测试边界；组件完成后由 **Main 串行集成**，不是四个 Agent 同时改 runner。
+四位成员各自认领无重叠的模块责任，组件通过 PR 后由 Main 协调集成，不同时改 runner；不强制使用 Agent。
 
-共同基线：`pkg/contracts` 的 `APIRevision=m1a-v1` 与 Main 冻结提交后的干净 `refs/heads/main`。启动前记录其完整 SHA，分配后逐个检查 baseCommit 相同，禁止过程中随 main 移动而混用基线。
+共同契约：`pkg/contracts` 的 `APIRevision=m1a-v1`。从 main 创建个人功能分支，PR 记录完整基线 SHA；更新分支后重新测试，不要求四人同机或同时启动。
 规范依据：本仓库的 [contracts.md](contracts.md)（接口与安全不变量）、[architecture.md](architecture.md)（执行模型）、[test-plan.md](test-plan.md)（验收用例）、[roadmap.md](roadmap.md)（里程碑范围）。
 本项目不再以复现或翻译其他项目的内部实现为验收目标；所有实现与验收以本仓库的接口、需求与测试为依据。
 
 ## 共同启动 / 交付条件
 
-1. 按 [worktree-preflight.md](worktree-preflight.md) 使用根 `/home/haoyue/Project/worktrees`、provider=native，配置 reload 后先通过一次小范围隔离冒烟，再取得用户正式 M1-B 授权。
-2. Main 记录 `lane | repo | cwd(绝对路径) | branch/baseRef | 文件范围 | 测试门禁 | handoff`。cwd 必须是 Native 实际返回的 `/home/haoyue/Project/worktrees/maskriver/pi-worktree-<runId>-<index>`，不同 writer 不得相同。四份正式工作树仍未创建。
-3. 每个 writer 只写自己的独立工作树。共享代码 `pkg/**`、`go.mod/go.sum`、`internal/config|runner|history|testenv`、`tools`、`scripts`、`docs`、`.pi` 均只读。
-4. 依赖已统一锁定；Worker 不 `go get`、不安装扩展、不改全局设置。不得递归委派、不得 `git add/commit/push`，也不得操作 GitHub；Main 收集 diff 与测试报告后统一提交。
-5. 所有任务必须对改动文件执行 `gofmt`，并运行 `go test ./...` 与 `go vet ./...`；是否新增 `-race` 见各 lane。报告 MySQL `SKIP` **不算**通过。输出改动文件、接口断言、实际命令/退出码、风险与阻塞。
-6. 各 owner 只接受冻结契约；遇签名不足、所有权冲突、类型不可无损表示、权限不足或基础设施失败，停止并交 Main 决策，不自行扩大类型、换模型或降级执行方式。
+1. 在 Windows、Linux 或 macOS 的独立 Git 克隆中认领 Issue，创建个人功能分支；无需 #2/#3/#4、旧工作树或任何 Agent 配置。
+2. 在 Issue/PR 记录负责人、分支、基线 SHA、文件范围、测试与交付条件，不记录个人绝对路径或会话。
+3. 仅模块负责人及授权协作者写对应模块。共享代码 `pkg/**`、`go.mod/go.sum`、`internal/config|runner|history|testenv`、`tools`、`scripts`、`docs`、`.github`、`.pi` 由 Main 协调；文档验收更新需协调或另行授权。
+4. 成员可以提交、推送功能分支及创建 PR，不自行修改冻结契约或依赖。Pi/Subagent 为可选工具，调用仍需授权。
+5. 改动 Go 文件执行 `gofmt`、`go test ./...`、`go vet ./...`；并发模块增加 `-race`，本机不支持时由 Ubuntu CI 补齐。MySQL `SKIP` **不算**通过。报告改动文件、接口断言、命令/退出码、风险与阻塞。
+6. 签名不足、所有权冲突、类型不可无损表示等交 Main 协调；环境失败只阻塞受影响测试，保留未验证状态，不放宽安全约束。
 7. 首轮真实 SQLite 集成是硬门禁；MySQL 缺实例允许记录 `UNVERIFIED/SKIP`，不阻塞其他组件，但保留其实现与真实集成用例。Mock 不能替代真实 MySQL，最终 M1 验收仍被该项阻塞。
 
-## Lane go-db — 数据库访问组件
-
-模型：`openai-codex/gpt-5.6-sol`。
+## 模块 go-db — 数据库访问组件（#5）
 
 **规范依据**：contracts.md §3（`DatabaseOptions`、`TableSchema`、`Reader`/`Writer`/`WriteTx`、分页与事务语义）；architecture.md 第一阶段执行模型第 5–6 条；roadmap.md M1 数据库接入范围。
 
@@ -42,11 +40,9 @@
 
 **完成标准**：首轮 SQLite 契约测试全部真实执行；Reader 与 Writer 分离；不 import `internal/detect|mask|verify`；有失败路径证据。MySQL 可按未验证状态交接本轮，但不得声称完整支持。
 
-**停止条件**：Native 隔离失败；SQLite 真实测试失败；需要扩展共享 DTO 或驱动；无法确定类型/元数据是否无损；超出文件范围。
+**停止条件**：SQLite 真实测试失败；需要扩展共享 DTO 或驱动；无法确定类型/元数据是否无损；超出文件范围。
 
-## Lane go-detect — 敏感信息检测组件
-
-模型：`openai-codex/gpt-5.6-sol`。
+## 模块 go-detect — 敏感信息检测组件（#6）
 
 **规范依据**：contracts.md §4（`Detector`、`DetectionRequest`、`Decision`、三态、`Evidence`、`IssueCode`）；feature-matrix.md 检测范围（12 类 M1 规则及其明确局限）；test-plan.md 检测用例。
 
@@ -65,9 +61,7 @@
 
 **停止条件**：需要新增契约字段或第三方依赖；词典来源与许可未决；规则冲突无法在现有契约内表达；要求外发样本。
 
-## Lane go-mask — 脱敏策略引擎
-
-模型：`openai-codex/gpt-6.1-sol`。
+## 模块 go-mask — 脱敏策略引擎（#7）
 
 **规范依据**：contracts.md §5（`Strategy`、`StrategyRef`、`MaskContext`、`MappingKey`、`MappingReader`/`MappingWriter`）；feature-matrix.md 策略目录与「首批切片」约定；test-plan.md 策略与确定性用例。
 
@@ -87,9 +81,7 @@
 
 **停止条件**：需要 schema/数据库/公共类型变更；要求一次性实现全部策略；输出约束无法满足且需产品决策。
 
-## Lane go-verify — 验证系统
-
-模型：`openai-codex/gpt-5.6-sol`。
+## 模块 go-verify — 验证系统（#8）
 
 **规范依据**：contracts.md §7（`Validator`、`ValidationReport`、`Coverage`、`Issue`、`Passed(strict)`）；architecture.md「确定性与完整性」；test-plan.md 验证用例。
 
@@ -109,6 +101,6 @@
 
 ## 最终交接门禁
 
-Main 收齐四个终态交接后执行串行集成：先审文件所有权、接口变动与敏感内容，再用 `git apply --check` 按基线应用补丁，随后执行完整 `go test ./...`、`go vet ./...` 与 SQLite 端到端。
-独立只读 `go-reviewer` 审查需单独授权，当前不启动。
+Main 通过模块 PR 协调集成：审查文件范围、接口变化与敏感内容，统一 CI 跑 `go test ./...`、`go vet ./...`、race 和适用的真实数据库测试；集成后补齐 SQLite 端到端。
+独立评审允许人类成员或获授权的 AI Reviewer，维护者审核后合并，不自动合并。
 M1-B 组件完成不等于 M1 完成：runner/config/history/CLI 集成、持久映射、其余策略与端到端安全门属于后续阶段。

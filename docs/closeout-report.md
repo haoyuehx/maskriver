@@ -1,5 +1,7 @@
 # M1-A 收尾与 M1-B 启动准备报告
 
+> 历史设备记录，不是当前协作规范。下文的 Native 路径、模型门禁及待处理清单已退出项目开发前置条件；当前以 [AGENTS.md](../AGENTS.md) 和 [跨平台 PR 流程](m1b-launch-plan.md) 为准。旧资源由设备持有人处理，此次改造未删除工作树，也未把旧 smoke 标记为通过。
+
 ## 已完成的准备
 
 - 共享接口 `pkg/contracts` APIRevision=m1a-v1 与 docs/contracts.md 对照一致；未更改冻结接口语义，四 Worker 的入口/依赖/独占文件范围仍一致。

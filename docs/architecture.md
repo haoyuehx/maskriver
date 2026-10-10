@@ -43,7 +43,7 @@ cmd/maskriver → config → runner
 6. 批次事务保证该批原子性，非整库原子性；返回已提交批次范围，失败不能称全局回滚。暂不自动重试已部分提交的全表，防止二次脱敏。
 7. 验证使用脱敏前源快照及固定 Plan，不重新扫描脱敏结果推断应验证哪些列。
 
-SQLite/MySQL 计划各自实现 `database/sql` 适配。驱动已固定 modernc.org/sqlite v1.60.1（BSD-3-Clause）与 github.com/go-sql-driver/mysql v1.10.1（MPL-2.0），选择与约束见 database-drivers.md。仅 SQLite 合成 driver smoke 实际通过；MySQL 隔离实例权限受阻，业务 adapters 均未实现。
+SQLite/MySQL 计划各自实现 `database/sql` 适配。驱动已固定 modernc.org/sqlite v1.60.1（BSD-3-Clause）与 github.com/go-sql-driver/mysql v1.10.1（MPL-2.0），选择与约束见 database-drivers.md。SQLite 与隔离 MySQL 8.0.46 合成 driver fixture 已实际通过（见 test-environment.md 的 PR CI 证据）；业务 adapters 均未实现，fixture 不能替代真实适配器验收。
 
 ## 确定性与完整性
 

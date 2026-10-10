@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Format check
+        shell: pwsh
+        run: |
+          $files = @(git ls-files '*.go')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $unformatted = @(& gofmt -l $files)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($unformatted.Count -gt 0) {
+            $unformatted | Write-Output
+            throw 'Run gofmt on the listed files'
+          }
+      - name: Tests (MySQL explicitly skips without isolated harness)
+        run: go test -count=1 -v ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Race
+        if: runner.os == 'Linux'
+        run: go test -race -count=1 ./...
+
+  mysql-fixture:
+    name: Isolated MySQL fixture (not adapter acceptance)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Real MySQL fixture in disposable network-disabled container
+        run: python3 scripts/test_mysql_container.py
+      - name: Scope of evidence
+        if: always()
+        shell: bash
+        run: |
+          echo 'This job tests only the synthetic fixture against MySQL 8.0.46.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Business adapter / end-to-end MySQL integration remains UNVERIFIED until #5/#10 deliver and execute it.' >> "$GITHUB_STEP_SUMMARY"
