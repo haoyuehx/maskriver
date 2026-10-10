@@ -1,5 +1,7 @@
 # 初始化验收记录
 
+> 历史单机证据，不是开发前置条件；当前成员使用独立克隆与 PR，见 [AGENTS.md](../AGENTS.md)。
+
 ## 环境与仓库
 
 - 初始 cwd：`/home/haoyue/Project`。

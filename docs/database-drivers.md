@@ -1,6 +1,6 @@
 # 数据库驱动决策 — M1-A
 
-Main 统一修改 go.mod/go.sum；Worker 禁止 go get/升级/替换依赖。运行环境 Go 1.26.3 linux/amd64。
+Main 协调 go.mod/go.sum；模块成员不得自行升级/替换依赖。Go 版本见 go.mod；支持 Windows/Linux/macOS 独立克隆，最初验证环境为 Go 1.26.3 linux/amd64。
 
 | DB | 固定 Go module/version | License | 选择依据 |
 |---|---|---|---|
@@ -29,12 +29,12 @@ MPL-2.0 是文件级义务：修改/分发受覆盖驱动文件须保留 MPL 与
 
 ## MySQL 使用约束
 
-- 目标测试服务器：本机可用 mysqld 8.0.46-0ubuntu0.24.04.4；MySQL 8.4/其他版本尚未验证，MariaDB 不算自动支持。
+- CI/容器目标：MySQL 8.0.46，实际镜像 digest 和服务器版本由测试输出记录；MySQL 8.4/其他版本尚未验证，MariaDB 不算自动支持。
 - 用 mysql.Config + NewConnector，避免字符串拼接 DSN；禁止日志输出 Config/DSN/原始 driver error。
 - 禁止 multiStatements、allowAllFiles、LOCAL INFILE；启用连接/读写超时，配合 context 取消。网络连接必须明确 TLS 策略，禁止生产凭证。
 - fixture 仅专用 Unix socket、全新私有数据目录、skip-networking/mysqlx=OFF；不接系统 socket、不读用户凭证、不管理系统服务。
 - schema 用 utf8mb4_bin；Decimal 以字符串精确保留，零日期不能当合法 Date，DATETIME 与 TIMESTAMP 不混同。Keyset 用数据库的键排序规则。
 - 单批 InnoDB 事务；DDL 会隐式提交，因此 schema 仅由环境工具在空实例创建。受影响行数/乐观比较/commit 不确定性须 adapter 测试。
-- MySQL 驱动已下载且编译，但临时实例初始化遇权限阻塞，**未完成 MySQL 连接/集成验收**，见 test-environment.md。
+- 驱动编译或 fixture 测试不等于业务适配器验收；真实适配器集成仍待 #5/#10。旧本机初始化权限问题不阻塞其他机器使用容器/CI，见 test-environment.md。
 
 当前 CLI 不导入 DB adapter；依赖仅供合成环境测试与后续组件使用。引入驱动不等于 SQLite/MySQL 业务支持。

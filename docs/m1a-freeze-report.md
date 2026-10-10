@@ -1,6 +1,6 @@
 # M1-A 接口冻结记录
 
-> 历史记录。后续状态以 [closeout-report.md](closeout-report.md) 为准：外部 Native 工作树根已获批准，首轮 MySQL 门禁已调整为可标记未验证。
+> 历史记录。旧设备路径和 Agent 启动前置条件不再适用；当前以 [AGENTS.md](../AGENTS.md) 和 [跨平台 PR 流程](m1b-launch-plan.md) 为准。首轮 MySQL 可标记未验证，最终 M1 仍须真实集成。
 > 本文件保留当时的冻结范围与验证结果，供追溯。
 
 结论：**共享接口 `m1a-v1` 已冻结**；业务组件尚未实现，M1-B 未启动。

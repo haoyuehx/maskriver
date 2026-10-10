@@ -19,9 +19,10 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 | 共享 DTO/接口 `m1a-v1` | 已实现 | `pkg/contracts` + 契约测试；不是完整引擎 |
 | `database/sql` 驱动版本锁定 | 已实现 | `go.mod`/`go.sum`、database-drivers.md |
 | SQLite 合成环境 | 已实现 | `internal/testenv`、`tools/fixture`；业务适配器未实现 |
-| MySQL 隔离环境 | 部分实现 | 脚本与 opt-in 测试已准备；实例初始化 Permission denied，未通过 |
-| 隔离工作树与 Native 分配 | 已实现 | `scripts/check-native-worktree.mjs` 实测通过（分配/隔离/补丁/回收） |
-| 组件并行任务定义 | 部分实现 | parallel-tasks.md；四个正式 Worker 未启动 |
+| MySQL 隔离环境 | 部分实现 | 私有 socket fixture + 一次性禁网容器入口；实际执行结果见 PR CI，业务集成仍待 #5/#10 |
+| 可选工作树工具 | 已实现（历史单机） | `scripts/check-native-worktree.mjs` 的旧预检，不是跨平台开发前置条件 |
+| 四人模块任务定义 | 已实现（文档） | parallel-tasks.md；独立克隆/分支/PR，业务组件仍待实现 |
+| 跨平台 CI | 部分实现 | Ubuntu/Windows 测试、格式、vet；Ubuntu race/MySQL fixture。配置不等于运行通过，以 PR checks 为准 |
 
 ## 数据库接入
 
