@@ -13,7 +13,7 @@ import tempfile
 import time
 import uuid
 
-IMAGE = "mysql:8.0.46"
+IMAGE = "mysql:8.0.46@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b"
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -50,7 +50,7 @@ def main():
             '--local-infile=OFF --secure-file-priv=NULL',
             "maskriver", str(directory),
         ], check=True, stdout=subprocess.DEVNULL)
-        # Record immutable image identity actually used; a version tag alone is not a digest.
+        # Record the pinned image identity actually used.
         subprocess.run(["docker", "image", "inspect", IMAGE,
                         "--format", "{{json .RepoDigests}}"], check=True)
         deadline = time.monotonic() + 180

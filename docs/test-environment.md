@@ -28,11 +28,15 @@ python3 scripts/test_mysql_container.py
 
 已有获授权 Docker daemon 的 Linux 开发机可运行同一命令；Windows/macOS 成员可使用 PR 的 Ubuntu CI，不要求更改本机系统服务。无 Docker/不支持 socket 时入口返回非零并明确 SKIP/UNVERIFIED，CI 不会把它当成功。
 
-容器使用 `mysql:8.0.46`，输出实际 RepoDigest 与测试中的服务器版本；驱动版本由 `go.mod` 锁定。每次新建唯一容器和 `.local/mysql-m1a-*` 0700 目录，使用当前用户 UID/GID，无网络、无宿主端口、无命名数据卷。自行初始化空 datadir，只暴露私有 Unix socket，禁用 LOCAL INFILE 和服务端文件导出。空口令 root 仅适用于该新建禁网私有实例，不接受任意 DSN、外部数据库或生产凭证。
+容器使用 `mysql:8.0.46`，在脚本中固定 digest `sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b`，输出实际 RepoDigest 与测试中的服务器版本；驱动版本由 `go.mod` 锁定。每次新建唯一容器和 `.local/mysql-m1a-*` 0700 目录，使用当前用户 UID/GID，无网络、无宿主端口、无命名数据卷。自行初始化空 datadir，只暴露私有 Unix socket，禁用 LOCAL INFILE 和服务端文件导出。空口令 root 仅适用于该新建禁网私有实例，不接受任意 DSN、外部数据库或生产凭证。
 
 复用 `TestMySQLFixture` 的 marker、目录权限和 socket guard；启动失败/超时、SQL 失败均报失败。finally 删除本次唯一容器及其匿名卷；成功后删除合成目录，失败诊断仅留在忽略的 `.local`，不上传数据文件。取消 CI 时 runner 为一次性环境；本机强制中断后由设备持有人确认残留资源，不自动处理其他容器。
 
 当前容器入口只执行已有真实 MySQL **fixture**。#5/#10 必须继续交付并接入只读、元数据、复合键分页、乐观冲突、回滚、取消、DECIMAL/DATE/BLOB 等适配器契约测试，最终 M1 前全部真实运行。不得以 fixture、Mock、编译或 SKIP 冒充 MySQL 产品支持。
+
+### 已取得的 CI 证据
+
+[首次 CI run](https://github.com/haoyuehx/maskriver/actions/runs/38038047670) 的 MySQL job 实际报告服务器 `8.0.46`、上述 digest、`TestMySQLFixture PASS` 和容器已删除。该次 Ubuntu 测试/race 通过，Windows 格式检查因 CRLF 失败；修复由 `.gitattributes` 强制 Go 源码 LF，最新结果以 PR #15 checks 为准。fixture 成功不代表 #5/#10 的业务集成完成。
 
 ## 可选 POSIX 用户态 mysqld
 
