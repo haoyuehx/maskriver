@@ -26,7 +26,7 @@ type MemoryMapping struct {
 
 // String and GoString hide the mapping's contents in formatted output.
 // This security hardening was contributed in PR #26.
-func (*MemoryMapping) String() string { return "[REDACTED]" }
+func (*MemoryMapping) String() string   { return "[REDACTED]" }
 func (*MemoryMapping) GoString() string { return "[REDACTED]" }
 
 // NewMemoryMapping constructs an empty in-memory mapping store.
