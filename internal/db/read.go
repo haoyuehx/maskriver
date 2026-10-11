@@ -14,6 +14,11 @@ func (r *reader) Count(ctx context.Context, ref contracts.TableRef) (int64, erro
 	if err := r.check(ctx); err != nil {
 		return 0, err
 	}
+	// Refuse cross-dataset and out-of-allowlist schema requests before
+	// querying metadata, even if the connection has broader DB grants.
+	if err := r.table(ref); err != nil {
+		return 0, err
+	}
 	if err := r.exists(ctx, ref); err != nil {
 		return 0, err
 	}
