@@ -1,8 +1,8 @@
 package mask
 
 import (
-	"strings"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/haoyuehx/maskriver/pkg/contracts"
