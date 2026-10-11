@@ -37,7 +37,7 @@ func NewStrategy(ref contracts.StrategyRef) (contracts.Strategy, error) {
 	case refFakeEmail:
 		return &fakeEmailStrategy{ref: refFakeEmail}, nil
 	default:
-		return nil, contracts.ErrInvalid
+		return newCNFormatStrategy(ref)
 	}
 }
 
