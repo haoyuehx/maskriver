@@ -69,15 +69,15 @@ China-first 的 13 种检测规则由 PR #20（Issue #6）实现；其规则是�
 
 ## 脱敏策略
 
-以下为 MaskRiver 规划的策略目录；当前 **没有任何算法实现**。M1 只交付首批有界切片。
+以下为 MaskRiver 的策略目录。首批五种 M1 策略和并发安全内存映射由原 PR #18 的整合 PR #24 交付；它们是**纯内存组件能力**，不意味着 CLI Apply、持久映射或中文身份证等格式约束替换已完成。
 
 | 策略 | 说明 | 状态 | 目标 |
 |---|---|---|---|
-| null | SQL NULL | 计划中 | M1/go-mask |
-| blank | 空串 | 计划中 | M1/go-mask |
-| redact | 遮蔽内容、保留分隔符 | 计划中 | M1/go-mask |
-| format_random | 字符类别/长度保持，typed 值专用分支 | 计划中 | M1/go-mask |
-| fake_email | 保留邮箱结构、使用不可投递域 | 计划中 | M1/go-mask |
+| null | 显式生成 SQL NULL；拒绝在非 Nullable 列上处理非 NULL 输入 | 部分实现（组件） | #7 / PR #24 |
+| blank | Text/Bytes 清空；拒绝不支持的数值/日期类型 | 部分实现（组件） | #7 / PR #24 |
+| redact | 支持文本、字节和有限基本数值类型；结果未变化时拒绝 | 部分实现（组件） | #7 / PR #24 |
+| format_random | HMAC 派生的 Text ASCII/汉字有界类别替换与 Bytes 等长变换；未支持脚本拒绝。非密码学 FPE | 部分实现（有界组件） | #7 / PR #24 |
+| fake_email | HMAC 派生本地部分与固定 `.local` 域；不暴露原始值 CRC32，不声称真实邮箱可投递 | 部分实现（组件） | #7 / PR #24 |
 | shuffle | 字符重排，typed 值专用分支 | 计划中 | 后续/go-mask |
 | fake_name | 姓名合成 | 计划中 | 后续/go-mask |
 | fake_first_name | 名合成 | 计划中 | 后续/go-mask |
@@ -91,18 +91,19 @@ China-first 的 13 种检测规则由 PR #20（Issue #6）实现；其规则是�
 | fake_phone | 受约束号码格式 | 计划中 | 后续/go-mask |
 | fake_ssn | 受约束编号格式 | 计划中 | 后续/go-mask |
 
-M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`）之外的策略必须在各自验收通过后才可升级状态。
+M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`）之外的策略必须在各自验收通过后才可升级状态。PR #24 对应原作者 PR #18；真实 CI/验收以最终合并记录为准。
 
 ## 确定性、映射与安全
 
 | 功能 | 说明 / 边界 | 状态 | 目标 |
 |---|---|---|---|
 | 策略优先级与未知策略拒绝 | 审核结论 > 列级 > 规则级 > 默认；未知即失败 | 计划中 | M1/go-mask |
-| typed 输出、未变化结果拒绝 | 输出必须符合目标类型与约束 | 计划中 | M1/go-mask |
+| typed 输出、未变化结果拒绝 | 首批纯策略针对合法 Kind 输出或 fail-closed，非空未变化拒绝；目标 Schema 的最终约束仍需 runner 验证 | 部分实现（组件） | #7 / PR #24，runner 待 #9 |
 | 显式列级 NULL 标记 | 仅精确列生效，先于映射，不写映射 | 计划中 | M1/go-mask |
 | 策略/词典注册与来源审核 | 新词典必须单独审核来源与许可 | 计划中 | M1/go-mask |
-| 确定性：同输入同 scope 同输出 | 不承诺与任何第三方实现逐字节一致 | 计划中 | M1/go-mask |
-| 持久映射：加盐指纹、不存原值、可复用 | 长度前缀编码，禁止拼接碰撞 | 计划中 | M1/go-mask |
+| 确定性：同输入同 scope 同输出 | HMAC 绑定 typed 输入/策略 ID+Version/scope/normalization/keyID；不承诺无碰撞或第三方兼容 | 部分实现（组件） | #7 / PR #24 |
+| 并发安全内存映射 | Lookup 和 atomic GetOrCreate；映射键为加密指纹，测试含并发/取消；不持久化 | 部分实现（内存组件） | #7 / PR #24 |
+| 持久映射：加盐指纹、不存原值、可复用 | 持久加盐指纹映射、加密存储及恢复仍无实现 | 计划中 | 后续 M1/Main |
 | Dry Run 零持久副作用 | 需文件快照 + 连接 spy 证据 | 计划中 | M1/go-mask |
 | 默认隐藏预览值 | 原值显示开关须单独评审，不默认实现 | 计划中 | M1/Main |
 | 审核历史：pending/approved、审核人、过期、审计 | 最小格式优先，CSV 次之 | 计划中 | M1/Main |
