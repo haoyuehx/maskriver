@@ -158,4 +158,4 @@ func cnHan(s string, low, high int) bool {
 
 // A deliberately narrow, public structural form: a Han place/road stem,
 // street marker, ASCII house number and 号. It is not a street dictionary.
-var cnAddressShape = regexp.MustCompile("^[\\p{Han}]{2,32}(?:路|街|大道|巷)[0-9]{1,4}号$")
+var cnAddressShape = regexp.MustCompile("^[\\p{Han}]{2,32}(路|街|大道|巷)[0-9]{1,4}号$")
