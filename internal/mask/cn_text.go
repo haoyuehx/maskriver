@@ -15,10 +15,12 @@ type cnCityPair struct {
 	pinyin string
 }
 
-var cnCities = [...]cnCityPair{
-	{"北京", "beijing"}, {"上海", "shanghai"}, {"广州", "guangzhou"},
-	{"深圳", "shenzhen"}, {"杭州", "hangzhou"}, {"成都", "chengdu"},
-	{"重庆", "chongqing"},
+func cnCityCatalog() [7]cnCityPair {
+	return [7]cnCityPair{
+		{"北京", "beijing"}, {"上海", "shanghai"}, {"广州", "guangzhou"},
+		{"深圳", "shenzhen"}, {"杭州", "hangzhou"}, {"成都", "chengdu"},
+		{"重庆", "chongqing"},
+	}
 }
 
 // cnCityStyle accepts a small, explicit dictionary with no generalized
@@ -33,7 +35,7 @@ func cnCityStyle(source string) (style int, suffix string, ok bool) {
 		suffix = source[len(source)-5:]
 		base = source[:len(source)-5]
 	}
-	for _, city := range cnCities {
+	for _, city := range cnCityCatalog() {
 		if base == city.han {
 			if suffix != "" && suffix != "市" {
 				return 0, "", false
@@ -58,8 +60,9 @@ func replaceCNCity(source string, seed [32]byte) (string, error) {
 	if !ok {
 		return "", contracts.ErrUnsupported
 	}
-	for i := 0; i < len(cnCities); i++ {
-		city := cnCities[(int(cnNumber(seed, "city", uint64(len(cnCities))))+i)%len(cnCities)]
+	cities := cnCityCatalog()
+	for i := 0; i < len(cities); i++ {
+		city := cities[(int(cnNumber(seed, "city", uint64(len(cities))))+i)%len(cities)]
 		out := city.han
 		if style > 0 {
 			out = city.pinyin
