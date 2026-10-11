@@ -32,7 +32,13 @@ func NewMemoryMapping() *MemoryMapping {
 // Lookup returns the stored masked Value for key, if any. A nil receiver
 // or nil backing map always reports not-found without error so that
 // callers can treat a zero-initialized store as empty.
-func (m *MemoryMapping) Lookup(_ context.Context, key contracts.MappingKey) (contracts.Value, bool, error) {
+func (m *MemoryMapping) Lookup(ctx context.Context, key contracts.MappingKey) (contracts.Value, bool, error) {
+	if ctx == nil {
+		return contracts.Value{}, false, contracts.ErrInvalid
+	}
+	if err := ctx.Err(); err != nil {
+		return contracts.Value{}, false, err
+	}
 	if m == nil || m.data == nil {
 		return contracts.Value{}, false, nil
 	}
@@ -51,6 +57,9 @@ func (m *MemoryMapping) Lookup(_ context.Context, key contracts.MappingKey) (con
 // is honored as close-to-the-call as possible (mapping-local operations
 // never block indefinitely).
 func (m *MemoryMapping) GetOrCreate(ctx context.Context, key contracts.MappingKey, candidate contracts.Value) (contracts.Value, error) {
+	if ctx == nil {
+		return contracts.Value{}, contracts.ErrInvalid
+	}
 	if err := ctx.Err(); err != nil {
 		return contracts.Value{}, err
 	}
@@ -72,6 +81,9 @@ func (m *MemoryMapping) GetOrCreate(ctx context.Context, key contracts.MappingKe
 	// Slow path with double-checked locking.
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return contracts.Value{}, err
+	}
 	if v, ok := m.data[key]; ok {
 		return v, nil
 	}
