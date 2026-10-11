@@ -24,6 +24,11 @@ type MemoryMapping struct {
 	data map[contracts.MappingKey]contracts.Value
 }
 
+// String and GoString hide the mapping's contents in formatted output.
+// This security hardening was contributed in PR #26.
+func (*MemoryMapping) String() string { return "[REDACTED]" }
+func (*MemoryMapping) GoString() string { return "[REDACTED]" }
+
 // NewMemoryMapping constructs an empty in-memory mapping store.
 func NewMemoryMapping() *MemoryMapping {
 	return &MemoryMapping{data: make(map[contracts.MappingKey]contracts.Value)}
