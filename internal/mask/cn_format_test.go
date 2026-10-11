@@ -233,7 +233,6 @@ func TestCNFormatDateAndBoundaries(t *testing.T) {
 	}
 }
 
-
 func TestCNFormatRejectsIncorrectChecksums(t *testing.T) {
 	tests := []struct {
 		id    string
