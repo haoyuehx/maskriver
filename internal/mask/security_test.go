@@ -45,7 +45,10 @@ func TestMaskRejectsUnchangedSensitiveValues(t *testing.T) {
 	ctx := context.Background()
 	mc := contracts.MaskContext{Plan: basicPlan(), Key: testKey()}
 	redact, _ := NewStrategy(refRedact)
-	for _, tc := range []struct{ kind contracts.Kind; raw string }{
+	for _, tc := range []struct {
+		kind contracts.Kind
+		raw  string
+	}{
 		{contracts.Text, "***REDACTED***"},
 		{contracts.Int, "0"},
 		{contracts.Bool, "false"},
