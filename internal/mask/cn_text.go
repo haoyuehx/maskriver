@@ -2,6 +2,7 @@ package mask
 
 import (
 	"strings"
+	"strconv"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -96,7 +97,7 @@ func replaceCNName(source string, seed [32]byte) (string, error) {
 	surnames := []rune(cnSurnames)
 	given := []rune("星河明月清云华光秋宁安")
 	for attempt := 0; attempt < 8; attempt++ {
-		tag := cnDecimal(attempt)
+		tag := strconv.Itoa(attempt)
 		surname := string(surnames[cnNumber(seed, "surname_"+tag, uint64(len(surnames)))])
 		if compound {
 			choices := [...]string{"欧阳", "司马", "上官", "诸葛"}
@@ -105,7 +106,7 @@ func replaceCNName(source string, seed [32]byte) (string, error) {
 		var b strings.Builder
 		b.WriteString(surname)
 		for i := 0; i < runeCount-utf8.RuneCountInString(surname); i++ {
-			b.WriteRune(given[cnNumber(seed, "given_"+tag+"_"+cnDecimal(i), uint64(len(given)))])
+			b.WriteRune(given[cnNumber(seed, "given_"+tag+"_"+strconv.Itoa(i), uint64(len(given)))])
 		}
 		if out := b.String(); out != source {
 			return out, nil
@@ -122,10 +123,10 @@ func replaceCNAddress(source string, seed [32]byte) (string, error) {
 	// existence or deliverability check is neither performed nor implied.
 	streets := [...]string{"示例路", "虚构街", "样本巷"}
 	for attempt := 0; attempt < 8; attempt++ {
-		tag := cnDecimal(attempt)
+		tag := strconv.Itoa(attempt)
 		street := streets[cnNumber(seed, "street_"+tag, uint64(len(streets)))]
 		number := 1 + cnNumber(seed, "house_"+tag, 9999)
-		out := "合成区" + street + cnDecimal(int(number)) + "号"
+		out := "合成区" + street + strconv.Itoa(int(number)) + "号"
 		if out != source {
 			return out, nil
 		}
@@ -153,7 +154,7 @@ func replaceCNDate(source string, seed [32]byte, kind contracts.Kind) (string, e
 		return "", err
 	}
 	for attempt := 0; attempt < 8; attempt++ {
-		tag := cnDecimal(attempt)
+		tag := strconv.Itoa(attempt)
 		day := 1 + cnNumber(seed, "date_"+tag, 365*24)
 		date := time.Date(1995, time.January, 1+int(day), 0, 0, 0, 0, time.UTC)
 		if out := date.Format(layout); out != source {
