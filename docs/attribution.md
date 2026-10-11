@@ -17,19 +17,6 @@ project's own terms in `docs/architecture.md`, `docs/roadmap.md` and
 `docs/feature-matrix.md`; they are not a compatibility target and no third-party
 implementation is reproduced or ported.
 
-## Retained licence text
-
-Earlier design documents in this repository referenced the MIT-licensed Python
-project `dbmask` (Copyright (c) 2026 Siyuan Feng) as prior art. That project's
-verbatim MIT licence text is retained at
-[`licenses/dbmask-MIT-LICENSE.txt`](licenses/dbmask-MIT-LICENSE.txt) so the
-reference is not misrepresented and the upstream notice remains available.
-
-If any future contribution does adapt third-party code, documentation or test
-material, the contributor must retain the applicable copyright notice, licence
-text and provenance note in this file before the contribution is merged. An
-independent repository does not remove that obligation.
-
 ## Dependency licences
 
 MaskRiver itself is MIT licensed (see [`../LICENSE`](../LICENSE)). Third-party
