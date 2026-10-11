@@ -74,6 +74,17 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - 内存映射采用键控指纹与原子 get-or-create 的单赢家语义；lookup 不写入；并发与 `go test -race ./internal/mask/...` 在最终 PR Head 的 Ubuntu CI 验证。暂不承诺持久映射、跨库 exactly-once、唯一性/碰撞或参照完整性。
 - 最终 CI 需执行 `gofmt -l`、`go test -count=1 ./...`、`go vet ./...`、Ubuntu race，记录真实结果。仅 CI 配置就绪或 MySQL fixture 通过不能替代运行态组件验收。
 
+## #12 中国格式约束脱敏组件（PR #29）
+
+- **代码边界**：`internal/mask/cn_format.go`、`cn_numeric.go`、`cn_text.go`、`cn_format_test.go`；仅新增 9 个 `cn_*` StrategyRef，版本 `1`。共享 `m1a-v1`、数据库适配器和 CLI 工作流接口均不变。
+- **明确约束**：身份证合法日期/有限地区码/MOD11-2；手机已知号段及可选国家码；银行卡 16–19 位/Luhn；USCC 有限类别/地区/MOD31；邮编六位；城市有界中英词表；姓名 2–4 汉字和限定姓氏；地址窄格式街道门牌；合法中国年月日及 typed Date。超范围输入必须返回 `ErrInvalid`/`ErrUnsupported`，而非伪造成功。
+- **安全测试**：密钥 Bytes 且至少 32B，类型及策略/Scope/KeyID 绑定，取消与 nil context，NULL 保持、非 NULL 不得不变、目标长度不匹配拒绝，明确校验位错误/非闰日/错误号段/无效地址负例；合成输入不进入错误与日志，策略不访问数据库。
+- **逐规则评估**：`TestCNFormatSyntheticEvaluation` 的开发时手工构造集合含 21 个正例、28 个负例（九条规则），测试格式接受结果并校验替换输出能再次通过对应格式规则。初轮 PR #29 CI 实测九条规则总 TP=21、FP=0、FN=0；逐规则 P/R 均为 1.000。这个小规模自编集合不是独立留出评估，更不是生产 PII 检测准确率或匿名化证明；检测规则的独立指标仍见 `internal/detect/eval_test.go`。
+- **可复现命令**：`go test -count=1 -v ./internal/mask/...`、`go test -count=1 ./...`、`go vet ./...`、`go test -race ./internal/mask/...`、`gofmt -l internal/mask`；最终 PR Head 的 Ubuntu/Windows GitHub CI 应全部成功。先前通过的旧 SHA 不算最新提交通过。
+- **未验证事项**：实际 SQLite/MySQL 接入、跨列唯一/PK-FK、持久映射、SQL 字节长度限制、真实 Dry Run/Apply/strict Validate 均属于后续 #9/#11。生成格式有效的身份证、银行卡、手机号等号码并不保证无人持有、不会被投递/联系，也不保证匿名性；只能处理授权的合成/隔离测试数据。
+
+更多覆盖范围与限制见 [#12 中国格式组件说明](issue12-cn-replacement.md)。
+
 ## 特别安全门禁
 
 - 标准输出、错误、日志、报告、Agent 会话均不得出现原始值、敏感主键、DSN、seed/salt。
