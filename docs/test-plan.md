@@ -13,7 +13,7 @@ MaskRiver 的测试目标：证明组件在真实数据库上按其契约工作�
 - `scripts/test_mysql.py`：可选 POSIX 本机专用禁网 MySQL；历史宿主机权限失败不是通用开发阻塞。
 - `scripts/test_mysql_container.py`：Linux 开发机或 Ubuntu CI 中运行一次性禁网 MySQL 容器，复用私有 socket guard；仅测 fixture，不是适配器验收。
 
-`internal/detect` 已由 PR #20 合并有界 China-first 检测实现；`internal/db` 的 SQLite/MySQL Reader/Writer、keyset 分页与事务由 #5 的 PR #21 交付，是否合并和测试通过以 GitHub 最终记录为准。`internal/db/mysql_test.go` 的 `TestMySQLAdapter` 只有在传入隔离 MySQL socket 时执行；当前 CI 的 isolated MySQL fixture 并不默认执行这一业务测试。其他模块 PR 不得被视为已在 `main` 交付。CLI/config/testenv 测试仍不代表完整业务流程，`scan/mask/validate` CLI 仍为占位行为。
+`internal/detect` 已由 PR #20 合并有界 China-first 检测实现；`internal/db` 的 SQLite/MySQL Reader/Writer、keyset 分页与事务由 #5 的 PR #21 交付，是否合并和测试通过以 GitHub 最终记录为准。`internal/db/mysql_test.go` 的 `TestMySQLAdapter` 只有在传入隔离 MySQL socket 时执行；当前 CI 的 isolated MySQL fixture 并不默认执行这一业务测试。go-mask 的五种 M1 策略及内存映射由 PR #24 从 #18 原始提交整合，测试证据见 `internal/mask/mask_test.go`、`security_test.go`；是否合并以 GitHub 实际记录为准。其他尚未交付的模块 PR 不得被视为已在 `main` 交付。CLI/config/testenv 测试仍不代表完整业务流程，`scan/mask/validate` CLI 仍为占位行为。
 
 ```sh
 gofmt -l cmd internal pkg tools
@@ -66,6 +66,13 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - Go CI 应在 Ubuntu/Windows 运行全仓测试和 vet，并在 Ubuntu 运行 race；以合并目标分支对应最终 PR Head 的通过记录为准，不把 queued、SKIP 或 fixture 环境通过写成适配器验收通过。
 - MySQL 业务测试入口是 `internal/db/mysql_test.go:TestMySQLAdapter`，需要隔离容器私有 socket 和 `MASKRIVER_TEST_MYSQL_SOCKET`；未提供时将 `SKIP/UNVERIFIED` 原样记录。#10 负责真实执行 MySQL Adapter 元数据、typed 值、复合键及事务回滚等完整用例，未完成前不得声称最终 M1 MySQL 业务验收。
 - 本轮数据库组件不等于 CLI/runner 端到端已交付；全链路 Dry Run/Apply/严格 Validate 仍由 #9/#11 验收。
+
+## 脱敏策略组件专项验收（#7 / 原 PR #18 / PR #24）
+
+- 五种策略 `null`、`blank`、`redact`、`format_random`、`fake_email` 仅实现纯内存有界切片，统一入口 `mask.NewStrategy`、`mask.NewMemoryMapping`，并验证冻结 `m1a-v1` 签名；不实现中国身份证/银行卡/信用代码校验位保持替换或密码学 FPE（仍为 #12）。
+- 测试覆盖：合法 `Bytes` 密钥且 >=32 字节，Text 密钥拒绝；ctx nil/取消；NULL 与空串；非 Nullable 列 null 拒绝；非空敏感输入不得保持不变；未知策略及不支持的 Kind 拒绝；HMAC keyed domain 隔离；仅支持部分 ASCII/汉字类的 Text 形状保持、任意 Bytes 等长；中文与二进制短输入边界；`fake_email` 只输出 keyed HMAC 和固定域名，不附原始值 CRC32。
+- 内存映射采用键控指纹与原子 get-or-create 的单赢家语义；lookup 不写入；并发与 `go test -race ./internal/mask/...` 在最终 PR Head 的 Ubuntu CI 验证。暂不承诺持久映射、跨库 exactly-once、唯一性/碰撞或参照完整性。
+- 最终 CI 需执行 `gofmt -l`、`go test -count=1 ./...`、`go vet ./...`、Ubuntu race，记录真实结果。仅 CI 配置就绪或 MySQL fixture 通过不能替代运行态组件验收。
 
 ## 特别安全门禁
 
