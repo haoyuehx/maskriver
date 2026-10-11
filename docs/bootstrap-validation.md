@@ -20,7 +20,7 @@
 - `go vet ./...` 通过，无诊断。
 - `go build -o bin/maskriver ./cmd/maskriver` 通过；版本输出 `MaskRiver 0.0.0-dev`。
 - 暂存区 diff whitespace 检查通过；常见 token/private-key 格式筛查未命中。简单模式筛查不等于完整安全审计。
-- 保留的第三方 MIT 许可文本与来源一致，详见 [attribution.md](attribution.md)。
+- 项目自身开源许可证见 [LICENSE](../LICENSE)；数据库驱动依赖的许可及来源见 [attribution.md](attribution.md)。
 - 未修改本机其他项目或系统状态。
 - 五个项目 Agent 被 pi-subagents list 正确识别，models 解析与指定模型一致；未启动子 Agent，未验证实际模型推理调用。
 
