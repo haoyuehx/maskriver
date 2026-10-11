@@ -13,7 +13,7 @@ MaskRiver 的测试目标：证明组件在真实数据库上按其契约工作�
 - `scripts/test_mysql.py`：可选 POSIX 本机专用禁网 MySQL；历史宿主机权限失败不是通用开发阻塞。
 - `scripts/test_mysql_container.py`：Linux 开发机或 Ubuntu CI 中运行一次性禁网 MySQL 容器，复用私有 socket guard；仅测 fixture，不是适配器验收。
 
-`internal/{db,detect,mask,verify,history}` 目前仍为占位包。上述 CLI/config/testenv 用例**不是**业务功能测试。
+`internal/detect` 已在 PR #20 实现有界 China-first 规则、三态 Evidence 和合成测试；其余尚未合并的组件 PR 不能在此处视为 `main` 的已交付功能。上述 CLI/config/testenv 用例**不是**完整业务流程或数据库脱敏验收，`scan/mask/validate` CLI 仍为占位行为。
 
 ```sh
 gofmt -l cmd internal pkg tools
@@ -42,7 +42,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 | 范围 | 关键用例 |
 |---|---|
 | 扫描 | 单列失败阻断 apply；skip 与 override 次序；UNKNOWN 不写入历史；错误分类与退出码 |
-| 检测 | 12 类规则正反例；19/20 样本边界；90% 阈值；冲突判定；无上下文纯数字；MDY/DMY 日期 |
+| 检测（#6 / PR #20） | 13 类 China-first 有界规则的正反例；身份证/USCC/Luhn 校验；城市中文与拼音；中文姓名普通词误报；默认 20 非空 distinct 与 19/20、18/20 vs 17/20、90% 阈值；NULL/空串；冲突 UNKNOWN；位置/类型不匹配的人工覆盖 ErrInvalid；DateOrder 参数验证（MDY/DMY 文本解析不在本次覆盖）；取消、输入不变性和无敏感值日志 |
 | 策略 | 首批 5 种策略的格式与类型保持；Unicode；NULL 与空串；typed 数值/日期；校验位有效性；未变化结果拒绝 |
 | 确定性 | 固定 key/scope/version 重复一致；跨表同 scope 一致；映射复用；词典变化不漂移；碰撞处理 |
 | Dry Run | 配置无法绕过 CLI 写意图；连接 spy 证明无写事务；文件树无新增或修改；历史与映射只读 |
@@ -51,6 +51,14 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 | 验证 | 行数与 schema；索引与约束；双向键差异；单字段未变化；无键、截断、缺表在 strict 下失败 |
 | 历史 | pending/approved；审核人；类型与过期；修订冲突；导入失败不污染；回写备份 |
 | 端到端 | 合成源快照 → scan → preview → apply → strict validate；SQLite 与真实 MySQL 分别独立运行 |
+
+## China-first 检测专项测试与评估说明
+
+- 代码证据：`internal/detect/detect_test.go`、`cn_test.go`、`cn_geo_test.go`、`eval_test.go`；不依赖数据库，应用 `go test -count=1 ./internal/detect/...`、`go test -race ./internal/detect/...`、全仓 `go test ./...` 和 `go vet ./...`。
+- 合成评估：74 条自行构造的 `(value,column)` 样本（38 正、36 负；8 条超出本轮规则覆盖）；`MinSamples=1` 用于测试匹配器与列上下文，而非默认聚合阈值。报告每条规则的 TP/FP/FN、Precision、Recall、F1 和明确的覆盖界限。样本同时用于开发与评估，**不宣称独立验证或生产准确率**。
+- 姓名误报：开发时数据 `cn_person_name` 的 TP=3、FP=3、FN=1（P=0.500、R=0.750、F1=0.600）。在独立负例扩充、评审和业务级不确定处理完成前，姓名检测只作实验性提示，不能自动推导写入批准。
+- 测试与范围分离：组件测试不能替代真实 SQLite/MySQL 端到端扫库、策略映射、Dry Run、Apply 和严格验证。中国身份证/手机号/银行卡/USCC 的**格式约束替换**仍是 #12 与 go-mask 的待完成范围。
+- GitHub CI 的 Ubuntu/Windows 格式、测试与 vet 以及 Ubuntu race 需针对**最终 PR Head**重新执行；MySQL fixture 绿灯不是业务 Adapter 验收。所有 SKIP/UNVERIFIED 需明确记录。
 
 ## 特别安全门禁
 

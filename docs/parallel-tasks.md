@@ -44,22 +44,21 @@
 
 ## 模块 go-detect — 敏感信息检测组件（#6）
 
-**规范依据**：contracts.md §4（`Detector`、`DetectionRequest`、`Decision`、三态、`Evidence`、`IssueCode`）；feature-matrix.md 检测范围（12 类 M1 规则及其明确局限）；test-plan.md 检测用例。
+**规范依据**：contracts.md §4（`Detector`、`DetectionRequest`、`Decision`、三态、`Evidence`、`IssueCode`）；[feature-matrix.md](feature-matrix.md) China-first 有界范围；[test-plan.md](test-plan.md) 的专项测试。团队已将原北美 M1 规则调整为 China-first；#12 中的中国检测部分提前在 #6 交付，**#12 的格式约束脱敏仍待实现**。
 
-**允许修改**：`internal/detect/**/*.go`（含本包测试）。其余文件一律只读。
+**允许修改**：`internal/detect/**/*.go`（含本包测试）。其余文件由 Main 协调。
 **依赖**：`Detector`、`DetectionRequest`、`Decision`、`Sensitivity`/`DecisionSource`、`Sample`/`Evidence`/`IssueCode`、`Value`/`Type`。
-**入口冻结**：`detect.New() contracts.Detector`；规则不可变，无包级可变全局状态。
+**入口冻结**：`detect.New() contracts.Detector`；规则不可变，不引入包级可变全局状态，维持 `APIRevision=m1a-v1`。
 
-**范围**：`email`、`url`、`ip_address`（仅 IPv4）、`uuid`、`ssn`、`credit_card`、`zip_code`、`phone`（北美格式）、`address`（英文街道）、`city`、`full_name`、`date`；人工覆盖 / 已审核结论 / 显式 skip 的优先级；distinct 非空样本阈值；证据不足或冲突输出 UNKNOWN；所有输出只含受控证据。
-如需城市词典，先用最小自写合成测试词典，并向 Main 提出正式词典来源与许可建议，不得自行引入数据依赖。
+**范围（#6 / PR #20，13 类规则）**：`email`、`url`、`ip_address`（IPv4/IPv6）、`uuid`（v1–5）、`cn_id_card`（含日期/有限地区码/校验位）、`cn_mobile`（有限号段）、`cn_bank_card`（Luhn + 上下文）、`cn_postal_code`、`cn_uscc`（MOD31 + 有界登记/地区码）、`cn_city`（中文/拼音有限词表）、`cn_person_name`（常见姓氏形状，实验性、误报风险）、`cn_address`（有界地址片段）、`cn_date`（合法年优先日历日期）。人工覆盖 > 已审核决定 > skip > 规则；采用非空 distinct 样本与阈值；缺证据、格式/列名冲突返回 UNKNOWN。所有判定都不得绕过 Apply 安全门。
 
-**非目标**：LLM 分类；中文格式（属 M2）；历史文件处理；数据库抽样；持久化与并发引擎；不承诺全球号码识别或完整姓名识别。
+**非目标**：SSN、US ZIP、北美电话/英文街道模式；LLM 分类；真实身份/信用机构认证；全国完整行政区划、手机号、姓名或地址词典；数据库采样、持久化与并发调度；本轮不实现中文格式约束脱敏。不得直接拷贝第三方词典或样本。
 
-**必须测试**：编译期 `Detector` 断言；每条规则正例与负例；19/20 样本边界与 90% 阈值；无上下文纯数字；NULL 与空串；多个规则同时合格时的冲突；列名/类型上下文与取值冲突；位置或类型不匹配的 override 返回 `ErrInvalid`；MDY/DMY 日期语义；`context` 取消；断言输入 DTO 未被修改。
+**必须测试**：13 条规则正反例与有限覆盖；身份证/USCC 校验码、银行卡 Luhn；中文及拼音地名；姓名普通词误报与字段上下文；默认 20 distinct、19/20 样本边界和 90% 命中率；NULL、空串、数字串误判；规则冲突；位置/类型不匹配的 override 返回 `ErrInvalid`；`DateOrder` 参数验证及合法中国年优先日期（不宣称已支持 MDY/DMY 字符串）；context 取消；输入不变；Evidence 不泄漏原值。合成评估注明 74 个开发时样本（38 正、36 负，含 8 个超范围正例），按规则报告真实 TP/FP/FN/P/R/F1，不能外推为生产准确率。
 
-**完成标准**：明确列出已实现规则与不支持的形态；UNKNOWN 不会被转换为安全结论；测试为纯内存，不依赖 `internal/db`。
+**完成标准**：列出支持与不支持的模式；`UNKNOWN` 永不转换为安全结论；纯内存规则测试；Main 同步 Feature Matrix/测试计划；GitHub CI 为最终 Head 通过；经团队独立审核后合并。中文姓名目前仅实验性提示，不能凭姓名分类单独批准 Apply。
 
-**停止条件**：需要新增契约字段或第三方依赖；词典来源与许可未决；规则冲突无法在现有契约内表达；要求外发样本。
+**停止条件**：需变更共享 DTO/新增不明来源依赖；规则冲突无法表达；任何原始样本需要上传；需要跨模块越权修改。
 
 ## 模块 go-mask — 脱敏策略引擎（#7）
 
