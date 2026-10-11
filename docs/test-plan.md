@@ -13,7 +13,7 @@ MaskRiver 的测试目标：证明组件在真实数据库上按其契约工作�
 - `scripts/test_mysql.py`：可选 POSIX 本机专用禁网 MySQL；历史宿主机权限失败不是通用开发阻塞。
 - `scripts/test_mysql_container.py`：Linux 开发机或 Ubuntu CI 中运行一次性禁网 MySQL 容器，复用私有 socket guard；仅测 fixture，不是适配器验收。
 
-`internal/detect` 已在 PR #20 实现有界 China-first 规则、三态 Evidence 和合成测试；其余尚未合并的组件 PR 不能在此处视为 `main` 的已交付功能。上述 CLI/config/testenv 用例**不是**完整业务流程或数据库脱敏验收，`scan/mask/validate` CLI 仍为占位行为。
+`internal/detect` 已由 PR #20 合并有界 China-first 检测实现；`internal/db` 的 SQLite/MySQL Reader/Writer、keyset 分页与事务由 #5 的 PR #21 交付，是否合并和测试通过以 GitHub 最终记录为准。`internal/db/mysql_test.go` 的 `TestMySQLAdapter` 只有在传入隔离 MySQL socket 时执行；当前 CI 的 isolated MySQL fixture 并不默认执行这一业务测试。其他模块 PR 不得被视为已在 `main` 交付。CLI/config/testenv 测试仍不代表完整业务流程，`scan/mask/validate` CLI 仍为占位行为。
 
 ```sh
 gofmt -l cmd internal pkg tools
@@ -59,6 +59,13 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - 姓名误报：开发时数据 `cn_person_name` 的 TP=3、FP=3、FN=1（P=0.500、R=0.750、F1=0.600）。在独立负例扩充、评审和业务级不确定处理完成前，姓名检测只作实验性提示，不能自动推导写入批准。
 - 测试与范围分离：组件测试不能替代真实 SQLite/MySQL 端到端扫库、策略映射、Dry Run、Apply 和严格验证。中国身份证/手机号/银行卡/USCC 的**格式约束替换**仍是 #12 与 go-mask 的待完成范围。
 - GitHub CI 的 Ubuntu/Windows 格式、测试与 vet 以及 Ubuntu race 需针对**最终 PR Head**重新执行；MySQL fixture 绿灯不是业务 Adapter 验收。所有 SKIP/UNVERIFIED 需明确记录。
+
+## 数据库适配器专项验收（#5 / PR #21）
+
+- 使用真实 SQLite 驱动运行 `go test -count=1 ./internal/db/...`，确认只读且缺失文件不创建、表元数据与保守 `SchemaCoverage`、有界 DISTINCT 非 NULL 抽样、NULL/空串/Bytes/Decimal/Date 与安全类型处理、25 行三页、真实有序复合主键 keyset、乐观锁冲突零提交、Rollback、取消、非法列名与跨 DatasetID/Schema 白名单拒绝。特别覆盖新增 `internal/db/count_scope_test.go` 的 Count 越界检查。
+- Go CI 应在 Ubuntu/Windows 运行全仓测试和 vet，并在 Ubuntu 运行 race；以合并目标分支对应最终 PR Head 的通过记录为准，不把 queued、SKIP 或 fixture 环境通过写成适配器验收通过。
+- MySQL 业务测试入口是 `internal/db/mysql_test.go:TestMySQLAdapter`，需要隔离容器私有 socket 和 `MASKRIVER_TEST_MYSQL_SOCKET`；未提供时将 `SKIP/UNVERIFIED` 原样记录。#10 负责真实执行 MySQL Adapter 元数据、typed 值、复合键及事务回滚等完整用例，未完成前不得声称最终 M1 MySQL 业务验收。
+- 本轮数据库组件不等于 CLI/runner 端到端已交付；全链路 Dry Run/Apply/严格 Validate 仍由 #9/#11 验收。
 
 ## 特别安全门禁
 
