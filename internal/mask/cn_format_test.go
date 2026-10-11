@@ -55,7 +55,7 @@ func cnCases() []cnCase {
 			[]string{"13912345678", "+8613912345678", "8618812345678"},
 			[]string{"12912345678", "1391234567", "+8713912345678"}},
 		{"cn_bank_card", contracts.Text,
-			[]string{bank, "1" + cnDigits([32]byte{1}, "bankfixture", 17)},
+			[]string{bank, "6222021234567890" + string(cnLuhnDigit("6222021234567890"))},
 			[]string{"1234", "0" + bank[1:], "a" + bank[1:]}},
 		{"cn_uscc", contracts.Text,
 			[]string{uscc},
