@@ -221,6 +221,14 @@ func (s *fakeEmailStrategy) Mask(ctx context.Context, val contracts.Value, mc co
 	if err := validateKey(mc.Key); err != nil {
 		return contracts.Value{}, err
 	}
+	// Apply the bounded input-shape validation contributed in PR #26.
+	// Do not accept arbitrary text as an email address.
+	if !validMaskEmail(val.Payload()) {
+		return contracts.Value{}, contracts.ErrInvalid
+	}
+	if mc.Plan.Type.Kind != contracts.Text {
+		return contracts.Value{}, contracts.ErrInvalid
+	}
 	extra, err := strategyExtra(mc, s.ref)
 	if err != nil {
 		return contracts.Value{}, err
@@ -229,6 +237,11 @@ func (s *fakeEmailStrategy) Mask(ctx context.Context, val contracts.Value, mc co
 	// Output must never contain an unkeyed digest of the original input.
 	local := hex.EncodeToString(digest[:16])
 	out := local + "@" + maskDomain
+	// A too-narrow destination must fail closed rather than silently truncate
+	// the HMAC-based token to fit the column.
+	if mc.Plan.Type.Length > 0 && len(out) > mc.Plan.Type.Length {
+		return contracts.Value{}, contracts.ErrUnsafe
+	}
 	if val.Payload() != "" && out == val.Payload() {
 		return contracts.Value{}, contracts.ErrUnsafe
 	}
