@@ -2,6 +2,7 @@ package mask
 
 import (
 	"strings"
+	"strconv"
 	"time"
 
 	"github.com/haoyuehx/maskriver/pkg/contracts"
@@ -58,7 +59,7 @@ func replaceCNID(source string, seed [32]byte) (string, error) {
 	}
 	areas := [...]string{"110101", "310101", "440103"}
 	for attempt := 0; attempt < 8; attempt++ {
-		tag := cnDecimal(attempt)
+		tag := strconv.Itoa(attempt)
 		date := time.Date(
 			1980+int(cnNumber(seed, "id_year_"+tag, 26)),
 			time.Month(1+cnNumber(seed, "id_month_"+tag, 12)),
@@ -76,7 +77,7 @@ func replaceCNID(source string, seed [32]byte) (string, error) {
 }
 
 func paddedCN(n uint64, width int) string {
-	s := cnDecimal(int(n))
+	s := strconv.Itoa(int(n))
 	return strings.Repeat("0", width-len(s)) + s
 }
 
@@ -97,7 +98,7 @@ func replaceCNMobile(source string, seed [32]byte) (string, error) {
 	}
 	prefixes := [...]string{"139", "188", "150", "176"}
 	for attempt := 0; attempt < 8; attempt++ {
-		tag := cnDecimal(attempt)
+		tag := strconv.Itoa(attempt)
 		output := country + prefixes[cnNumber(seed, "mobile_prefix_"+tag, uint64(len(prefixes)))] +
 			cnDigits(seed, "mobile_tail_"+tag, 8)
 		if output != source {
@@ -133,7 +134,7 @@ func replaceCNBank(source string, seed [32]byte) (string, error) {
 		return "", contracts.ErrInvalid
 	}
 	for attempt := 0; attempt < 8; attempt++ {
-		tag := cnDecimal(attempt)
+		tag := strconv.Itoa(attempt)
 		first := string(byte('1'+cnNumber(seed, "bank_first_"+tag, 9))) +
 			cnDigits(seed, "bank_body_"+tag, len(source)-2)
 		output := first + string(cnLuhnDigit(first))
@@ -172,10 +173,10 @@ func replaceCNUSCC(source string, seed [32]byte) (string, error) {
 	}
 	areas := [...]string{"110000", "310000", "440300"}
 	for attempt := 0; attempt < 8; attempt++ {
-		tag := cnDecimal(attempt)
+		tag := strconv.Itoa(attempt)
 		var subject strings.Builder
 		for i := 0; i < 9; i++ {
-			subject.WriteByte(cnUSCCAlphabet[cnNumber(seed, "uscc_"+tag+"_"+cnDecimal(i), uint64(len(cnUSCCAlphabet)))])
+			subject.WriteByte(cnUSCCAlphabet[cnNumber(seed, "uscc_"+tag+"_"+strconv.Itoa(i), uint64(len(cnUSCCAlphabet)))])
 		}
 		first17 := "91" + areas[cnNumber(seed, "uscc_area_"+tag, uint64(len(areas)))] + subject.String()
 		output := first17 + string(cnUSCCCheck(first17))
@@ -193,7 +194,7 @@ func replaceCNPostal(source string, seed [32]byte) (string, error) {
 		return "", contracts.ErrInvalid
 	}
 	for attempt := 0; attempt < 8; attempt++ {
-		tag := cnDecimal(attempt)
+		tag := strconv.Itoa(attempt)
 		output := cnDigits(seed, "postal_"+tag, 6)
 		if output != source {
 			return output, nil
