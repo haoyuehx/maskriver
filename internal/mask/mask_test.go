@@ -65,7 +65,7 @@ func trunc(s string) string {
 func basicPlan() contracts.ColumnPlan {
 	return contracts.ColumnPlan{
 		Column:               contracts.ColumnRef{TableRef: contracts.TableRef{Database: "ds", Schema: "s", Table: "t"}, Column: "c"},
-		Type:                 contracts.Type{Kind: contracts.Text, Native: "VARCHAR(64)"},
+		Type:                 contracts.Type{Kind: contracts.Text, Native: "VARCHAR(64)", Nullable: true},
 		Strategy:             contracts.StrategyRef{},
 		Scope:                "tests/unit",
 		NormalizationVersion: "m1a-v1",
