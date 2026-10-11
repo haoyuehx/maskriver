@@ -232,3 +232,41 @@ func TestCNFormatDateAndBoundaries(t *testing.T) {
 		}
 	}
 }
+
+
+func TestCNFormatRejectsIncorrectChecksums(t *testing.T) {
+	tests := []struct {
+		id    string
+		valid string
+	}{
+		{"cn_id_card", cnSyntheticID()},
+		{"cn_bank_card", cnSyntheticBank()},
+		{"cn_uscc", cnSyntheticUSCC()},
+	}
+	for _, tc := range tests {
+		t.Run(tc.id, func(t *testing.T) {
+			ref := contracts.StrategyRef{ID: tc.id, Version: cnFormatVersion}
+			strategy, err := NewStrategy(ref)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mc := cnTestContext(ref, contracts.Text)
+			last := byte('0')
+			if tc.valid[len(tc.valid)-1] == last {
+				last = '1'
+			}
+			wrong := tc.valid[:len(tc.valid)-1] + string(last)
+			if _, err := strategy.Mask(context.Background(), newTextValue(t, wrong), mc); !errors.Is(err, contracts.ErrInvalid) {
+				t.Fatal("invalid checksum accepted", err)
+			}
+		})
+	}
+
+	idDate := "11010120230229001"
+	invalidLeapDay := idDate + string(cnIDCheck(idDate))
+	ref := contracts.StrategyRef{ID: "cn_id_card", Version: cnFormatVersion}
+	strategy, _ := NewStrategy(ref)
+	if _, err := strategy.Mask(context.Background(), newTextValue(t, invalidLeapDay), cnTestContext(ref, contracts.Text)); !errors.Is(err, contracts.ErrInvalid) {
+		t.Fatal("invalid calendar date accepted", err)
+	}
+}
