@@ -10,13 +10,6 @@ test suite has been copied into this repository from another project. The Go
 implementation, contracts, synthetic fixtures, CLI skeleton and tests under this
 repository were written for MaskRiver.
 
-Behavioural references (for example a default sampling threshold, or a
-tri-state classification model) were used during early design exploration as
-prior art for solving a well-known problem shape. Those are documented in this
-project's own terms in `docs/architecture.md`, `docs/roadmap.md` and
-`docs/feature-matrix.md`; they are not a compatibility target and no third-party
-implementation is reproduced or ported.
-
 ## Dependency licences
 
 MaskRiver itself is MIT licensed (see [`../LICENSE`](../LICENSE)). Third-party
