@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"hash/crc32"
 	"strings"
 
 	"github.com/haoyuehx/maskriver/pkg/contracts"
@@ -52,7 +51,7 @@ const maskDomain = "maskriver.local"
 // least 32 bytes of material. All deterministic strategies must call
 // validateKey before producing output.
 func validateKey(k contracts.Value) error {
-	if k.Kind() != contracts.Bytes && k.Kind() != contracts.Text {
+	if k.Kind() != contracts.Bytes {
 		return contracts.ErrInvalid
 	}
 	if len(k.Payload()) < 32 {
@@ -100,58 +99,79 @@ func planExtra(ctx contracts.MaskContext) string {
 	return strings.Join(parts, "|")
 }
 
+func checkMaskContext(ctx context.Context) error {
+	if ctx == nil {
+		return contracts.ErrInvalid
+	}
+	return ctx.Err()
+}
+
+func strategyExtra(ctx contracts.MaskContext, ref contracts.StrategyRef) (string, error) {
+	if ctx.Plan.Strategy != (contracts.StrategyRef{}) && ctx.Plan.Strategy != ref {
+		return "", contracts.ErrInvalid
+	}
+	ctx.Plan.Strategy = ref
+	return planExtra(ctx), nil
+}
+
 // ----- individual strategies -----------------------------------------
 
 type nullStrategy struct{ ref contracts.StrategyRef }
 
 func (s *nullStrategy) Ref() contracts.StrategyRef { return s.ref }
-func (s *nullStrategy) Mask(_ context.Context, _ contracts.Value, _ contracts.MaskContext) (contracts.Value, error) {
-	// Always returns SQL NULL for any input. Key is deliberately not
-	// consulted; null is a structural (non-sensitive) mapping.
+func (s *nullStrategy) Mask(ctx context.Context, val contracts.Value, mc contracts.MaskContext) (contracts.Value, error) {
+	if err := checkMaskContext(ctx); err != nil {
+		return contracts.Value{}, err
+	}
+	if !val.IsNull() && !mc.Plan.Type.Nullable {
+		return contracts.Value{}, contracts.ErrUnsafe
+	}
 	return contracts.Value{}, nil
 }
 
 type blankStrategy struct{ ref contracts.StrategyRef }
 
 func (s *blankStrategy) Ref() contracts.StrategyRef { return s.ref }
-func (s *blankStrategy) Mask(_ context.Context, val contracts.Value, _ contracts.MaskContext) (contracts.Value, error) {
-	// Null remains null; everything else becomes empty-Text.
+func (s *blankStrategy) Mask(ctx context.Context, val contracts.Value, _ contracts.MaskContext) (contracts.Value, error) {
+	if err := checkMaskContext(ctx); err != nil {
+		return contracts.Value{}, err
+	}
 	if val.IsNull() {
 		return contracts.Value{}, nil
 	}
-	return contracts.NewValue(contracts.Text, "")
+	if val.Kind() != contracts.Text && val.Kind() != contracts.Bytes {
+		return contracts.Value{}, contracts.ErrUnsupported
+	}
+	return contracts.NewValue(val.Kind(), "")
 }
 
 type redactStrategy struct{ ref contracts.StrategyRef }
 
 func (s *redactStrategy) Ref() contracts.StrategyRef { return s.ref }
-func (s *redactStrategy) Mask(_ context.Context, val contracts.Value, _ contracts.MaskContext) (contracts.Value, error) {
-	// Redact replaces textual payloads with "***REDACTED***". Non-text
-	// non-null inputs retain their Kind but the payload becomes an
-	// intentionally useless zero-like value (empty) to discourage
-	// leakage through downstream type coercion.
+func (s *redactStrategy) Mask(ctx context.Context, val contracts.Value, _ contracts.MaskContext) (contracts.Value, error) {
+	if err := checkMaskContext(ctx); err != nil {
+		return contracts.Value{}, err
+	}
 	if val.IsNull() {
 		return contracts.Value{}, nil
 	}
+	var raw string
 	switch val.Kind() {
 	case contracts.Text:
-		return contracts.NewValue(contracts.Text, "***REDACTED***")
+		raw = "***REDACTED***"
 	case contracts.Bytes:
-		return contracts.NewValue(contracts.Bytes, "")
-	case contracts.Int:
-		return contracts.NewValue(contracts.Int, "0")
-	case contracts.Uint:
-		return contracts.NewValue(contracts.Uint, "0")
-	case contracts.Float:
-		return contracts.NewValue(contracts.Float, "0")
-	case contracts.Decimal:
-		return contracts.NewValue(contracts.Decimal, "0")
+		raw = ""
+	case contracts.Int, contracts.Uint, contracts.Float, contracts.Decimal:
+		raw = "0"
 	case contracts.Bool:
-		return contracts.NewValue(contracts.Bool, "false")
-	case contracts.Date, contracts.LocalDateTime, contracts.Instant:
+		raw = "false"
+	default:
 		return contracts.Value{}, contracts.ErrUnsupported
 	}
-	return contracts.Value{}, contracts.ErrUnsupported
+	if val.Payload() != "" && raw == val.Payload() {
+		return contracts.Value{}, contracts.ErrUnsafe
+	}
+	return contracts.NewValue(val.Kind(), raw)
 }
 
 // formatRandomStrategy produces deterministic "random"-looking values
@@ -162,41 +182,24 @@ func (s *redactStrategy) Mask(_ context.Context, val contracts.Value, _ contract
 type formatRandomStrategy struct{ ref contracts.StrategyRef }
 
 func (s *formatRandomStrategy) Ref() contracts.StrategyRef { return s.ref }
-func (s *formatRandomStrategy) Mask(_ context.Context, val contracts.Value, ctx contracts.MaskContext) (contracts.Value, error) {
+func (s *formatRandomStrategy) Mask(ctx context.Context, val contracts.Value, mc contracts.MaskContext) (contracts.Value, error) {
+	if err := checkMaskContext(ctx); err != nil {
+		return contracts.Value{}, err
+	}
 	if val.IsNull() {
 		return contracts.Value{}, nil
 	}
-	switch val.Kind() {
-	case contracts.Text, contracts.Bytes:
-	default:
+	if val.Kind() != contracts.Text && val.Kind() != contracts.Bytes {
 		return contracts.Value{}, contracts.ErrUnsupported
 	}
-	if err := validateKey(ctx.Key); err != nil {
+	if err := validateKey(mc.Key); err != nil {
 		return contracts.Value{}, err
 	}
-	digest := typedLexicalDigest(val, ctx.Key, planExtra(ctx))
-	hexed := hex.EncodeToString(digest[:])
-	// Trim / grow output to the same UTF-8 length as the original
-	// textual payload when possible; Text stays at or under 64 bytes
-	// to keep tests stable.
-	wantLen := len(val.Payload())
-	if wantLen <= 0 {
-		wantLen = 16
+	extra, err := strategyExtra(mc, s.ref)
+	if err != nil {
+		return contracts.Value{}, err
 	}
-	if wantLen > 64 {
-		wantLen = 64
-	}
-	out := hexed
-	for len(out) < wantLen {
-		// Double-hash to extend without introducing RNG.
-		next := hmacSHA256([]byte(ctx.Key.Payload()), []byte(hexed+maskDomain))
-		out += hex.EncodeToString(next[:])
-	}
-	out = out[:wantLen]
-	if val.Kind() == contracts.Bytes {
-		return contracts.NewValue(contracts.Bytes, out)
-	}
-	return contracts.NewValue(contracts.Text, out)
+	return deterministicFormatRandom(val, mc.Key, extra)
 }
 
 // fakeEmailStrategy produces deterministic <hex-16>@maskriver.local
@@ -205,25 +208,29 @@ func (s *formatRandomStrategy) Mask(_ context.Context, val contracts.Value, ctx 
 type fakeEmailStrategy struct{ ref contracts.StrategyRef }
 
 func (s *fakeEmailStrategy) Ref() contracts.StrategyRef { return s.ref }
-func (s *fakeEmailStrategy) Mask(_ context.Context, val contracts.Value, ctx contracts.MaskContext) (contracts.Value, error) {
+func (s *fakeEmailStrategy) Mask(ctx context.Context, val contracts.Value, mc contracts.MaskContext) (contracts.Value, error) {
+	if err := checkMaskContext(ctx); err != nil {
+		return contracts.Value{}, err
+	}
 	if val.IsNull() {
 		return contracts.Value{}, nil
 	}
 	if val.Kind() != contracts.Text {
 		return contracts.Value{}, contracts.ErrUnsupported
 	}
-	if err := validateKey(ctx.Key); err != nil {
+	if err := validateKey(mc.Key); err != nil {
 		return contracts.Value{}, err
 	}
-	digest := typedLexicalDigest(val, ctx.Key, planExtra(ctx))
-	local := hex.EncodeToString(digest[:16])
-	// Append a tiny CRC tag bound to the original length so that long
-	// and short emails with identical prefixes do not collide at the
-	// output when truncated by the caller.
-	crc := crc32.ChecksumIEEE([]byte(val.Payload()))
-	local = fmt.Sprintf("%s%08x", local, crc)
-	if len(local) > 40 {
-		local = local[:40]
+	extra, err := strategyExtra(mc, s.ref)
+	if err != nil {
+		return contracts.Value{}, err
 	}
-	return contracts.NewValue(contracts.Text, local+"@"+maskDomain)
+	digest := typedLexicalDigest(val, mc.Key, extra)
+	// Output must never contain an unkeyed digest of the original input.
+	local := hex.EncodeToString(digest[:16])
+	out := local + "@" + maskDomain
+	if val.Payload() != "" && out == val.Payload() {
+		return contracts.Value{}, contracts.ErrUnsafe
+	}
+	return contracts.NewValue(contracts.Text, out)
 }
