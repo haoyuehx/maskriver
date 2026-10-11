@@ -72,8 +72,6 @@ PR 合并前完成代码评审与 Ubuntu/Windows CI（测试、格式、vet；Ub
 ## 来源与许可
 
 MaskRiver 采用 [MIT](LICENSE)。本项目独立研发：不是任何其他仓库的 Fork，不共享其 Git 历史，未复制其源码、词典、配置或测试数据。
-早期设计文档曾把 MIT 许可的 Python 项目 `dbmask`（Copyright (c) 2026 Siyuan Feng）作为先例参考；为免误述该参考、并保留其许可声明，其完整 MIT 文本保留在
-[docs/licenses/dbmask-MIT-LICENSE.txt](docs/licenses/dbmask-MIT-LICENSE.txt)。
 第三方依赖保留各自许可，详见 [来源与许可说明](docs/attribution.md)。
 若将来确实改编或复用第三方代码、文档或测试，必须先在该说明中保留其版权、许可与来源标注。
 
