@@ -19,19 +19,19 @@ type cnFormatStrategy struct{ ref contracts.StrategyRef }
 
 const cnFormatVersion = "1"
 
-var cnFormatIDs = map[string]bool{
-	"cn_id_card": true, "cn_mobile": true, "cn_bank_card": true,
-	"cn_uscc": true, "cn_postal_code": true, "cn_city": true,
-	"cn_person_name": true, "cn_address": true, "cn_date": true,
-}
-
 var _ contracts.Strategy = (*cnFormatStrategy)(nil)
 
 func newCNFormatStrategy(ref contracts.StrategyRef) (contracts.Strategy, error) {
-	if ref.Version != cnFormatVersion || !cnFormatIDs[ref.ID] {
+	if ref.Version != cnFormatVersion {
 		return nil, contracts.ErrInvalid
 	}
-	return &cnFormatStrategy{ref: ref}, nil
+	switch ref.ID {
+	case "cn_id_card", "cn_mobile", "cn_bank_card", "cn_uscc",
+		"cn_postal_code", "cn_city", "cn_person_name", "cn_address", "cn_date":
+		return &cnFormatStrategy{ref: ref}, nil
+	default:
+		return nil, contracts.ErrInvalid
+	}
 }
 
 func (s *cnFormatStrategy) Ref() contracts.StrategyRef { return s.ref }
