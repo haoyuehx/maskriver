@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -97,33 +98,17 @@ func (s *cnFormatStrategy) Mask(ctx context.Context, input contracts.Value, mc c
 // cnNumber is derived from HMAC input bound to input Kind, strategy,
 // normalization version, scope and key ID. No source material is stored.
 func cnNumber(seed [32]byte, label string, limit uint64) uint64 {
-	var n [8]byte
 	block := hmacSHA256(seed[:], []byte(label))
-	copy(n[:], block[:8])
-	return binary.BigEndian.Uint64(n[:]) % limit
+	return binary.BigEndian.Uint64(block[:8]) % limit
 }
 
 func cnDigits(seed [32]byte, label string, length int) string {
 	var b strings.Builder
 	b.Grow(length)
 	for i := 0; i < length; i++ {
-		b.WriteByte(byte('0' + cnNumber(seed, label+"_"+cnDecimal(i), 10)))
+		b.WriteByte(byte('0' + cnNumber(seed, label+"_"+strconv.Itoa(i), 10)))
 	}
 	return b.String()
-}
-
-func cnDecimal(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var digits [20]byte
-	i := len(digits)
-	for n > 0 {
-		i--
-		digits[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(digits[i:])
 }
 
 func cnASCII(s string) bool {
