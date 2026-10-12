@@ -71,10 +71,12 @@ def main():
             raise RuntimeError("isolated MySQL readiness timeout")
         env = os.environ.copy()
         env["MASKRIVER_TEST_MYSQL_SOCKET"] = str(socket)
-        # Only environment fixture exists today. Adapter integration remains #5/#10.
+        # Run BOTH fixture and real adapter contract tests against this exact
+        # harness-owned, disposable Unix socket. A skip is not a passing
+        # adapter acceptance: CI additionally requires positive test evidence.
         result = subprocess.run([
-            "go", "test", "-count=1", "-v", "./internal/testenv",
-            "-run", "^TestMySQLFixture$",
+            "go", "test", "-count=1", "-v", "./internal/testenv", "./internal/db",
+            "-run", "^(TestMySQLFixture|TestMySQLAdapter)$",
         ], cwd=ROOT, env=env).returncode
     finally:
         with (directory / "container.log").open("w") as log:
