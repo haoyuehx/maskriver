@@ -124,13 +124,16 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 
 ## 完整性校验
 
+**#8 验证组件边界**：`verify.New()` 只读取两个 `contracts.Reader`，不读取配置或原始密钥、不自动写入，报告不包含明文主键和值。PR #32 的原始实现经 PR #33 补强为每边最多 256 行的有界内存双向 keyset 校验。原有及新增回归均基于 fake Reader；**不能替代 #9 的真实 SQLite/MySQL CLI Scan/Preview/Apply/strict Validate 全流程安全验收**。对排序语义无法安全对齐的键显式拒绝。
+
+
 | 功能 | 说明 / 边界 | 状态 | 目标 |
 |---|---|---|---|
-| 行数校验 | 不得增删行 | 计划中 | M1/go-verify |
-| schema 校验：列类型/PK/索引/FK/unique/check | 能力缺失必须显式声明 | 计划中 | M1/go-verify |
+| 行数校验 | Count 对比，双向键集逐项核对，数量不一致失败 | 已实现（fake Reader 组件） | #8 / PR #32、#33；真实 Workflow 待 #9 |
+| schema 校验：列类型/PK/索引/FK/unique/check | 已实现列名/类型/NULL/长度/精度/比例与计划 PK 比对；索引、FK、unique、check **尚未由本组件验证** | 部分实现（仅列与 PK） | #8 / PR #33；其他约束 #9/#11 |
 | triggers/grants 校验 | 需驱动能力支持，不在首版承诺 | 未实现 | 后续评估 |
-| 主键对齐逐值完整性校验 | 必须包含双向键差异 | 计划中 | M1/go-verify |
-| 无键/限量覆盖/strict 模式 | 未完整覆盖不得 PASS | 计划中 | M1/go-verify |
+| 主键对齐逐值完整性校验 | 基于冻结 Plan，双向 keyset 流式合并，已选敏感列未变化失败，字段缺失/类型/NULL 转换失败 | 已实现（fake Reader 组件） | #8 / PR #32、#33 |
+| 无键/限量覆盖/strict 模式 | RowLimit=0 有界分页全量；正数为总行预算，截断/无主键证据/分页异常不得 PASS；strict 由 contracts.Passed 拒绝 Warning | 已实现（fake Reader 组件） | #8 / PR #33 |
 | 测试数据忽略、采样上限、形状遮蔽 | 忽略策略须显式审核 | 计划中 | M1/go-verify |
 | 稳定公共库 API | `pkg/contracts` 仅内部协作冻结，非稳定外部 SDK | 未实现 | 待契约稳定后评估 |
 
