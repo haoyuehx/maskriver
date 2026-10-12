@@ -25,6 +25,9 @@ func (r *boundedReader) Page(ctx context.Context, req contracts.PageRequest) (co
 	if r.replay && r.calls > 1 {
 		return r.cached, nil
 	}
+	if r.replay {
+		req.Limit = 2 // Force multiple bounded pages for stuck-cursor regression.
+	}
 	page, err := r.Reader.Page(ctx, req)
 	if r.replay && r.calls == 1 {
 		r.cached = page
