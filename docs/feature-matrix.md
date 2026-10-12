@@ -19,7 +19,7 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 | 共享 DTO/接口 `m1a-v1` | 已实现 | `pkg/contracts` + 契约测试；不是完整引擎 |
 | `database/sql` 驱动版本锁定 | 已实现 | `go.mod`/`go.sum`、database-drivers.md |
 | SQLite 合成环境 | 已实现 | `internal/testenv`、`tools/fixture`；业务 Reader/Writer、分页和事务测试由 #5/PR #21 交付，是否通过以最终 CI 为准 |
-| MySQL 隔离环境 | 部分实现 | 私有 socket fixture 已通过 CI；#5 提供 MySQL 适配器与可选业务测试入口，但业务测试仍可能 SKIP/UNVERIFIED，真实验收由 #10 负责 |
+| MySQL 隔离环境 | 已实现（隔离测试） | PR #30 在固定 MySQL 8.0.46 私有 socket 容器执行 TestMySQLFixture + TestMySQLAdapter；其他版本与完整 CLI 未验证 |
 | 可选工作树工具 | 已实现（历史单机） | `scripts/check-native-worktree.mjs` 的旧预检，不是跨平台开发前置条件 |
 | 四人模块任务定义 | 已实现（文档） | parallel-tasks.md；独立克隆/分支/PR，业务组件仍待实现 |
 | 跨平台 CI | 部分实现 | Ubuntu/Windows 测试、格式、vet；Ubuntu race/MySQL fixture。配置不等于运行通过，以 PR checks 为准 |
@@ -35,7 +35,7 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 | 连接生命周期、schema/table/column/type/PK 元数据 | SQLite/MySQL Reader/Writer，元数据与 SchemaCoverage 保守声明；不支持或可能丢精度的映射显式拒绝 | 部分实现（#5 组件） | #5 / PR #21；MySQL 业务待 #10 验证 |
 | distinct 非空抽样、表/列过滤 | typed、非 NULL distinct 有界抽样；按 DataSetID/Schema/TableRef 限定访问范围 | 部分实现（#5 组件） | #5 / PR #21 |
 | SQLite 连接与真实集成 | SQLite 真实驱动执行 Reader/Writer、只读、类型、复合键分页和安全拒绝测试；以 PR #21 最终 CI 为证据 | 部分实现（#5 组件） | #5 / PR #21 |
-| MySQL 连接与真实集成 | 驱动适配和 `TestMySQLAdapter` 已实现；需要隔离 socket，否则 SKIP；MySQL fixture 绿灯不等于适配器业务用例验证 | 部分实现（业务 UNVERIFIED） | #10 最终 M1 验收 |
+| MySQL 连接与真实集成 | TestMySQLAdapter 在一次性 MySQL 8.0.46 实例真实通过；包含 nine CN 策略的 typed SQL 写入/读回；其他版本与整套 CLI 流程未验收 | 部分实现（适配器实测） | #10 / PR #30 |
 | MariaDB / PostgreSQL / SQL Server / Oracle | 需独立适配与独立验证 | 未实现 | 后续评估 |
 | 参数化更新、批次事务、复合键 keyset 分页 | #5 提供按真实复合主键游标、参数绑定、乐观受影响行数检查与回滚；跨方言独立验证持续进行 | 部分实现（#5 组件） | #5 / PR #21，MySQL 待 #10 |
 | 无主键 apply 拒绝、敏感主键明确未处理 | 数据库 Writer 已对无主键及试图改主键的计划拒绝；CLI 端到端授权与拒绝仍待 Main 集成 | 部分实现（组件） | #5 / #9 |
@@ -138,7 +138,7 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 
 | 功能 | 状态 | 目标 |
 |---|---|---|
-| 中国 PII 检测与格式约束脱敏 | 部分实现（检测 + 纯内存替换组件） | 检测见 #6/PR #20；九种有界替换及合成评估见 #12/PR #29；真实数据库 Apply/Validate 依赖 #9/#11，不宣称完整产品验收 |
+| 中国 PII 检测与格式约束脱敏 | 部分实现（检测 + 有界替换 + SQL 集成测试） | 检测见 #6/PR #20，九种策略见 PR #29，真实 SQLite/MySQL 8.0.46 组件级读/写/回读与只读快照测试见 PR #30；用户 CLI 工作流与独立安全评审仍属 #9/#11 |
 | 有界流式并发、背压、取消 | 计划中 | M2；M1 仅正确有界分页，不冒充高性能并发 |
 | 故障恢复、版本化 checkpoint、幂等重放 | 计划中 | M2；先解决事务提交与映射一致性 |
 | precision/recall 与吞吐/内存基准、可视化 | 部分实现 | 仅 #6 的 74 条开发时合成检测评估已产生数值；独立评测、吞吐/内存基准与可视化仍未实现 |
