@@ -1,0 +1,55 @@
+name: Synthetic performance benchmarks
+
+on:
+  pull_request:
+    paths:
+      - "internal/runner/**"
+      - "cmd/maskriver/**"
+      - "scripts/bench_report.py"
+      - ".github/workflows/bench.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Environment metadata
+        shell: bash
+        run: |
+          mkdir -p bench-out
+          {
+            date --utc --iso-8601=seconds
+            go version
+            go env GOOS GOARCH GOAMD64
+            uname -a
+            nproc
+            git rev-parse HEAD
+          } | tee bench-out/environment.txt
+      - name: Repeat synthetic masking benchmarks
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -run '^$' -bench '^BenchmarkMaskBatchWorkers$' -benchmem -count=3 -benchtime=300ms ./internal/runner | tee bench-out/raw.txt
+      - name: Generate machine-readable metrics and chart
+        run: python3 scripts/bench_report.py bench-out/raw.txt bench-out
+      - name: Race regression
+        run: go test -race -count=1 ./internal/runner/...
+      - name: Upload measured evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-mask-benchmarks
+          path: bench-out/
+      - name: Caveats
+        if: always()
+        shell: bash
+        run: |
+          echo 'Synthetic transform throughput only. No full DB throughput/RSS/CPU profile, privacy certification, or guaranteed speedup is claimed.' >> "$GITHUB_STEP_SUMMARY"
