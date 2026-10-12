@@ -1,67 +1,67 @@
-# Roadmap
+# MaskRiver Roadmap
 
-MaskRiver 的定位：**独立研发的 Go 数据脱敏与敏感信息治理工具**，面向企业开发、测试与数据共享场景。
-产品目标：自动发现敏感数据；提供安全、确定性的脱敏策略；支持 SQLite 与 MySQL；提供数据完整性校验；后续支持有界流式处理、失败恢复与中文敏感数据治理。
+MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段目标是：在授权且隔离的测试数据库中，以可复现方式完成发现、审核计划、预览、显式脱敏写入和严格验证。本路线图按 **2026-10-12 的 `main` 状态** 编写；实现证据详见 [Feature Matrix](feature-matrix.md)、[测试计划](test-plan.md)、[契约](contracts.md) 与对应 PR/CI。
 
-本路线图描述 MaskRiver 自身的产品需求与阶段划分。所有实现以本仓库的接口（[contracts.md](contracts.md)）、设计（[architecture.md](architecture.md)）、功能范围（[feature-matrix.md](feature-matrix.md)）与测试计划（[test-plan.md](test-plan.md)）为依据。
+## 现状与里程碑
 
-## 阶段 0 — 项目基座（已完成）
+| 阶段 | 状态 | 验证过的边界 / 尚缺能力 |
+| --- | --- | --- |
+| M0 · 项目基座 | 完成 | 独立 Go module、MIT 授权、help/version、跨平台 CI；数据库业务 CLI 仍只会安全拒绝 |
+| M1-A · 共享契约 | 完成 | `pkg/contracts` 冻结 `APIRevision=m1a-v1`、SQLite/MySQL 测试环境及基础类型 |
+| M1-B · 四个核心组件 | 已合并 | #5/#10 数据库、#6 检测、#7/#12 脱敏、#8 验证；有真实 SQLite/MySQL 适配器与 CN 策略 SQL 组件集成、fake Reader 验证器回归。**不等于端到端 CLI** |
+| M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **进行前准备 / 待开发** | Config、冻结 Plan、Scan、Preview、显式 Apply、严格 Validate、真实 SQLite 完整流程 |
+| M1-D · 独立安全验收 [#11](https://github.com/haoyuehx/maskriver/issues/11) | **待 #9 完成** | 第三方或团队内非作者审查、失败注入、零持久副作用证据、风险登记和发布门禁 |
+| M2 · 增强能力 | **未启动** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 有界并发/实测性能；[#14](https://github.com/haoyuehx/maskriver/issues/14) checkpoint、幂等恢复与故障注入。不得宣称已具备恢复或高吞吐保证 |
 
-- 独立 Git/Go/GitHub 项目，MIT 许可，可编译且拒绝数据库操作的 CLI 骨架。
-- 四人跨平台协作规范、模块责任与安全边界。
-- 来源与许可说明见 [attribution.md](attribution.md)。
+## 已交付核心能力（M1-B）
 
-不在阶段 0 承诺任何数据库操作。
+- **go-db**：真实 SQLite 与隔离 MySQL 8.0.46 的 Reader/Writer、元数据、typed 值、复合键分页、乐观写入和事务回滚。MySQL 业务适配器已实际运行 `TestMySQLAdapter`，不是仅有 Fixture smoke（PR #21/#30）。未验证其他 MySQL 版本和通过 CLI 的完整工作流。
+- **go-detect**：有界 13 类 China-first 规则与三态判断（PR #20）；默认采样下的真实世界准确率没有被独立证明，`UNKNOWN` 不可授权写入。
+- **go-mask**：5 种基础策略、并发安全内存映射、9 种中国格式约束替换（PR #24/#29），以及在 SQLite/MySQL 合成表的真实 SQL 组件集成（PR #30）。无持久映射、全局唯一性、未分配号码或匿名化保证。
+- **go-verify**：基于冻结 Plan 的 Schema、行数、双向主键与所选敏感列变化校验；两端有界分页，异常 fail-closed，主要测试为 fake Reader（PR #32/#33）。真实 CLI 的独立源快照验证仍属 #9/#11。
 
-## 阶段 1-A — 接口与测试环境冻结（已完成）
+## M1-C：Issue #9 的交付顺序
 
-- `pkg/contracts` 冻结 `APIRevision=m1a-v1`：定位与类型化值、检测三态、脱敏计划与策略、数据库读写接口、验证报告、错误与取消语义、四个工作流签名。
-- SQLite 与 MySQL 驱动版本锁定并记录许可与使用约束。
-- 合成测试环境：SQLite 真实驱动接入、fixture 生成工具、隔离 MySQL 启动脚本。
-- 曾完成单机隔离工具预检（历史证据，不作为开发前置条件）。
-- 组件任务定义：四个无重叠边界，见 [parallel-tasks.md](parallel-tasks.md)。
+按依赖顺序拆成小 PR，最终由 Main 负责合并和端到端编排，不平行重写 `runner`。每个 PR 必须列出变更文件、最终 SHA、测试命令与真实 PASS/SKIP/UNVERIFIED。
 
-阶段 1-A 不交付业务功能。
+| 顺序 | PR 工作包 | 主责 / 支持 | 完成门禁 |
+| --- | --- | --- | --- |
+| 1 | **配置、Plan 和授权门禁**：读取安全配置、组装冻结 Plan、审查决策与 Digest | A 主责；C 审核 UNKNOWN/策略，B 审核数据定位 | 配置不得激活 Apply；Plan 与 Schema/Key 对齐；无 DSN、密钥或明文泄漏 |
+| 2 | **Scan 与默认 Preview**：有界样本和检测、生成待审核决策、确定性预览统计 | A 编排；C 规则门禁，B 源快照/只读支持 | `UNKNOWN`、抽样不足、无主键、非法策略均 fail-closed；Dry Run 文件快照加 SQL Spy 证明**零持久副作用** |
+| 3 | **显式 Apply**：仅 `mask --apply` 可以进入 Writer，提交前重新校验 Plan、范围和 schema；分批事务 | A 唯一写入协调；B 提供 DB 事务/回滚测试，C 处理策略边界 | 无授权绝不写入；冲突/取消/提交状态不确定明确失败；Preview 与 Apply 输出一致；不承诺跨批全局原子性 |
+| 4 | **Strict Validate 和 CLI 出口**：从脱敏前独立快照与目标比较，报告安全摘要、可靠退出码 | A 接入 CLI；D 主责验证用例，B 提供隔离库 | 真实 SQLite 合成库 `scan → preview → apply → strict validate` 完整通过；失败/部分覆盖不能返回成功 |
+| 5 | **回归与文档**：错误注入、CI、演示脚本、真实输出证据、更新功能矩阵 | A 发布协调；B/C/D 各自交付证据 | Ubuntu/Windows Go CI、Ubuntu race、真实 SQLite 端到端；日志无原值/密钥/DSN；列出尚未验证的情况 |
 
-## 阶段 1-B — 核心组件（待实现，按 Issue 认领与 PR 交付）
+首版只承诺**经测试的 SQLite CLI 全流程**；MySQL 8.0.46 业务适配器已测试，但 MySQL 的用户 CLI 全流程仍须单独验收，不得借组件测试宣称已完成。
 
-1. **契约门禁 / Main**：以 `m1a-v1` 为冻结基线，确定字段命名、三态语义、错误与 CLI 退出码，固定第一轮范围。
-2. **可并行组件**：
-   - go-db：连接与元数据、distinct 抽样、复合键 keyset 分页、参数化乐观更新与逐批事务。
-   - go-detect：规则证据、上下文、阈值与冲突判定，输出三态结论。
-   - go-mask：首批 5 种策略、确定性映射键与并发安全内存映射。
-   - go-verify：行数、schema、双向键差异与逐值完整性校验。
-   共享类型与依赖清单只由 Main 修改。
-3. **串行集成 / Main**：config、runner、history 与 CLI，实现 scan → plan → preview → apply → validate，落实默认 Dry Run 与 fail-closed 写入门禁。
-4. **历史与 CLI / Main**：先交付人工覆盖与审核结论的最小可用格式，再做 CSV、审计与映射管理；导入回写等增量为后续工作。
-5. **门禁**：真实 SQLite 集成、脱敏前快照对照、失败注入、无原值/无密钥输出检查、独立只读审查。由 Main 执行并提供可审阅证据。
+## 四人分工与文件所有权
 
-诚实性要求：
+| 人员（待认领） | 主要责任 | 允许主写的范围 | 近期可并行交付 |
+| --- | --- | --- | --- |
+| **A — Main / 集成与发布** | #9 owner、Config/Plan、Runner、CLI、共享契约协调、最后合并 | `cmd/maskriver/**`、`internal/config/**`、`internal/runner/**`、`internal/history/**`、根文档/CI/`pkg/contracts`（后者仅经审批） | 先发布安全配置与 Plan PR，再依次落 Scan/Preview、Apply、Validate；制定退出码与演示命令 |
+| **B — 数据库与 SQL 安全** | 来源快照、只读连接、事务/回滚、复合键、SQL Spy、真实 SQLite/MySQL 回归 | `internal/db/**`；协作测试文件由 A 授权后认领 | 交付快照复制与哈希校验、只读/写入 SQL Spy、冲突/取消/提交歧义测试；审查 A 的 DB 写入边界 |
+| **C — 敏感检测与脱敏策略** | UNKNOWN/人工覆盖门禁、密钥/Scope/格式边界、确定性与安全回归 | `internal/detect/**`、`internal/mask/**` | 扩充合成负例和分类门禁，验证策略输出型别/长度/未变化拒绝与映射局限；帮助 A 制定 Plan 规则 |
+| **D — 完整性验证与 QA** | `verify` 契约、真实 SQLite 端到端测试、失败注入与 #11 独立验收证据 | `internal/verify/**`、`tests/**`；审查阶段保持只读 | 先构造合成场景和验收矩阵，后接入真实 Workflow，完成覆盖率/坏主键/错误报告验证、独立报告 |
 
-- 有 `database/sql` 接口不等于支持该数据库；未实测的引擎保持「未实现」。
-- 输出以语义、约束与稳定性为目标，不承诺与任何第三方实现逐字节一致。
-- 尚无持久映射或恢复能力时，不得宣称可以断点续跑。
+**规则：** 这四个角色由四位实际成员认领，Main 不是第五个人。只有 A 修改 Runner/CLI/共享配置，B/C/D 通过独立的组件 PR 与测试接口协作；任何跨模块改动先得到 owner 同意，不直接互相覆盖。建议 D 评审 A/B 的实现，B 评审 C，C 评审 D。D 如果编写了某项实现，就不能为该项提供独立的非作者批准。团队 PR 原作者的 Git 身份应保留，尽量使用正常 Merge 而非 Squash。
 
-## 阶段 2 — 流式、恢复与中文敏感数据治理
+## M1-D：Issue #11 的最终验收
 
-- 中国本土格式识别与约束有效的替换输出；标注覆盖范围、误报/漏报与模糊样本。
-- 有界流式并发、背压、取消与资源配额；先保证 race 与正确性，再压测。
-- 幂等事务批次、崩溃恢复、版本与源快照绑定的 checkpoint；不要把简单 last-key 文件当作 exactly-once。
-- 固定合成数据集与配置下的吞吐、延迟、内存、CPU 与分配统计，输出机器可读报告与静态可视化。
-- 竞赛或演示材料：来源与许可清单、可复现演示、架构、安全边界与性能证据；报名条件与时间以官方通知为准。
+在 #9 真实 SQLite CLI 端到端通过后开展**只读**独立审查；实现作者不能自我批准。必须有文件/行号、复现命令、运行结果或明确标记 UNVERIFIED，并出具 P0/P1/P2、残余风险及 Go/数据库版本信息。
 
-## 后续评估（非当前承诺）
+- 默认 Preview 不写源/目标数据、映射库或历史文件：文件快照及 SQL Spy 双重证明。
+- 扫描 UNKNOWN/错误、无稳定主键、缺失计划/Schema、未验证输出、密钥/Scope/数据类型错误一律 fail-closed。
+- `--apply` 唯一授权写入入口；乐观冲突、取消、提交歧义和批间部分成功要准确报告。
+- 与脱敏前**独立源快照**比较双向键、行数、Schema 与计划字段；未完成覆盖不能 PASS，strict 模式拒绝 Warning/UNKNOWN。
+- CLI stdout/stderr、日志、审计、测试报告和发布资产不得包含敏感明文、行键、DSN 或密钥。
+- M1 Feature Matrix、README 示例、版权/依赖许可证与 CI 证据逐项核对，保留不支持的数据库/格式/失败场景清单。
 
-LLM 辅助分类、审核结果导入回写、其他数据库引擎适配、稳定公共 Go API、数据目录与治理平台集成。
-外部 LLM 默认关闭；真实数据不得作为提示词或未经批准的对外样本。
+## M2：不阻塞首版的研发
 
-## 并行启动前清单
+1. [#13](https://github.com/haoyuehx/maskriver/issues/13)：有界 Worker Pool/背压/取消以及 race、fuzz、重复跑的吞吐/延迟/RSS/分配基准；只发布真实测得的分布和环境。
+2. [#14](https://github.com/haoyuehx/maskriver/issues/14)：绑定源快照、版本、提交批次的 checkpoint 与跨存储 commit-gap 策略；故障注入证明幂等和可恢复性前不宣称 exactly-once。
+3. 演示与竞赛材料：合成数据、可重放 CLI 录屏/命令、架构与安全边界、测试方法、来源许可清单。报名资格和赛事日程需要另行核实。
 
-- 成员认领 Issue，Main 协调文件范围、接口、测试与停问条件。
-- Windows/Linux/macOS 独立克隆，个人功能分支与 PR；Pi/AI 工具可选，不依赖旧会话或工作树。
-- 并发 writer 不共享目录；不要求固定本机路径，设备维护不属于产品 Issue。
-- 首轮准备真实 SQLite 合成环境；MySQL 保留实现与测试，缺实例时标记 `UNVERIFIED`；最终 M1 验收前补齐隔离实例、源快照与清理机制。
-- 基于已冻结 `m1a-v1` 独立实现，契约和依赖变化先协调。
-- PR 统一 CI 与评审；已有 Ubuntu/Windows 测试、格式、vet、Ubuntu race/MySQL fixture 工作流，运行结果以 PR 检查为准。业务集成、漏洞与许可检查、fuzz 门禁仍按里程碑补齐。
+## 不做的承诺
 
-每一里程碑验收后更新 Feature Matrix，记录真实命令、环境与结果，并保留未验证事项。
+当前既没有可用的端到端数据库 CLI，也没有生产级 PII 识别准确率、全局匿名化、稳定公共 SDK、断点恢复或高性能并发证明。项目只处理获得授权的隔离/合成数据；保持 `m1a-v1` 契约，任何变化必须经 Main 审核并记录证据。发布状态必须以功能与实际测试为依据，而不是 Issue 标记或 CI 配置是否存在。
