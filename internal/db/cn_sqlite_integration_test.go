@@ -142,7 +142,7 @@ func TestCNDateSQLiteRealIntegration(t *testing.T) {
 	}
 	defer raw.Close()
 	var persisted string
-	if err := raw.QueryRowContext(ctx, "SELECT born FROM people WHERE id=1").Scan(&persisted); err != nil || persisted != changed.Payload() {
+	if err := raw.QueryRowContext(ctx, "SELECT CAST(born AS TEXT) FROM people WHERE id=1").Scan(&persisted); err != nil || persisted != changed.Payload() {
 		t.Fatal("durable SQLite value mismatch", err)
 	}
 }
