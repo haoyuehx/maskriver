@@ -9,7 +9,7 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 | M0 · 项目基座 | 完成 | 独立 Go module、MIT 授权、help/version、跨平台 CI；数据库业务 CLI 仍只会安全拒绝 |
 | M1-A · 共享契约 | 完成 | `pkg/contracts` 冻结 `APIRevision=m1a-v1`、SQLite/MySQL 测试环境及基础类型 |
 | M1-B · 四个核心组件 | 已合并 | #5/#10 数据库、#6 检测、#7/#12 脱敏、#8 验证；有真实 SQLite/MySQL 适配器与 CN 策略 SQL 组件集成、fake Reader 验证器回归。**不等于端到端 CLI** |
-| M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **进行前准备 / 待开发** | Config、冻结 Plan、Scan、Preview、显式 Apply、严格 Validate、真实 SQLite 完整流程 |
+| M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **开发中（PR #35 首个有界路径）** | SQLite 单表单列真实 Scan/Preview/Apply/Validate 已测；多表、审核记录、SQL Spy/失败注入、独立验收仍未完成 |
 | M1-D · 独立安全验收 [#11](https://github.com/haoyuehx/maskriver/issues/11) | **待 #9 完成** | 第三方或团队内非作者审查、失败注入、零持久副作用证据、风险登记和发布门禁 |
 | M2 · 增强能力 | **未启动** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 有界并发/实测性能；[#14](https://github.com/haoyuehx/maskriver/issues/14) checkpoint、幂等恢复与故障注入。不得宣称已具备恢复或高吞吐保证 |
 
@@ -64,4 +64,4 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 
 ## 不做的承诺
 
-当前既没有可用的端到端数据库 CLI，也没有生产级 PII 识别准确率、全局匿名化、稳定公共 SDK、断点恢复或高性能并发证明。项目只处理获得授权的隔离/合成数据；保持 `m1a-v1` 契约，任何变化必须经 Main 审核并记录证据。发布状态必须以功能与实际测试为依据，而不是 Issue 标记或 CI 配置是否存在。
+当前仅有 SQLite 单表单列合成数据库 CLI 首个端到端路径，没有完整通用数据库 CLI、生产级 PII 识别准确率、全局匿名化、稳定公共 SDK、断点恢复或高性能并发证明。项目只处理获得授权的隔离/合成数据；保持 `m1a-v1` 契约，任何变化必须经 Main 审核并记录证据。发布状态必须以功能与实际测试为依据，而不是 Issue 标记或 CI 配置是否存在。
