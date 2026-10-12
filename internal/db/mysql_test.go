@@ -94,6 +94,15 @@ func TestMySQLAdapter(t *testing.T) {
 	if err != nil || n != 25 {
 		t.Fatal("MySQL count failed", err)
 	}
+	// Reader sessions must be database-enforced read-only, even when
+	// the disposable harness connects with an otherwise writable account.
+	if _, err := r.db.ExecContext(ctx, "UPDATE people SET nickname='should-never-write' WHERE id=1"); err == nil {
+		t.Fatal("MySQL Reader allowed a direct UPDATE")
+	}
+	var stillNull sql.NullString
+	if err := db.QueryRowContext(ctx, "SELECT nickname FROM people WHERE id=1").Scan(&stillNull); err != nil || stillNull.Valid {
+		t.Fatal("MySQL reader modified a persistent value")
+	}
 	after := []contracts.Value(nil)
 	seen := 0
 	for {
