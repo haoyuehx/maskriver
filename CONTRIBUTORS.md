@@ -6,7 +6,7 @@ MaskRiver 是四人协作的开源项目。下面仅列出目前能够从公开 
 | --- | --- |
 | [@haoyuehx](https://github.com/haoyuehx) | 仓库维护与集成、中国敏感信息检测 [#20](https://github.com/haoyuehx/maskriver/pull/20)、数据库 Count 范围校验及整合 [#21](https://github.com/haoyuehx/maskriver/pull/21) |
 | [@HerrscherofSentience555](https://github.com/HerrscherofSentience555) | 原始 SQLite/MySQL 适配器实现 [#16](https://github.com/haoyuehx/maskriver/pull/16)，随后由 [#21](https://github.com/haoyuehx/maskriver/pull/21) 纳入主线 |
-| [@emgps](https://github.com/emgps) | 通过 [PR #18](https://github.com/haoyuehx/maskriver/pull/18) 提交 M1 五种脱敏策略和并发内存映射；安全修复与整合见 [PR #24](https://github.com/haoyuehx/maskriver/pull/24) |
+| [@emgps](https://github.com/emgps) | 通过 [PR #18](https://github.com/haoyuehx/maskriver/pull/18) 提交 M1 五种脱敏策略和并发内存映射（整合 PR #24）；并通过 [PR #32](https://github.com/haoyuehx/maskriver/pull/32) 提交只读双向验证器与 fake Reader 用例，安全整合见 [PR #33](https://github.com/haoyuehx/maskriver/pull/33) |
 | [@whh-true](https://github.com/whh-true) | 提交 [PR #26](https://github.com/haoyuehx/maskriver/pull/26) 的独立脱敏策略与映射实现；冲突解决保留现有主线并吸收邮箱格式/长度校验、映射安全输出及对应测试 |
 
 ## GitHub 贡献者统计
