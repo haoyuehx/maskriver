@@ -7,7 +7,7 @@ An independently developed Go data masking and sensitive-data governance project
 
 MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具，面向企业开发、测试与数据共享场景：自动发现敏感数据，提供安全、确定性的脱敏策略，支持 SQLite 与 MySQL，并提供数据完整性校验。
 
-> **M1 核心组件已交付，完整 CLI 仍未实现。** 已有真实 SQLite/MySQL 适配器、13 类 China-first 检测、5 种基础及 9 种有界中文脱敏策略、流式验证器；`scan` / `mask` / `validate` 仍为安全拒绝执行的占位命令。不能据此声称产品已端到端可用或生产就绪。
+> **M1 核心组件已交付，SQLite 单表单列 CLI 的第一条真实路径由 PR #35 交付。** `scan → preview → mask --apply --approved → validate --strict` 已在合成 SQLite 两份独立数据库上实测；多表计划、审查存储、SQL Spy、安全异常注入、独立 #11 验收和 MySQL CLI 尚未完成。不能据此声称完整产品或生产就绪。
 
 ## 快速开始
 
@@ -21,8 +21,8 @@ go vet ./...
 go build -o bin/maskriver ./cmd/maskriver
 ```
 
-`scan`、`mask`、`validate` 为预留命令，返回退出码 2（未实现），不会打开数据库或写入文件。**真实 SQLite/MySQL 读写与九种中文格式替换已有 Go 组件集成测试，但不是通过 CLI 完成的工作流。**
-`mask` 默认 Dry Run；即使传入 `--apply`，当前版本仍拒绝执行。
+`scan`、`mask`、`validate` 已支持明确限定的 **SQLite 单表单列**合成测试工作流；必须提供两个各自存在且不同的绝对路径数据库文件，默认只读。其他数据库 CLI 尚未实现，非法配置或未获批准的写入一律拒绝。
+`mask` 默认 Dry Run；**仅** `mask --apply --approved` 同时提供明确的人工审核声明与写意图才可能调用 Writer，且会先完成只读 Preview、Plan 和安全检查。写入使用批次事务，故障后不保证整次操作全局原子，未实现断点恢复。
 直接运行编译后的二进制可观察原始退出码；`go run` 会包装子进程退出状态。
 
 ## 四人跨平台协作
@@ -42,7 +42,7 @@ CI 包括 Ubuntu/Windows 的测试与 vet、Ubuntu race，以及隔离 MySQL 8.0
 ## 产品路线图
 
 - **M1-B 已交付：** 数据库适配器（#5、#10）、检测（#6）、脱敏（#7、#12）和验证器（#8），有真实数据库或有界 fake Reader 测试证据；各组件不等于完整产品。
-- **M1 收尾：** [#9 完整 CLI](https://github.com/haoyuehx/maskriver/issues/9) 实现 `scan → preview → apply → strict validate` 与真实 SQLite 端到端；[#11 独立安全验收](https://github.com/haoyuehx/maskriver/issues/11) 核验授权、零副作用、失败注入及无泄露。
+- **M1 收尾：** [#9](https://github.com/haoyuehx/maskriver/issues/9) 已开始交付单表单列 SQLite CLI PR #35，继续完善多表计划、完整授权、SQL Spy 与异常注入；[#11](https://github.com/haoyuehx/maskriver/issues/11) 独立验收尚未完成。
 - **M2 待启动：** [#13 有界并发/基准](https://github.com/haoyuehx/maskriver/issues/13)、[#14 幂等恢复](https://github.com/haoyuehx/maskriver/issues/14)。中文格式约束替换已有有界组件实现，不再列作从零开发。
 - 完整阶段划分见 [Roadmap](docs/roadmap.md)。
 
