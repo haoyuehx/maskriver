@@ -103,8 +103,8 @@ func TestCNDateSQLiteRealIntegration(t *testing.T) {
 	}
 	original := page.Rows[0]["born"]
 	count, err := tx.Update(ctx, []contracts.RowChange{{
-		Key: []contracts.Value{page.Rows[0]["id"]},
-		Expected: contracts.Row{"born": original},
+		Key:         []contracts.Value{page.Rows[0]["id"]},
+		Expected:    contracts.Row{"born": original},
 		Replacement: contracts.Row{"born": changed},
 	}})
 	if err != nil || count != 1 {
