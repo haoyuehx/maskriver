@@ -174,7 +174,7 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 		Table: schema.Ref, PrimaryKey: append([]string(nil), schema.PrimaryKey...),
 		Columns: []contracts.ColumnPlan{{
 			Column: col.Ref, Type: col.Type, Strategy: e.cfg.Strategy,
-			Scope: "sqlite/" + schema.Ref.Table + "/" + col.Ref.Column,
+			Scope:                "sqlite/" + schema.Ref.Table + "/" + col.Ref.Column,
 			NormalizationVersion: "typed-lexical-v1", KeyID: e.cfg.KeyID,
 		}},
 	}
