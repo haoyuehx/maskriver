@@ -35,6 +35,6 @@ MPL-2.0 是文件级义务：修改/分发受覆盖驱动文件须保留 MPL 与
 - fixture 仅专用 Unix socket、全新私有数据目录、skip-networking/mysqlx=OFF；不接系统 socket、不读用户凭证、不管理系统服务。
 - schema 用 utf8mb4_bin；Decimal 以字符串精确保留，零日期不能当合法 Date，DATETIME 与 TIMESTAMP 不混同。Keyset 用数据库的键排序规则。
 - 单批 InnoDB 事务；DDL 会隐式提交，因此 schema 仅由环境工具在空实例创建。受影响行数/乐观比较/commit 不确定性须 adapter 测试。
-- 驱动编译或 fixture 测试不等于业务适配器验收；真实适配器集成仍待 #5/#10。旧本机初始化权限问题不阻塞其他机器使用容器/CI，见 test-environment.md。
+- [PR #30](https://github.com/haoyuehx/maskriver/pull/30) 的隔离 MySQL 8.0.46 CI 已执行并通过真实 `TestMySQLAdapter`：元数据、typed 值、分页、乐观事务及九种有界 CN 格式替换的真实 SQL 回读。详情见 [验收运行](https://github.com/haoyuehx/maskriver/actions/runs/38243891955)。这不代表完整 CLI workflow、生产部署或其他 MySQL 版本已验证。旧本机初始化权限问题不阻塞 CI，见 test-environment.md。
 
-当前 CLI 不导入 DB adapter；依赖仅供合成环境测试与后续组件使用。引入驱动不等于 SQLite/MySQL 业务支持。
+当前 CLI 仍未导入 DB adapter；SQLite/MySQL 适配器已通过隔离业务测试，独立 CLI 的 `scan/mask/validate` 端到端路径仍属 #9/#11。

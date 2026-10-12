@@ -11,9 +11,9 @@ MaskRiver 的测试目标：证明组件在真实数据库上按其契约工作�
 - `internal/config/config_test.go`：零值只读与显式 Apply 意图。
 - `tools/fixture`：生成 `.local/m1a-synthetic.db`，拒绝覆盖已有文件。
 - `scripts/test_mysql.py`：可选 POSIX 本机专用禁网 MySQL；历史宿主机权限失败不是通用开发阻塞。
-- `scripts/test_mysql_container.py`：Linux 开发机或 Ubuntu CI 中运行一次性禁网 MySQL 容器，复用私有 socket guard；仅测 fixture，不是适配器验收。
+- `scripts/test_mysql_container.py`：Linux 或 Ubuntu CI 一次性禁网 MySQL 8.0.46 容器，复用 marker + 私有 socket guard；现执行 TestMySQLFixture + TestMySQLAdapter 业务测试（PR #30）。
 
-`internal/detect` 已由 PR #20 合并有界 China-first 检测实现；`internal/db` 的 SQLite/MySQL Reader/Writer、keyset 分页与事务由 #5 的 PR #21 交付，是否合并和测试通过以 GitHub 最终记录为准。`internal/db/mysql_test.go` 的 `TestMySQLAdapter` 只有在传入隔离 MySQL socket 时执行；当前 CI 的 isolated MySQL fixture 并不默认执行这一业务测试。go-mask 的五种 M1 策略及内存映射由 PR #24 从 #18 原始提交整合，测试证据见 `internal/mask/mask_test.go`、`security_test.go`；是否合并以 GitHub 实际记录为准。其他尚未交付的模块 PR 不得被视为已在 `main` 交付。CLI/config/testenv 测试仍不代表完整业务流程，`scan/mask/validate` CLI 仍为占位行为。
+`internal/detect` 已由 PR #20 合并有界 China-first 检测实现；`internal/db` 的 SQLite/MySQL Reader/Writer、keyset 分页与事务由 #5 的 PR #21 交付，是否合并和测试通过以 GitHub 最终记录为准。`internal/db/mysql_test.go` 的 `TestMySQLAdapter` 只有在传入隔离 MySQL socket 时执行；PR #30 的独立隔离 MySQL CI 现已实际执行这一业务测试并成功；本地普通测试无 socket 时仍会 SKIP。go-mask 的五种 M1 策略及内存映射由 PR #24 从 #18 原始提交整合，测试证据见 `internal/mask/mask_test.go`、`security_test.go`；是否合并以 GitHub 实际记录为准。其他尚未交付的模块 PR 不得被视为已在 `main` 交付。CLI/config/testenv 测试仍不代表完整业务流程，`scan/mask/validate` CLI 仍为占位行为。
 
 ```sh
 gofmt -l cmd internal pkg tools
@@ -26,9 +26,9 @@ go build -o bin/maskriver ./cmd/maskriver
 
 四位成员各自 clone、认领 Issue、开分支并提交 PR。纯内存模块可在 Windows/Linux/macOS 独立测试；不依赖本地 Agent smoke。共享测试环境变动由 Main 协调。
 
-`.github/workflows/ci.yml` 在 Ubuntu/Windows 执行格式检查、`go test -count=1 -v ./...` 和 `go vet ./...`，Ubuntu 另跑 race。MySQL fixture 单独在 Ubuntu 一次性禁网容器执行，失败即 CI 失败；普通测试无 MySQL 时明确 SKIP。macOS 可以本地测试，当前 CI 不宣称覆盖 macOS。
+`.github/workflows/ci.yml` 在 Ubuntu/Windows 执行格式检查、`go test -count=1 -v ./...` 和 `go vet ./...`，Ubuntu 另跑 race。MySQL 隔离业务测试单独在 Ubuntu 禁网容器执行 fixture + adapter，失败即 CI 失败；普通测试无 MySQL socket 时明确 SKIP。macOS 可以本地测试，当前 CI 不宣称覆盖 macOS。
 
-PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，统一 CI 与评审完成后才能合并。本机不支持 race 可由 Ubuntu CI 补齐，不能记成本机通过。#5/#10 后续须将真实适配器全部用例接入隔离实例；fixture 绿灯不关闭 #10。
+PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，统一 CI 与评审完成后才能合并。本机不支持 race 可由 Ubuntu CI 补齐，不能记成本机通过。#10 的当前适配器用例已在 PR #30 隔离 MySQL 8.0.46 实跑；尚未验证完整用户 CLI workflow、其他版本及生产环境。
 
 ## 分阶段门禁
 
@@ -64,7 +64,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 
 - 使用真实 SQLite 驱动运行 `go test -count=1 ./internal/db/...`，确认只读且缺失文件不创建、表元数据与保守 `SchemaCoverage`、有界 DISTINCT 非 NULL 抽样、NULL/空串/Bytes/Decimal/Date 与安全类型处理、25 行三页、真实有序复合主键 keyset、乐观锁冲突零提交、Rollback、取消、非法列名与跨 DatasetID/Schema 白名单拒绝。特别覆盖新增 `internal/db/count_scope_test.go` 的 Count 越界检查。
 - Go CI 应在 Ubuntu/Windows 运行全仓测试和 vet，并在 Ubuntu 运行 race；以合并目标分支对应最终 PR Head 的通过记录为准，不把 queued、SKIP 或 fixture 环境通过写成适配器验收通过。
-- MySQL 业务测试入口是 `internal/db/mysql_test.go:TestMySQLAdapter`，需要隔离容器私有 socket 和 `MASKRIVER_TEST_MYSQL_SOCKET`；未提供时将 `SKIP/UNVERIFIED` 原样记录。#10 负责真实执行 MySQL Adapter 元数据、typed 值、复合键及事务回滚等完整用例，未完成前不得声称最终 M1 MySQL 业务验收。
+- MySQL 业务测试入口是 `internal/db/mysql_test.go:TestMySQLAdapter`，需要隔离容器私有 socket 和 `MASKRIVER_TEST_MYSQL_SOCKET`；未提供时将 `SKIP/UNVERIFIED` 原样记录。#10 的 MySQL 8.0.46 适配器场景已由 PR #30 的测试入口实跑；尚不能宣称用户 CLI 的最终 M1 端到端验收。
 - 本轮数据库组件不等于 CLI/runner 端到端已交付；全链路 Dry Run/Apply/严格 Validate 仍由 #9/#11 验收。
 
 ## 脱敏策略组件专项验收（#7 / 原 PR #18 / PR #24）
@@ -81,7 +81,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - **安全测试**：密钥 Bytes 且至少 32B，类型及策略/Scope/KeyID 绑定，取消与 nil context，NULL 保持、非 NULL 不得不变、目标长度不匹配拒绝，明确校验位错误/非闰日/错误号段/无效地址负例；合成输入不进入错误与日志，策略不访问数据库。
 - **逐规则评估**：`TestCNFormatSyntheticEvaluation` 的开发时手工构造集合含 21 个正例、28 个负例（九条规则），测试格式接受结果并校验替换输出能再次通过对应格式规则。初轮 PR #29 CI 实测九条规则总 TP=21、FP=0、FN=0；逐规则 P/R 均为 1.000。这个小规模自编集合不是独立留出评估，更不是生产 PII 检测准确率或匿名化证明；检测规则的独立指标仍见 `internal/detect/eval_test.go`。
 - **可复现命令**：`go test -count=1 -v ./internal/mask/...`、`go test -count=1 ./...`、`go vet ./...`、`go test -race ./internal/mask/...`、`gofmt -l internal/mask`；最终 PR Head 的 Ubuntu/Windows GitHub CI 应全部成功。先前通过的旧 SHA 不算最新提交通过。
-- **未验证事项**：实际 SQLite/MySQL 接入、跨列唯一/PK-FK、持久映射、SQL 字节长度限制、真实 Dry Run/Apply/strict Validate 均属于后续 #9/#11。生成格式有效的身份证、银行卡、手机号等号码并不保证无人持有、不会被投递/联系，也不保证匿名性；只能处理授权的合成/隔离测试数据。
+- **真实 SQL 组件集成**：PR #30 在 SQLite 真实快照做日期策略的只读文件哈希对比、optimistic UPDATE/COMMIT、独立 SQL 回读和源快照不变性校验；另对全部九种策略在实际 SQLite 和 MySQL 8.0.46 表上做 typed Page → mask → WriteTx → 持久化读回及行数/主键检查。- **仍未验证**：CLI 全链路 Scan/Preview/Apply/strict Validate、SQL spy、跨列唯一/PK-FK、持久映射及所有目标列的字节长度限制，属于 #9/#11。生成格式有效的身份证、银行卡、手机号等号码并不保证无人持有、不会被投递/联系，也不保证匿名性；只能处理授权的合成/隔离测试数据。
 
 更多覆盖范围与限制见 [#12 中国格式组件说明](issue12-cn-replacement.md)。
 
