@@ -209,8 +209,8 @@ func TestMySQLAdapter(t *testing.T) {
 		t.Fatal("MySQL CN write begin failed", err)
 	}
 	count, err := tx.Update(ctx, []contracts.RowChange{{
-		Key: []contracts.Value{before.Rows[0]["id"]},
-		Expected: contracts.Row{"born": before.Rows[0]["born"]},
+		Key:         []contracts.Value{before.Rows[0]["id"]},
+		Expected:    contracts.Row{"born": before.Rows[0]["born"]},
 		Replacement: contracts.Row{"born": masked},
 	}})
 	if err != nil || count != 1 {
