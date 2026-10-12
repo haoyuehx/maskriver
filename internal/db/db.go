@@ -89,6 +89,16 @@ func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool) (*
 			return nil, contracts.ErrUnsafe
 		}
 		cfg.ParseTime = false
+		if readOnly {
+			// The driver applies arbitrary DSN system-variable parameters
+			// to every new pooled connection. Force read-only transactions
+			// on reader sessions, not just on the initial ping connection.
+			// Database credentials should additionally have SELECT-only grants.
+			if cfg.Params == nil {
+				cfg.Params = make(map[string]string)
+			}
+			cfg.Params["transaction_read_only"] = "1"
+		}
 		dsn = cfg.FormatDSN()
 		driver = "mysql"
 	default:
