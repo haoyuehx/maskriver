@@ -1,18 +1,17 @@
 # MaskRiver
 
-A streaming, reliable data masking engine written in Go.
+An independently developed Go data masking and sensitive-data governance project. Streaming performance and failure recovery are roadmap goals, not yet demonstrated guarantees.
 
 面向 **2026 开放原子大赛 · 开源基础软件与解决方案赛道** 的独立 Go 项目。
 这是参赛研发目标，不代表已报名、入选或获官方背书。
 
 MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具，面向企业开发、测试与数据共享场景：自动发现敏感数据，提供安全、确定性的脱敏策略，支持 SQLite 与 MySQL，并提供数据完整性校验。
 
-> 当前阶段：可编译 CLI、冻结的共享契约、安全测试与 SQLite 合成环境。
-> **尚不能连接数据库、扫描、脱敏或验证数据。** Streaming/reliable 是设计目标，不是已验证的性能承诺。
+> **M1 核心组件已交付，完整 CLI 仍未实现。** 已有真实 SQLite/MySQL 适配器、13 类 China-first 检测、5 种基础及 9 种有界中文脱敏策略、流式验证器；`scan` / `mask` / `validate` 仍为安全拒绝执行的占位命令。不能据此声称产品已端到端可用或生产就绪。
 
 ## 快速开始
 
-需要 Go 1.26.3 或更新版本；测试环境已锁定 SQLite/MySQL 驱动，CLI 仍为不执行数据库操作的骨架。
+请使用 `go.mod` 指定的 Go 工具链；以下构建和单元测试无需连接生产数据库。
 
 ```sh
 go run ./cmd/maskriver --help
@@ -22,38 +21,29 @@ go vet ./...
 go build -o bin/maskriver ./cmd/maskriver
 ```
 
-`scan`、`mask`、`validate` 为预留命令，返回退出码 2（未实现），不会打开数据库或写入文件。
+`scan`、`mask`、`validate` 为预留命令，返回退出码 2（未实现），不会打开数据库或写入文件。**真实 SQLite/MySQL 读写与九种中文格式替换已有 Go 组件集成测试，但不是通过 CLI 完成的工作流。**
 `mask` 默认 Dry Run；即使传入 `--apply`，当前版本仍拒绝执行。
 直接运行编译后的二进制可观察原始退出码；`go run` 会包装子进程退出状态。
 
 ## 四人跨平台协作
 
-Windows、Linux、macOS 成员各自 clone，认领 Issue，创建个人功能分支并提交 PR；不需要 Pi、原 Linux 工作树或个人 Agent 会话。模块责任及共享变更协调见 [AGENTS.md](AGENTS.md)。
+团队成员各自 clone 仓库、认领 Issue、通过分支和 PR 交付；不要求固定设备、AI 工具或共用工作树。建议按当前 M1 收尾任务而不是按已经完成的组件再次分工：
 
-例如认领 #6 后，在自己的克隆中运行（PowerShell/终端均可）：
+| 角色（待认领） | 当前主责 | 修改边界 |
+| --- | --- | --- |
+| A · Main/集成协调（建议组长） | #9：Config、Plan、Runner、CLI、合并与发布协调 | `cmd/maskriver/**`、`internal/config/**`、`internal/runner/**`、`internal/history/**` |
+| B · 数据库/事务 | SQLite 快照、SQL Spy、只读/写入/回滚和 MySQL 适配器回归 | `internal/db/**` |
+| C · 检测/脱敏 | UNKNOWN 与策略门禁、格式约束、映射一致性和合成负例 | `internal/detect/**`、`internal/mask/**` |
+| D · 验证/QA | 验证器、真实端到端回归、#11 独立验收报告 | `internal/verify/**`、`tests/**`；审查时只读 |
 
-```sh
-git switch -c feat/detect-rules
-git rev-parse HEAD
-# 仅在 internal/detect 中新增或修改 Go 源码及测试
-gofmt -w internal/detect
-go test -count=1 ./internal/detect
-go test ./...
-go vet ./...
-git add internal/detect
-git commit -m "feat: implement detection rules"
-git push -u origin feat/detect-rules
-```
+公共契约 `pkg/contracts`、CI、根文档及跨模块修改由 A 统一协调。非作者交叉审核：D 审 A/B，B 审 C，C 审 D；不得自审自批。具体 PR 依赖与验收标准见 [Roadmap](docs/roadmap.md) 和 [AGENTS.md](AGENTS.md)。
 
-无仓库推送权限时推到个人 fork，再向本仓库创建 PR。#6 是纯内存任务，不依赖数据库或 MySQL。共享契约保持 `m1a-v1`；文档及其他模块修改先协调。
-
-PR 合并前完成代码评审与 Ubuntu/Windows CI（测试、格式、vet；Ubuntu 另跑 race 和隔离 MySQL fixture）。MySQL 缺环境明确 SKIP/UNVERIFIED，fixture 通过不等于业务适配器通过。详见 [测试环境](docs/test-environment.md)。
-
+CI 包括 Ubuntu/Windows 的测试与 vet、Ubuntu race，以及隔离 MySQL 8.0.46 的实际 `TestMySQLAdapter`；这是组件业务测试，不代表 CLI 全流程已验收。未运行或 SKIP 的测试仍需如实记录。
 ## 产品路线图
 
-- M1：敏感字段扫描、规则检测、脱敏策略引擎、确定性映射、SQLite/MySQL、默认 Dry Run、完整性校验、CLI。
-- M2：中文敏感数据治理与格式约束、有界流式并发、故障恢复与断点续跑、性能基准与可视化。
-- 当前状态：[Feature Matrix](docs/feature-matrix.md)。驱动已为测试环境引入；业务数据库适配器尚未实现。
+- **M1-B 已交付：** 数据库适配器（#5、#10）、检测（#6）、脱敏（#7、#12）和验证器（#8），有真实数据库或有界 fake Reader 测试证据；各组件不等于完整产品。
+- **M1 收尾：** [#9 完整 CLI](https://github.com/haoyuehx/maskriver/issues/9) 实现 `scan → preview → apply → strict validate` 与真实 SQLite 端到端；[#11 独立安全验收](https://github.com/haoyuehx/maskriver/issues/11) 核验授权、零副作用、失败注入及无泄露。
+- **M2 待启动：** [#13 有界并发/基准](https://github.com/haoyuehx/maskriver/issues/13)、[#14 幂等恢复](https://github.com/haoyuehx/maskriver/issues/14)。中文格式约束替换已有有界组件实现，不再列作从零开发。
 - 完整阶段划分见 [Roadmap](docs/roadmap.md)。
 
 ## 文档
