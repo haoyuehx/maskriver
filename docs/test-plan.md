@@ -85,6 +85,15 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 
 更多覆盖范围与限制见 [#12 中国格式组件说明](issue12-cn-replacement.md)。
 
+## #8 验证器组件（PR #32 原作者，PR #33 安全整合）
+
+- **接口**：`verify.New() contracts.Validator`，仅传入两个 `contracts.Reader` 和冻结 `ValidateRequest.Plan`；不读取配置、不写源库/目标库、不扫描目标内容推断敏感列、不输出行或主键。
+- **有界内存**：两边各保持至多 256 行的 `Page`，按真实 Keyset 顺序逐键合并；聚合同类受控 `Issue`，不会为每条行差异生成无界报告。对于未支持的键排序/Collation 显式 `ErrUnsupported`。
+- **契约**：`RowLimit=0` 执行全量有界分页；正数表示总行预算，超过时 `PartialCoverage` + `Complete=false`；负数或 nil ctx/reader 拒绝。缺失 schema/PK 能力、类型不符、计划列缺失、重复键/倒退游标/空页面等必须失败关闭；完整空表可通过。
+- **回归**：`internal/verify/verify_test.go` 保留原始 PR #32 的 fake-Reader 用例；`verify_safety_test.go` 新增 520 行分页、Issue 聚合、非法游标、计划/schema 错配、nil Context、缺少字段、刚好达到总行预算和截断拒绝。仅冻结 `Plan` 中的敏感列查验非 NULL 值变化，NULL 语义异常不通过。
+- **门禁**：`gofmt -l internal/verify`、`go test -count=1 -v ./internal/verify`、`go test -count=1 ./...`、`go vet ./...`、`go test -race ./...`（Linux CI）；记录最终 PR Head 三项 CI 真实结论，不把初期 green 当作末次 green。
+- **剩余未验收**：全量 DB schema 的 Index/FK/Unique/CHECK/Trigger 安全不变量以及真实 CLI/runner 的独立源快照严格 Validate 仍属 #9/#11。以上测试是 fake Reader **不是实际数据库全流程验证**，不能将 #8 组件通过描述成 M1 完成。
+
 ## 特别安全门禁
 
 - 标准输出、错误、日志、报告、Agent 会话均不得出现原始值、敏感主键、DSN、seed/salt。
