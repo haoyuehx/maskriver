@@ -62,13 +62,14 @@ func (*validator) Validate(ctx context.Context, source, target contracts.Reader,
 			complete = false
 			continue
 		}
+		if keyCollationsDiffer(srcSchema, dstSchema, plan.PrimaryKey) ||
+			!safeKeyOrder(srcSchema, plan.PrimaryKey) || !safeKeyOrder(dstSchema, plan.PrimaryKey) {
+			return report, contracts.ErrUnsupported
+		}
 		if !schemasMatch(srcSchema, dstSchema, plan) {
 			report.Issues = append(report.Issues, issue(contracts.Fail, contracts.SchemaMismatch, 1))
 			complete = false
 			continue
-		}
-		if !safeKeyOrder(srcSchema, plan.PrimaryKey) || !safeKeyOrder(dstSchema, plan.PrimaryKey) {
-			return report, contracts.ErrUnsupported
 		}
 		srcCount, err := source.Count(ctx, plan.Table)
 		if err != nil {
@@ -203,6 +204,25 @@ func schemasMatch(a, b contracts.TableSchema, plan contracts.TablePlan) bool {
 		}
 	}
 	return true
+}
+
+func keyCollationsDiffer(a, b contracts.TableSchema, keys []string) bool {
+	lookup := func(schema contracts.TableSchema, name string) (string, bool) {
+		for _, col := range schema.Columns {
+			if col.Ref.Column == name {
+				return col.Type.Collation, true
+			}
+		}
+		return "", false
+	}
+	for _, key := range keys {
+		left, aOK := lookup(a, key)
+		right, bOK := lookup(b, key)
+		if !aOK || !bOK || left != right {
+			return true
+		}
+	}
+	return false
 }
 
 // A non-binary string collation might order keys differently from Go and
