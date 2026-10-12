@@ -7,13 +7,13 @@ MaskRiver 的测试目标：证明组件在真实数据库上按其契约工作�
 
 - `pkg/contracts/contracts_test.go`：typed Value / NULL / 精度 / 时间语义、fmt 与 JSON 遮蔽、无效 Plan 拒绝、报告 strict gate。
 - `internal/testenv/fixture_test.go`：SQLite 真实驱动与合成数据、约束、事务、只读、取消；MySQL 为 opt-in，未启动时明确 `SKIP`。
-- `cmd/maskriver/main_test.go`：help/version、占位命令返回非零、默认 Dry Run、`--apply` 仍拒绝、未知参数与多余位置参数。
+- `cmd/maskriver/main_test.go`：help/version/非法参数、无授权拒绝，以及真实 SQLite 合成源与目标库 Scan、默认 Preview、显式 --apply --approved、strict Validate、源与目标文件哈希/唯一列和重复 Apply 拒绝（PR #35）。
 - `internal/config/config_test.go`：零值只读与显式 Apply 意图。
 - `tools/fixture`：生成 `.local/m1a-synthetic.db`，拒绝覆盖已有文件。
 - `scripts/test_mysql.py`：可选 POSIX 本机专用禁网 MySQL；历史宿主机权限失败不是通用开发阻塞。
 - `scripts/test_mysql_container.py`：Linux 或 Ubuntu CI 一次性禁网 MySQL 8.0.46 容器，复用 marker + 私有 socket guard；现执行 TestMySQLFixture + TestMySQLAdapter 业务测试（PR #30）。
 
-`internal/detect` 已由 PR #20 合并有界 China-first 检测实现；`internal/db` 的 SQLite/MySQL Reader/Writer、keyset 分页与事务由 #5 的 PR #21 交付，是否合并和测试通过以 GitHub 最终记录为准。`internal/db/mysql_test.go` 的 `TestMySQLAdapter` 只有在传入隔离 MySQL socket 时执行；PR #30 的独立隔离 MySQL CI 现已实际执行这一业务测试并成功；本地普通测试无 socket 时仍会 SKIP。go-mask 的五种 M1 策略及内存映射由 PR #24 从 #18 原始提交整合，测试证据见 `internal/mask/mask_test.go`、`security_test.go`；是否合并以 GitHub 实际记录为准。其他尚未交付的模块 PR 不得被视为已在 `main` 交付。CLI/config/testenv 测试仍不代表完整业务流程，`scan/mask/validate` CLI 仍为占位行为。
+`internal/detect` 已由 PR #20 合并有界 China-first 检测实现；`internal/db` 的 SQLite/MySQL Reader/Writer、keyset 分页与事务由 #5 的 PR #21 交付，是否合并和测试通过以 GitHub 最终记录为准。`internal/db/mysql_test.go` 的 `TestMySQLAdapter` 只有在传入隔离 MySQL socket 时执行；PR #30 的独立隔离 MySQL CI 现已实际执行这一业务测试并成功；本地普通测试无 socket 时仍会 SKIP。go-mask 的五种 M1 策略及内存映射由 PR #24 从 #18 原始提交整合，测试证据见 `internal/mask/mask_test.go`、`security_test.go`；是否合并以 GitHub 实际记录为准。其他尚未交付的模块 PR 不得被视为已在 `main` 交付。PR #35 的 SQLite **单表单列**真实 CLI 流程已覆盖；尚未实现多表、持久审批/审计、SQL Spy、异常提交注入和 MySQL CLI，因此不代表全部 #9/#11 验收。
 
 ```sh
 gofmt -l cmd internal pkg tools
