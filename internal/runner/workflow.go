@@ -109,7 +109,7 @@ func (e *Engine) Scan(ctx context.Context, req contracts.ScanRequest) (contracts
 	}
 	decision, err := detect.New().Detect(ctx, contracts.DetectionRequest{
 		Column: col, Sample: sample, MinSamples: e.cfg.MinSamples,
-		MinRatio: e.cfg.MinRatio,
+		MinRatio: e.cfg.MinRatio, DateOrder: "MDY",
 	})
 	if err != nil {
 		return report, err
