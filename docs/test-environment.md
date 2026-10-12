@@ -32,7 +32,7 @@ python3 scripts/test_mysql_container.py
 
 复用 `TestMySQLFixture` 的 marker、目录权限和 socket guard；启动失败/超时、SQL 失败均报失败。finally 删除本次唯一容器及其匿名卷；成功后删除合成目录，失败诊断仅留在忽略的 `.local`，不上传数据文件。取消 CI 时 runner 为一次性环境；本机强制中断后由设备持有人确认残留资源，不自动处理其他容器。
 
-当前容器入口只执行已有真实 MySQL **fixture**。#5/#10 必须继续交付并接入只读、元数据、复合键分页、乐观冲突、回滚、取消、DECIMAL/DATE/BLOB 等适配器契约测试，最终 M1 前全部真实运行。不得以 fixture、Mock、编译或 SKIP 冒充 MySQL 产品支持。
+自 PR #30 起，容器入口同时执行 `TestMySQLFixture` 与 `TestMySQLAdapter`，MySQL 8.0.46 业务适配器测试不再被静默 SKIP。真实 typed 日期/数字/二进制、分页与事务及九种 CN 策略通过相同私有 socket 验证；其他 MySQL/MariaDB 版本、生产凭证权限、用户 CLI 全流程仍未验收。不得以 fixture、Mock 或编译结果冒充未运行的测试。
 
 ### 已取得的 CI 证据
 
@@ -44,4 +44,4 @@ python3 scripts/test_mysql_container.py
 
 ## PR 验收证据
 
-记录 OS、Go/driver/server 版本、实际镜像 digest、精确命令、测试输出、清理结果和未验证项；不提交凭证、数据库或原始敏感数据。首轮 SQLite 必须真实通过，MySQL 可标记未验证支持其他模块继续；最终 M1 仍必须通过完整真实 MySQL 集成。
+[PR #30 真实数据库验收运行](https://github.com/haoyuehx/maskriver/actions/runs/38243891955)：MySQL 8.0.46、固定镜像 SHA256 见 `scripts/test_mysql_container.py`，`TestMySQLFixture PASS`、`TestMySQLAdapter PASS`、一次性容器删除；Ubuntu 与 Windows Go 测试均成功。仅使用合成数据。记录 OS、Go/driver/server 版本、实际镜像 digest、精确命令、测试输出、清理结果和未验证项；不提交凭证、数据库或原始敏感数据。首轮 SQLite 必须真实通过，MySQL 可标记未验证支持其他模块继续；最终 M1 仍必须通过完整真实 MySQL 集成。
