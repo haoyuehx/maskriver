@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/haoyuehx/maskriver/internal/mask"
 	"github.com/haoyuehx/maskriver/internal/testenv"
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
@@ -166,5 +167,61 @@ func TestMySQLAdapter(t *testing.T) {
 	}
 	if _, err = tx.Update(ctx, []contracts.RowChange{change}); !errors.Is(err, contracts.ErrConflict) {
 		t.Fatal("MySQL optimistic conflict not detected", err)
+	}
+
+	// Exercise the actual CN date strategy through MySQL typed Page,
+	// optimistic WriteTx and independent durable readback. This test is
+	// reached only when a harness-owned private Unix socket is provided.
+	var born contracts.Column
+	for _, c := range schema.Columns {
+		if c.Ref.Column == "born" {
+			born = c
+		}
+	}
+	if born.Ref.Column == "" || born.Type.Kind != contracts.Date {
+		t.Fatal("MySQL DATE metadata unavailable")
+	}
+	before, err := r.Page(ctx, contracts.PageRequest{
+		Table: people, Columns: []string{"id", "born"}, KeyColumns: []string{"id"}, Limit: 1,
+	})
+	if err != nil || len(before.Rows) != 1 {
+		t.Fatal("MySQL CN input read failed", err)
+	}
+	ref := contracts.StrategyRef{ID: "cn_date", Version: "1"}
+	strategy, err := mask.NewStrategy(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	col := contracts.ColumnPlan{
+		Column: born.Ref, Type: born.Type, Strategy: ref,
+		Scope: "synthetic/mysql", NormalizationVersion: "cn-v1", KeyID: "synthetic-key",
+	}
+	masked, err := strategy.Mask(ctx, before.Rows[0]["born"], contracts.MaskContext{
+		Plan: col, Key: testValue(t, contracts.Bytes, "synthetic-test-key-material-32bytes-only"),
+	})
+	if err != nil || masked == before.Rows[0]["born"] || masked.Kind() != contracts.Date {
+		t.Fatal("MySQL CN date strategy failed", err)
+	}
+	tx, err = w.Begin(ctx, contracts.TablePlan{
+		Table: people, PrimaryKey: []string{"id"}, Columns: []contracts.ColumnPlan{col},
+	})
+	if err != nil {
+		t.Fatal("MySQL CN write begin failed", err)
+	}
+	count, err := tx.Update(ctx, []contracts.RowChange{{
+		Key: []contracts.Value{before.Rows[0]["id"]},
+		Expected: contracts.Row{"born": before.Rows[0]["born"]},
+		Replacement: contracts.Row{"born": masked},
+	}})
+	if err != nil || count != 1 {
+		t.Fatal("MySQL CN update failed", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal("MySQL CN commit failed", err)
+	}
+	var persisted string
+	if err := db.QueryRowContext(ctx, "SELECT born FROM people WHERE id=1").Scan(&persisted); err != nil ||
+		persisted != masked.Payload() {
+		t.Fatal("MySQL CN durable readback failed", err)
 	}
 }
