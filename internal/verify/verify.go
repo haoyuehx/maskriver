@@ -295,7 +295,7 @@ func (c *cursor) next(ctx context.Context) (contracts.Row, bool, error) {
 		}
 		c.page, c.pos, c.done = page.Rows, 0, page.Done
 		if !page.Done {
-					last, ok := rowKey(page.Rows[len(page.Rows)-1], c.keys)
+			last, ok := rowKey(page.Rows[len(page.Rows)-1], c.keys)
 			if !ok {
 				return nil, false, contracts.ErrIncomplete
 			}
