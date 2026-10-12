@@ -132,6 +132,19 @@ func issue(status contracts.Status, code contracts.IssueCode, count int64) contr
 	return contracts.Issue{Status: status, Code: code, Count: count}
 }
 
+// addIssue aggregates by safe category and location; the report never grows
+// with row count or records a raw key or sensitive field value.
+func addIssue(r *contracts.ValidationReport, next contracts.Issue) {
+	for i := range r.Issues {
+		prev := &r.Issues[i]
+		if prev.Status == next.Status && prev.Code == next.Code && prev.Column == next.Column {
+			prev.Count += next.Count
+			return
+		}
+	}
+	r.Issues = append(r.Issues, next)
+}
+
 func plannedColumns(plan contracts.TablePlan) []string {
 	out := make([]string, 0, len(plan.PrimaryKey)+len(plan.Columns))
 	out = append(out, plan.PrimaryKey...)
@@ -262,13 +275,21 @@ func (c *cursor) next(ctx context.Context) (contracts.Row, bool, error) {
 		}
 		c.page, c.pos, c.done = page.Rows, 0, page.Done
 		if !page.Done {
+					last, ok := rowKey(page.Rows[len(page.Rows)-1], c.keys)
+			if !ok {
+				return nil, false, contracts.ErrIncomplete
+			}
+			cmp, ok := compareKeys(last, page.Next)
+			if !ok || cmp != 0 {
+				return nil, false, contracts.ErrIncomplete
+			}
 			if len(c.after) > 0 {
 				cmp, ok := compareKeys(c.after, page.Next)
 				if !ok || cmp >= 0 {
 					return nil, false, contracts.ErrIncomplete
 				}
 			}
-			c.after = page.Next
+			c.after = append([]contracts.Value(nil), page.Next...)
 		}
 	}
 	row := c.page[c.pos]
@@ -353,10 +374,10 @@ func compareRows(ctx context.Context, src, dst *cursor, plan contracts.TablePlan
 		}
 		switch {
 		case !hasLeft:
-			report.Issues = append(report.Issues, issue(contracts.Fail, contracts.KeyMismatch, 1))
+			addIssue(report, issue(contracts.Fail, contracts.KeyMismatch, 1))
 			right, hasRight, err = dst.next(ctx)
 		case !hasRight:
-			report.Issues = append(report.Issues, issue(contracts.Fail, contracts.KeyMismatch, 1))
+			addIssue(report, issue(contracts.Fail, contracts.KeyMismatch, 1))
 			left, hasLeft, err = src.next(ctx)
 		default:
 			cmp, ok := compareKeys(src.prev, dst.prev)
@@ -365,27 +386,27 @@ func compareRows(ctx context.Context, src, dst *cursor, plan contracts.TablePlan
 			}
 			switch {
 			case cmp < 0:
-				report.Issues = append(report.Issues, issue(contracts.Fail, contracts.KeyMismatch, 1))
+				addIssue(report, issue(contracts.Fail, contracts.KeyMismatch, 1))
 				left, hasLeft, err = src.next(ctx)
 			case cmp > 0:
-				report.Issues = append(report.Issues, issue(contracts.Fail, contracts.KeyMismatch, 1))
+				addIssue(report, issue(contracts.Fail, contracts.KeyMismatch, 1))
 				right, hasRight, err = dst.next(ctx)
 			default:
 				for _, col := range plan.Columns {
 					a, aOK := left[col.Column.Column]
 					b, bOK := right[col.Column.Column]
 					if !aOK || !bOK || a.Kind() != b.Kind() {
-						report.Issues = append(report.Issues, contracts.Issue{
+						addIssue(report, contracts.Issue{
 							Status: contracts.Fail, Code: contracts.ConflictingEvidence,
 							Column: col.Column, Count: 1,
 						})
 					} else if a.IsNull() != b.IsNull() {
-						report.Issues = append(report.Issues, contracts.Issue{
+						addIssue(report, contracts.Issue{
 							Status: contracts.Fail, Code: contracts.ConflictingEvidence,
 							Column: col.Column, Count: 1,
 						})
 					} else if !a.IsNull() && a == b {
-						report.Issues = append(report.Issues, contracts.Issue{
+						addIssue(report, contracts.Issue{
 							Status: contracts.Fail, Code: contracts.UnchangedValue,
 							Column: col.Column, Count: 1,
 						})
