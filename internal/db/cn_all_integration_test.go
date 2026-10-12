@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/haoyuehx/maskriver/internal/mask"
 	"github.com/haoyuehx/maskriver/pkg/contracts"
@@ -158,4 +159,18 @@ func verifyCNAdapterIntegration(t *testing.T, ctx context.Context, sqlDB *sql.DB
 	if err != nil || n != 1 {
 		t.Fatal("CN row count changed", err)
 	}
+}
+
+func TestCNAllFormatsSQLiteIntegration(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	opts := sqliteOptions(t)
+	dsn := "file:" + opts.DSN.Payload() + "?mode=rw&_pragma=foreign_keys(1)"
+	database, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	database.SetMaxOpenConns(1)
+	verifyCNAdapterIntegration(t, ctx, database, opts)
 }
