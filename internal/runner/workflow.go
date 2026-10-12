@@ -183,7 +183,7 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 		SourceSnapshotID: digest,
 		TargetID:         hashString(e.cfg.Target),
 		SchemaDigest:     schemaDigest, ConfigDigest: configDigest,
-		ScanComplete:     true, Tables: []contracts.TablePlan{tablePlan},
+		ScanComplete: true, Tables: []contracts.TablePlan{tablePlan},
 	}
 	p.ID = hashString(p.Revision + p.SourceSnapshotID + p.TargetID +
 		p.SchemaDigest + p.ConfigDigest)
