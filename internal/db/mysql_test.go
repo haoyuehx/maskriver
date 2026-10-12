@@ -224,4 +224,5 @@ func TestMySQLAdapter(t *testing.T) {
 		persisted != masked.Payload() {
 		t.Fatal("MySQL CN durable readback failed", err)
 	}
+	verifyCNAdapterIntegration(t, ctx, db, opts)
 }
