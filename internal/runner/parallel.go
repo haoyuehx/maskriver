@@ -11,7 +11,13 @@ import (
 // It neither reads nor writes a database. Results preserve input indexes even
 // if workers finish out of order. Memory is O(page size + worker count).
 func (e *Engine) maskBatch(ctx context.Context, original []contracts.Value, col contracts.ColumnPlan, workers int) ([]contracts.Value, error) {
-	if ctx == nil || workers < 1 || workers > 16 || len(original) > 1000 {
+	return maskBatchValues(ctx, original, col, workers, e.maskColumn)
+}
+
+// maskBatchValues has a private transform seam so cancellation, in-flight
+// failures and goroutine cleanup can be tested deterministically.
+func maskBatchValues(ctx context.Context, original []contracts.Value, col contracts.ColumnPlan, workers int, transform func(context.Context, contracts.Value, contracts.ColumnPlan) (contracts.Value, error)) ([]contracts.Value, error) {
+	if ctx == nil || transform == nil || workers < 1 || workers > 16 || len(original) > 1000 {
 		return nil, contracts.ErrInvalid
 	}
 	if err := ctx.Err(); err != nil {
@@ -20,7 +26,7 @@ func (e *Engine) maskBatch(ctx context.Context, original []contracts.Value, col 
 	result := make([]contracts.Value, len(original))
 	if workers == 1 || len(original) < 2 {
 		for i, v := range original {
-			masked, err := e.maskColumn(ctx, v, col)
+			masked, err := transform(ctx, v, col)
 			if err != nil {
 				return nil, err
 			}
@@ -48,7 +54,7 @@ func (e *Engine) maskBatch(ctx context.Context, original []contracts.Value, col 
 					if !open {
 						return
 					}
-					value, err := e.maskColumn(workCtx, original[i], col)
+					value, err := transform(workCtx, original[i], col)
 					if err != nil {
 						select {
 						case errors <- err:
