@@ -63,6 +63,43 @@ jobs:
         run: |
           echo 'Synthetic transform throughput only. No full DB throughput/RSS/CPU profile, privacy certification, or guaranteed speedup is claimed.' >> "$GITHUB_STEP_SUMMARY"
  -fuzztime=10s -parallel=2 ./internal/runner
+      - name: Fuzz synthetic CN checksum invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in FuzzCNIDReplacement FuzzCNBankReplacement FuzzCNUSCCReplacement; do
+            go test -run '^
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in 1 2 4 8; do
+            /usr/bin/time -v -o "bench-out/process-workers-${n}.txt" \
+              go test -run '^
+        with:
+          name: synthetic-mask-benchmarks
+          path: bench-out/
+      - name: Caveats
+        if: always()
+        shell: bash
+        run: |
+          echo 'Synthetic transform throughput only. No full DB throughput/RSS/CPU profile, privacy certification, or guaranteed speedup is claimed.' >> "$GITHUB_STEP_SUMMARY"
+ -bench "^BenchmarkMaskBatchWorkers/workers_${n}$" \
+              -benchmem -benchtime=500ms -count=1 ./internal/runner \
+              > "bench-out/process-workers-${n}-raw.txt"
+          done
+          python3 scripts/bench_system_report.py bench-out
+      - name: Upload measured evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-mask-benchmarks
+          path: bench-out/
+      - name: Caveats
+        if: always()
+        shell: bash
+        run: |
+          echo 'Synthetic transform throughput only. No full DB throughput/RSS/CPU profile, privacy certification, or guaranteed speedup is claimed.' >> "$GITHUB_STEP_SUMMARY"
+ -fuzz "^\${name}$" -fuzztime=5s -parallel=2 ./internal/mask
+          done
       - name: Measure separate process CPU and peak RSS (synthetic transform only)
         shell: bash
         run: |
