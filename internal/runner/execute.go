@@ -89,7 +89,7 @@ func (e *Engine) visit(ctx context.Context, plan contracts.Plan, budget int64, e
 		}
 		for i, row := range left.Rows {
 			change := contracts.RowChange{
-				Expected: contracts.Row{col.Column.Column: originals[i]},
+				Expected:    contracts.Row{col.Column.Column: originals[i]},
 				Replacement: contracts.Row{col.Column.Column: masked[i]},
 			}
 			for _, name := range table.PrimaryKey {
@@ -200,7 +200,7 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 		changes := make([]contracts.RowChange, 0, len(page.Rows))
 		for i, row := range page.Rows {
 			change := contracts.RowChange{
-				Expected: contracts.Row{col.Column.Column: originals[i]},
+				Expected:    contracts.Row{col.Column.Column: originals[i]},
 				Replacement: contracts.Row{col.Column.Column: masked[i]},
 			}
 			for _, pk := range table.PrimaryKey {
