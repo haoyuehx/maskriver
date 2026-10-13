@@ -4,8 +4,10 @@ on:
   pull_request:
     paths:
       - "internal/runner/**"
+      - "internal/mask/**"
       - "cmd/maskriver/**"
       - "scripts/bench_report.py"
+      - "scripts/bench_system_report.py"
       - ".github/workflows/bench.yml"
   workflow_dispatch:
 
@@ -15,7 +17,7 @@ permissions:
 jobs:
   bench:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -25,6 +27,7 @@ jobs:
       - name: Environment metadata
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p bench-out
           {
             date --utc --iso-8601=seconds
@@ -33,6 +36,7 @@ jobs:
             uname -a
             nproc
             git rev-parse HEAD
+            go list -m github.com/go-sql-driver/mysql modernc.org/sqlite
           } | tee bench-out/environment.txt
       - name: Repeat synthetic masking benchmarks
         shell: bash
@@ -42,82 +46,22 @@ jobs:
       - name: Generate machine-readable metrics and chart
         run: python3 scripts/bench_report.py bench-out/raw.txt bench-out
       - name: Race regression
-        run: go test -race -count=1 ./internal/runner/...
+        run: go test -race -count=1 ./internal/runner/... ./internal/mask/...
       - name: Fuzz worker ordering and encoding
-        run: go test -run '^
-        with:
-          name: synthetic-mask-benchmarks
-          path: bench-out/
-      - name: Caveats
-        if: always()
-        shell: bash
-        run: |
-          echo 'Synthetic transform throughput only. No full DB throughput/RSS/CPU profile, privacy certification, or guaranteed speedup is claimed.' >> "$GITHUB_STEP_SUMMARY"
- -fuzz '^FuzzMaskBatchDeterminism
-        with:
-          name: synthetic-mask-benchmarks
-          path: bench-out/
-      - name: Caveats
-        if: always()
-        shell: bash
-        run: |
-          echo 'Synthetic transform throughput only. No full DB throughput/RSS/CPU profile, privacy certification, or guaranteed speedup is claimed.' >> "$GITHUB_STEP_SUMMARY"
- -fuzztime=10s -parallel=2 ./internal/runner
+        run: go test -run '^$' -fuzz '^FuzzMaskBatchDeterminism$' -fuzztime=10s -parallel=2 ./internal/runner
       - name: Fuzz synthetic CN checksum invariants
         shell: bash
         run: |
           set -euo pipefail
           for name in FuzzCNIDReplacement FuzzCNBankReplacement FuzzCNUSCCReplacement; do
-            go test -run '^
-        shell: bash
-        run: |
-          set -euo pipefail
-          for n in 1 2 4 8; do
-            /usr/bin/time -v -o "bench-out/process-workers-${n}.txt" \
-              go test -run '^
-        with:
-          name: synthetic-mask-benchmarks
-          path: bench-out/
-      - name: Caveats
-        if: always()
-        shell: bash
-        run: |
-          echo 'Synthetic transform throughput only. No full DB throughput/RSS/CPU profile, privacy certification, or guaranteed speedup is claimed.' >> "$GITHUB_STEP_SUMMARY"
- -bench "^BenchmarkMaskBatchWorkers/workers_${n}$" \
-              -benchmem -benchtime=500ms -count=1 ./internal/runner \
-              > "bench-out/process-workers-${n}-raw.txt"
-          done
-          python3 scripts/bench_system_report.py bench-out
-      - name: Upload measured evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: synthetic-mask-benchmarks
-          path: bench-out/
-      - name: Caveats
-        if: always()
-        shell: bash
-        run: |
-          echo 'Synthetic transform throughput only. No full DB throughput/RSS/CPU profile, privacy certification, or guaranteed speedup is claimed.' >> "$GITHUB_STEP_SUMMARY"
- -fuzz "^\${name}$" -fuzztime=5s -parallel=2 ./internal/mask
+            go test -run '^$' -fuzz "^${name}$" -fuzztime=5s -parallel=2 ./internal/mask
           done
       - name: Measure separate process CPU and peak RSS (synthetic transform only)
         shell: bash
         run: |
           set -euo pipefail
           for n in 1 2 4 8; do
-            /usr/bin/time -v -o "bench-out/process-workers-${n}.txt" \
-              go test -run '^
-        with:
-          name: synthetic-mask-benchmarks
-          path: bench-out/
-      - name: Caveats
-        if: always()
-        shell: bash
-        run: |
-          echo 'Synthetic transform throughput only. No full DB throughput/RSS/CPU profile, privacy certification, or guaranteed speedup is claimed.' >> "$GITHUB_STEP_SUMMARY"
- -bench "^BenchmarkMaskBatchWorkers/workers_${n}$" \
-              -benchmem -benchtime=500ms -count=1 ./internal/runner \
-              > "bench-out/process-workers-${n}-raw.txt"
+            /usr/bin/time -v -o "bench-out/process-workers-${n}.txt" go test -run '^$' -bench "^BenchmarkMaskBatchWorkers/workers_${n}$" -benchmem -benchtime=500ms -count=1 ./internal/runner > "bench-out/process-workers-${n}-raw.txt"
           done
           python3 scripts/bench_system_report.py bench-out
       - name: Upload measured evidence
@@ -129,4 +73,4 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo 'Synthetic transform throughput only. No full DB throughput/RSS/CPU profile, privacy certification, or guaranteed speedup is claimed.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Synthetic transform throughput only. Process RSS and CPU include Go test startup, not full database measurements. No linear speedup or privacy certification is claimed.' >> "$GITHUB_STEP_SUMMARY"
