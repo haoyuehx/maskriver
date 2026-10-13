@@ -21,7 +21,11 @@ func FuzzMaskBatchDeterminism(f *testing.F) {
 			t.Skip()
 		}
 		engine, col, _ := syntheticBatch(t, 0)
-		sample := "test-" + hex.EncodeToString(data) + "@example.invalid"
+		encoded := data
+		if len(encoded) > 24 {
+			encoded = encoded[:24] // RFC local part stays safely below 64 bytes.
+		}
+		sample := "test-" + hex.EncodeToString(encoded) + "@example.invalid"
 		value, err := contracts.NewValue(contracts.Text, sample)
 		if err != nil {
 			t.Fatal("synthetic text constructor rejected encoded bytes")
