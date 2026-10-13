@@ -19,8 +19,8 @@ func syntheticBatch(t testing.TB, n int) (*Engine, contracts.ColumnPlan, []contr
 	engine := &Engine{key: key}
 	col := contracts.ColumnPlan{
 		Strategy: contracts.StrategyRef{ID: "fake_email", Version: "1"},
-		Type: contracts.Type{Kind: contracts.Text, Length: 128},
-		Scope: "synthetic/bench", NormalizationVersion: "v1", KeyID: "bench-only",
+		Type:     contracts.Type{Kind: contracts.Text, Length: 128},
+		Scope:    "synthetic/bench", NormalizationVersion: "v1", KeyID: "bench-only",
 	}
 	values := make([]contracts.Value, n)
 	for i := range values {
