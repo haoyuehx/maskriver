@@ -127,6 +127,27 @@ func TestCLIRealSQLiteWorkflow(t *testing.T) {
 	if distinct != 25 || total != 25 {
 		t.Fatal("unique email constraint or row count was not preserved")
 	}
+	if err := query.Close(); err != nil {
+		t.Fatal(err)
+	}
+	serialMasked, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, before, 0600); err != nil {
+		t.Fatal(err)
+	}
+	parallel := append(append([]string{}, common...), "--workers", "4")
+	runCmd(0, "mask", parallel...)
+	runCmd(0, "mask", append(append([]string{}, parallel...), "--apply", "--approved")...)
+	runCmd(0, "validate", append(append([]string{}, parallel...), "--approved", "--strict")...)
+	parallelMasked, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sha256.Sum256(serialMasked) != sha256.Sum256(parallelMasked) {
+		t.Fatal("serial and parallel mask runs differ on durable SQLite results")
+	}
 	// Re-running Apply would try to mask already-modified data; must refuse.
 	runCmd(1, "mask", append(append([]string{}, common...), "--apply", "--approved")...)
 	// Same inode is never a source + target pair.

@@ -21,12 +21,14 @@ type Runtime struct {
 	SampleLimit    int
 	MinRatio       float64
 	BatchSize      int
+	Workers        int
 }
 
 func (c Runtime) Validate() error {
 	if c.Source == "" || c.Target == "" || c.Table == "" || c.Column == "" ||
 		c.MinSamples < 1 || c.SampleLimit < c.MinSamples || c.SampleLimit > 10000 ||
-		c.MinRatio <= 0 || c.MinRatio > 1 || c.BatchSize < 1 || c.BatchSize > 1000 {
+		c.MinRatio <= 0 || c.MinRatio > 1 || c.BatchSize < 1 || c.BatchSize > 1000 ||
+		c.Workers < 1 || c.Workers > 16 {
 		return contracts.ErrInvalid
 	}
 	source, err := os.Stat(c.Source)

@@ -58,6 +58,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.IntVar(&cfg.SampleLimit, "sample-limit", 128, "maximum distinct sampled inputs")
 	flags.Float64Var(&cfg.MinRatio, "min-ratio", 0.9, "required rule hit ratio")
 	flags.IntVar(&cfg.BatchSize, "batch-size", 64, "transaction batch size (1..1000)")
+	flags.IntVar(&cfg.Workers, "workers", 1, "bounded masking workers (1..16)")
 	if command != "scan" {
 		flags.StringVar(&strategy, "strategy", "redact", "supported strategy identifier")
 		flags.StringVar(&keyID, "key-id", "", "opaque ID for external Bytes key")

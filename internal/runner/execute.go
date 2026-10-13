@@ -63,31 +63,37 @@ func (e *Engine) visit(ctx context.Context, plan contracts.Plan, budget int64, e
 			left.Done != right.Done || len(left.Rows) > size {
 			return visited, contracts.ErrIncomplete
 		}
+		if len(table.Columns) != 1 {
+			return visited, contracts.ErrUnsupported
+		}
+		col := table.Columns[0]
+		originals := make([]contracts.Value, len(left.Rows))
 		for i, row := range left.Rows {
-			var change contracts.RowChange
-			change.Expected = make(contracts.Row, len(table.Columns))
-			change.Replacement = make(contracts.Row, len(table.Columns))
 			for _, name := range table.PrimaryKey {
 				l, a := row[name]
 				r, b := right.Rows[i][name]
 				if !a || !b || l.IsNull() || l != r {
 					return visited, contracts.ErrConflict
 				}
-				change.Key = append(change.Key, l)
 			}
-			for _, col := range table.Columns {
-				name := col.Column.Column
-				old, a := row[name]
-				current, b := right.Rows[i][name]
-				if !a || !b || old != current {
-					return visited, contracts.ErrConflict
-				}
-				newValue, err := e.maskColumn(ctx, old, col)
-				if err != nil {
-					return visited, err
-				}
-				change.Expected[name] = old
-				change.Replacement[name] = newValue
+			old, a := row[col.Column.Column]
+			current, b := right.Rows[i][col.Column.Column]
+			if !a || !b || old != current {
+				return visited, contracts.ErrConflict
+			}
+			originals[i] = old
+		}
+		masked, err := e.maskBatch(ctx, originals, col, e.cfg.Workers)
+		if err != nil {
+			return visited, err
+		}
+		for i, row := range left.Rows {
+			change := contracts.RowChange{
+				Expected:    contracts.Row{col.Column.Column: originals[i]},
+				Replacement: contracts.Row{col.Column.Column: masked[i]},
+			}
+			for _, name := range table.PrimaryKey {
+				change.Key = append(change.Key, row[name])
 			}
 			if err := each(change); err != nil {
 				return visited, err
@@ -175,10 +181,27 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 		if len(page.Rows) == 0 {
 			return report, contracts.ErrIncomplete
 		}
+		if len(table.Columns) != 1 {
+			return report, contracts.ErrUnsupported
+		}
+		col := table.Columns[0]
+		originals := make([]contracts.Value, len(page.Rows))
+		for i, row := range page.Rows {
+			v, ok := row[col.Column.Column]
+			if !ok {
+				return report, contracts.ErrIncomplete
+			}
+			originals[i] = v
+		}
+		masked, err := e.maskBatch(ctx, originals, col, e.cfg.Workers)
+		if err != nil {
+			return report, err
+		}
 		changes := make([]contracts.RowChange, 0, len(page.Rows))
-		for _, row := range page.Rows {
+		for i, row := range page.Rows {
 			change := contracts.RowChange{
-				Expected: make(contracts.Row), Replacement: make(contracts.Row),
+				Expected:    contracts.Row{col.Column.Column: originals[i]},
+				Replacement: contracts.Row{col.Column.Column: masked[i]},
 			}
 			for _, pk := range table.PrimaryKey {
 				v, ok := row[pk]
@@ -186,18 +209,6 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 					return report, contracts.ErrIncomplete
 				}
 				change.Key = append(change.Key, v)
-			}
-			for _, col := range table.Columns {
-				v, ok := row[col.Column.Column]
-				if !ok {
-					return report, contracts.ErrIncomplete
-				}
-				out, err := e.maskColumn(ctx, v, col)
-				if err != nil {
-					return report, err
-				}
-				change.Expected[col.Column.Column] = v
-				change.Replacement[col.Column.Column] = out
 			}
 			changes = append(changes, change)
 		}
