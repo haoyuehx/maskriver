@@ -39,6 +39,39 @@ go test -run '^$' -fuzz '^FuzzMaskBatchDeterminism$' -fuzztime=10s -parallel=2 .
 
 The benchmark CI also runs bounded fuzz targets for CN identity/card/USCC checksum invariants using only synthetic seeds. Fuzz coverage does **not** prove global PII-format correctness.
 
+
+## PR #37: real SQLite Runner workflow benchmark methodology
+
+In addition to the PR #36 in-memory transformation benchmark, PR #37 adds a
+real, disposable **SQLite** workflow benchmark via
+`cmd/maskriver/sqlite_workflow_bench_test.go`. Each timed operation opens
+two real database Readers, binds a frozen Plan, completes Preview, performs
+optimistic SQL batched Apply, runs strict validation against the unchanged source
+snapshot and closes the adapters. The synthetic setup and resetting the
+target database file are excluded from the Go benchmark timer.
+
+The fixed matrix is **128 / 512 / 2048 rows**, **short / long synthetic
+email shapes**, and **1 / 4 transformation workers**, repeated **three**
+times per configuration with `-benchtime=1x`. The CI captures `ns/op`,
+`B/op`, `allocs/op`, and computed `rows/s` per case; its artifacts include
+the raw output, environment metadata, CSV, JSON and a static SVG chart.
+Results must be obtained from a successful real CI run, **not predicted**.
+Run manually on a Linux host using the exact commands in
+`.github/workflows/ci.yml` under `sqlite-db-benchmark`.
+
+The process-level `/usr/bin/time -v` peak RSS and CPU seconds include
+SQLite fixture creation and the entire compiled Go test binary process.
+They are **not** per-workload sustained memory curves or evidence of bounded
+resident memory at arbitrary input sizes. `TestSQLiteConnectionPoolsClose`
+runs twenty real adapter close/cancel cycles and checks SQL pool statistics;
+the isolated MySQL adapter test now checks a real socket-backed close.
+These checks do not constitute a complete sustained MySQL load/leak benchmark.
+
+**Remaining gates**: actual MySQL user workflow at several row counts and
+distributions (not yet supported by the SQLite-only CLI), repeatable sustained
+RSS/CPU measurements, independent non-author review, and upstream #9/#11 M1
+acceptance. Keep #13 open until these are satisfied.
+
 ## Remaining Issue #13 acceptance
 
 - Full end-to-end **SQLite and MySQL** throughput/latency comparisons at fixed multiple row counts and distributions; this PR measures only a 128-value in-memory HMAC task.
