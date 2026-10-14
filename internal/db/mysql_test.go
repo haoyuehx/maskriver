@@ -234,4 +234,22 @@ func TestMySQLAdapter(t *testing.T) {
 		t.Fatal("MySQL CN durable readback failed", err)
 	}
 	verifyCNAdapterIntegration(t, ctx, db, opts)
+
+	// Probe a separate live adapter session, then verify sql.DB resources
+	// return to zero when it is explicitly closed. This does not measure
+	// sustained MySQL connection usage or prove the absence of all leaks.
+	probe, err := OpenReader(ctx, opts)
+	if err != nil {
+		t.Fatal("MySQL connection cleanup probe open failed", err)
+	}
+	probeReader := probe.(*reader)
+	if _, err := probe.Count(ctx, people); err != nil {
+		t.Fatal("MySQL connection cleanup probe failed", err)
+	}
+	if err := probe.Close(); err != nil {
+		t.Fatal("MySQL connection cleanup probe close failed", err)
+	}
+	if opened := probeReader.db.Stats().OpenConnections; opened != 0 {
+		t.Fatal("MySQL adapter retained open pooled connections after Close")
+	}
 }

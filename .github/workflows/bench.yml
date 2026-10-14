@@ -8,6 +8,7 @@ on:
       - "cmd/maskriver/**"
       - "scripts/bench_report.py"
       - "scripts/bench_system_report.py"
+      - "scripts/db_bench_report.py"
       - ".github/workflows/bench.yml"
   workflow_dispatch:
 
@@ -64,6 +65,37 @@ jobs:
             /usr/bin/time -v -o "bench-out/process-workers-${n}.txt" go test -run '^$' -bench "^BenchmarkMaskBatchWorkers/workers_${n}$" -benchmem -benchtime=500ms -count=1 ./internal/runner > "bench-out/process-workers-${n}-raw.txt"
           done
           python3 scripts/bench_system_report.py bench-out
+      - name: Measure real SQLite Preview/Apply/Validate at multiple scales
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A compiled binary excludes Go build/compiler startup from /usr/bin/time.
+          # SQLite fixture generation still contributes to process peak RSS and CPU.
+          go test -c -o bench-out/sqlite-workflow.test ./cmd/maskriver
+          /usr/bin/time -v -o bench-out/sqlite-process.txt \
+            ./bench-out/sqlite-workflow.test \
+            -test.run '^        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-mask-benchmarks
+          path: bench-out/
+      - name: Caveats
+        if: always()
+        shell: bash
+        run: |
+          echo 'Synthetic in-memory measurements and real SQLite single-table Preview/Apply/Validate measurements are separate; benchmark-process CPU/RSS still include fixture setup. No MySQL CLI, production PII, latency SLA or linear speedup is claimed.' >> "$GITHUB_STEP_SUMMARY"
+ -test.bench '^BenchmarkSQLiteM1Workflow        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-mask-benchmarks
+          path: bench-out/
+      - name: Caveats
+        if: always()
+        shell: bash
+        run: |
+          echo 'Synthetic transform throughput only. Process RSS and CPU include Go test startup, not full database measurements. No linear speedup or privacy certification is claimed.' >> "$GITHUB_STEP_SUMMARY"
+ \
+            -test.benchtime=1x -test.count=3 -test.benchmem \
+            | tee bench-out/sqlite-raw.txt
+          python3 scripts/db_bench_report.py bench-out
       - name: Upload measured evidence
         uses: actions/upload-artifact@v4
         with:
