@@ -43,7 +43,7 @@ func BenchmarkSQLiteM1Workflow(b *testing.B) {
 						Source: source, Target: target,
 						Table: "people", Column: "email", Approved: true,
 						Strategy: contracts.StrategyRef{ID: "fake_email", Version: "1"},
-						KeyID: "benchmark-key", MinSamples: 1, SampleLimit: 64,
+						KeyID:    "benchmark-key", MinSamples: 1, SampleLimit: 64,
 						MinRatio: 1, BatchSize: 128, Workers: workers,
 					}
 					b.ReportAllocs()
