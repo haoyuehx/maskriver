@@ -47,6 +47,95 @@ jobs:
         if: runner.os == 'Linux'
         run: go test -race -count=1 ./...
 
+
+  sqlite-db-benchmark:
+    name: Real SQLite synthetic workflow benchmark
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.title, 'perf')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Collect environment and compile reusable benchmark executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bench-out
+          {
+            date --utc --iso-8601=seconds
+            go version
+            go env GOOS GOARCH GOAMD64
+            uname -a
+            nproc
+            git rev-parse HEAD
+            go list -m github.com/go-sql-driver/mysql modernc.org/sqlite
+          } > bench-out/sqlite-environment.txt
+          go test -c -o bench-out/sqlite-workflow.test ./cmd/maskriver
+      - name: Repeat real SQLite Preview Apply Validate with measured process resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/time -v -o bench-out/sqlite-process.txt \
+            ./bench-out/sqlite-workflow.test \
+            -test.run '^    name: Isolated MySQL fixture and adapter acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Real MySQL fixture and adapter in disposable network-disabled container
+        run: python3 scripts/test_mysql_container.py
+      - name: Scope of evidence
+        if: always()
+        shell: bash
+        run: |
+          echo 'This job runs TestMySQLFixture and TestMySQLAdapter against the same isolated MySQL 8.0.46 socket.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Successful tests verify the current MySQL adapter contract cases, not the full CLI workflow or untested MySQL versions.' >> "$GITHUB_STEP_SUMMARY"
+ -test.bench '^BenchmarkSQLiteM1Workflow    name: Isolated MySQL fixture and adapter acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Real MySQL fixture and adapter in disposable network-disabled container
+        run: python3 scripts/test_mysql_container.py
+      - name: Scope of evidence
+        if: always()
+        shell: bash
+        run: |
+          echo 'This job runs TestMySQLFixture and TestMySQLAdapter against the same isolated MySQL 8.0.46 socket.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Successful tests verify the current MySQL adapter contract cases, not the full CLI workflow or untested MySQL versions.' >> "$GITHUB_STEP_SUMMARY"
+ \
+            -test.benchtime=1x -test.count=3 -test.benchmem \
+            | tee bench-out/sqlite-raw.txt
+          python3 scripts/db_bench_report.py bench-out
+      - name: Publish machine-readable evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-db-benchmark
+          path: |
+            bench-out/sqlite-environment.txt
+            bench-out/sqlite-process.txt
+            bench-out/sqlite-raw.txt
+            bench-out/sqlite-results.csv
+            bench-out/sqlite-results.json
+            bench-out/sqlite-summary.svg
+      - name: Clarify scope
+        if: always()
+        shell: bash
+        run: |
+          echo 'Measured: synthetic SQLite 128/512/2048 row single-table Runner Preview/Apply/strict Validate at 1 and 4 workers, 3 repetitions each. No MySQL CLI or production performance claim.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Reported process CPU/RSS covers fixture preparation and entire benchmark process; not steady-state masking-only memory.' >> "$GITHUB_STEP_SUMMARY"
+
   mysql-fixture:
     name: Isolated MySQL fixture and adapter acceptance
     runs-on: ubuntu-latest
