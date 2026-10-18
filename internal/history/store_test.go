@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -231,8 +232,13 @@ func TestApproveStoresVerifiableRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat record = %v", err)
 	}
-	if mode := info.Mode().Perm(); mode != storeFilePerm {
-		t.Fatalf("record mode = %o, want %o", mode, storeFilePerm)
+	// POSIX permission bits are not modelled on Windows: the file reports 0666
+	// and access is governed by inherited ACLs. The 0600 requirement is
+	// therefore asserted only where the platform actually stores mode bits.
+	if runtime.GOOS != "windows" {
+		if mode := info.Mode().Perm(); mode != storeFilePerm {
+			t.Fatalf("record mode = %o, want %o", mode, storeFilePerm)
+		}
 	}
 	dirInfo, err := os.Stat(f.dir)
 	if err != nil {
