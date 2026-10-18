@@ -590,7 +590,21 @@ func (r *applyRun) writerFor(ctx context.Context) (contracts.Writer, error) {
 // applyTable writes one planned table in batch-sized pages, each page in its own
 // transaction. The cursor restarts at the first key for every table, and the
 // batch ordinal restarts at 1, so a receipt names a position inside its own table.
+//
+// The table's row count on BOTH snapshots is recorded before its first page and
+// compared again after its last page. The plan and its approval bind the planned
+// scopes, not a row count, so a table that was non-empty at plan, preflight and
+// dry-run time and is then emptied during the run would otherwise contribute
+// zero rows and still be reported as Complete. Emptying both snapshots together
+// is invisible to the page comparison, so the counts are the only check that
+// notices: a count that differs between the snapshots or between start and end
+// means the state the dry run proved no longer holds, and the run refuses with
+// contracts.ErrConflict instead of claiming work it did not do.
 func (r *applyRun) applyTable(ctx context.Context, table contracts.TablePlan) error {
+	rows, err := r.countTable(ctx, table)
+	if err != nil {
+		return err
+	}
 	cols := planColumns(table)
 	var after []contracts.Value
 	var ordinal int64
@@ -619,7 +633,7 @@ func (r *applyRun) applyTable(ctx context.Context, table contracts.TablePlan) er
 		if len(left.Rows) == 0 {
 			// An exhausted table has nothing to write and needs no receipt.
 			if left.Done {
-				return nil
+				break
 			}
 			return contracts.ErrIncomplete
 		}
@@ -635,7 +649,7 @@ func (r *applyRun) applyTable(ctx context.Context, table contracts.TablePlan) er
 			ordinal++
 		}
 		if left.Done {
-			return nil
+			break
 		}
 		if len(left.Next) != len(table.PrimaryKey) || len(right.Next) != len(table.PrimaryKey) {
 			return contracts.ErrIncomplete
@@ -647,6 +661,37 @@ func (r *applyRun) applyTable(ctx context.Context, table contracts.TablePlan) er
 		}
 		after = append([]contracts.Value(nil), left.Next...)
 	}
+	end, err := r.countTable(ctx, table)
+	if err != nil {
+		return err
+	}
+	if end != rows {
+		return contracts.ErrConflict
+	}
+	return nil
+}
+
+// countTable requires both snapshots to hold the same positive number of rows
+// for one planned table and returns it. A missing table, a one-sided change or
+// an emptied table is a conflict, not an empty success: the dry run that
+// authorized this run proved the table non-empty, so zero rows means the state
+// it proved is gone.
+func (r *applyRun) countTable(ctx context.Context, table contracts.TablePlan) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	source, err := r.engine.source.Count(ctx, table.Table)
+	if err != nil {
+		return 0, err
+	}
+	target, err := r.engine.target.Count(ctx, table.Table)
+	if err != nil {
+		return 0, err
+	}
+	if source != target || source <= 0 {
+		return 0, contracts.ErrConflict
+	}
+	return source, nil
 }
 
 // writeBatch writes one page in its own transaction. Rows whose planned columns
