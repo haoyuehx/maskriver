@@ -5,9 +5,9 @@ An independently developed Go data masking and sensitive-data governance project
 面向 **2026 开放原子大赛 · 开源基础软件与解决方案赛道** 的独立 Go 项目。
 这是参赛研发目标，不代表已报名、入选或获官方背书。
 
-MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具，面向企业开发、测试与数据共享场景：自动发现敏感数据，提供安全、确定性的脱敏策略，支持 SQLite 与 MySQL，并提供数据完整性校验。
+MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具，面向企业开发、测试与数据共享场景：自动发现敏感数据，提供安全、确定性的脱敏策略，数据库适配器支持 SQLite 与 MySQL（当前 CLI 仅 SQLite），并提供数据完整性校验。
 
-> **M1 核心组件已交付，SQLite 单表单列 CLI 的第一条真实路径由 PR #35 交付。** `scan → preview → mask --apply --approved → validate --strict` 已在合成 SQLite 两份独立数据库上实测；多表计划、审查存储、SQL Spy、安全异常注入、独立 #11 验收和 MySQL CLI 尚未完成。不能据此声称完整产品或生产就绪。
+> **M1 仍在收尾：#9 的 AC 待独立验收签署，尚未发布。** 当前真实可用范围是合成 SQLite 快照上的多表 CLI（同一表多列由 runner 级用例覆盖）：`scan → preview → approve（独立进程签发）→ 新进程 mask --apply → validate`。Ed25519 审批记录、驱动级 SQL Spy、静态安全门禁和批次故障回归已有真实 SQLite 测试；`--strict` 目前没有独立的严格语义，MySQL CLI、断点恢复/checkpoint、exactly-once、持久映射和生产级检测准确率均未验证。不能据此声称完整产品或生产就绪。
 
 ## 快速开始
 
@@ -21,8 +21,9 @@ go vet ./...
 go build -o bin/maskriver ./cmd/maskriver
 ```
 
-`scan`、`mask`、`validate` 已支持明确限定的 **SQLite 单表单列**合成测试工作流；必须提供两个各自存在且不同的绝对路径数据库文件，默认只读。其他数据库 CLI 尚未实现，非法配置或未获批准的写入一律拒绝。
-`mask` 默认 Dry Run；**仅** `mask --apply --approved` 同时提供明确的人工审核声明与写意图才可能调用 Writer，且会先完成只读 Preview、Plan 和安全检查。写入使用批次事务，故障后不保证整次操作全局原子，未实现断点恢复。
+`scan`、`mask`、`validate`、`approve`、`revoke` 已支持明确限定的 **SQLite 多表**合成测试工作流（同一表多列另有 runner 级用例）；必须提供两个各自存在且不同的绝对路径数据库文件，默认只读。MySQL CLI 尚未实现；非法配置或未获批准的写入一律拒绝。
+`mask` 默认 Dry Run。写入需要三者同时成立：`--approved`（操作者声明）、`--apply`（写意图）和一条由 `approve` 独立签发并绑定当前 Plan 的 Ed25519 审批记录；前两者单独或组合都不充分。`apply` 只从部署预置 trust file 加载可信公钥，不接收审核私钥；`revoke` 撤销已有记录。Preview 由驱动级 SQL Spy 与文件树 SHA256 证明零写入。写入使用批次事务，故障后不保证跨批全局原子，未实现断点恢复。
+可复现路径见 `cmd/maskriver/approval_e2e_test.go` 的 `TestE2EPlanIssueNewProcessApply`、`TestCLIMultiTableWorkflow` 与 `TestCLIRealSQLiteWorkflow`。
 直接运行编译后的二进制可观察原始退出码；`go run` 会包装子进程退出状态。
 
 ## 四人跨平台协作
@@ -42,8 +43,8 @@ CI 包括 Ubuntu/Windows 的测试与 vet、Ubuntu race，以及隔离 MySQL 8.0
 ## 产品路线图
 
 - **M1-B 已交付：** 数据库适配器（#5、#10）、检测（#6）、脱敏（#7、#12）和验证器（#8），有真实数据库或有界 fake Reader 测试证据；各组件不等于完整产品。
-- **M1 收尾：** [#9](https://github.com/haoyuehx/maskriver/issues/9) 已开始交付单表单列 SQLite CLI PR #35，继续完善多表计划、完整授权、SQL Spy 与异常注入；[#11](https://github.com/haoyuehx/maskriver/issues/11) 独立验收尚未完成。
-- **M2 待启动：** [#13 有界并发/基准](https://github.com/haoyuehx/maskriver/issues/13)、[#14 幂等恢复](https://github.com/haoyuehx/maskriver/issues/14)。中文格式约束替换已有有界组件实现，不再列作从零开发。
+- **M1 收尾中：** [#9](https://github.com/haoyuehx/maskriver/issues/9) 的 AC 待独立验收签署。SQLite 多表 CLI、签名审批记录、SQL Spy、静态门禁和批次故障回归已有真实测试；`--strict` 语义、MySQL CLI 与 [#11](https://github.com/haoyuehx/maskriver/issues/11) 独立验收仍未完成。
+- **M2 待启动/部分：** [#13 有界并发/基准](https://github.com/haoyuehx/maskriver/issues/13) 已有有界 Worker 组件，完整基准与端到端吞吐未验收；[#14 幂等恢复](https://github.com/haoyuehx/maskriver/issues/14) 未启动。中文格式约束替换已有有界组件实现，不再列作从零开发。
 - 完整阶段划分见 [Roadmap](docs/roadmap.md)。
 
 ## 文档
@@ -69,3 +70,7 @@ MaskRiver 采用 [MIT](LICENSE)。本项目独立研发：不是任何其他仓�
 
 仅处理获授权的数据库副本；脱敏不等于匿名化。确定性映射可能遭受猜测攻击，也不自动保证唯一性或所有关联完整性。
 不要向仓库、日志或 Agent 会话提交真实个人数据、连接凭证、种子及映射库。
+
+- **审批信任边界**：可信公钥来自部署预置 trust file，`apply` 只加载公钥；同一操作者同时控制 trust file 与审核私钥时本工具无法阻止，这不是 RBAC。`ReviewerID` 是自填标签，不是已认证身份。
+- **`null` 策略端到端拒绝**：Preview 与 Apply 都在打开 Writer 前拒绝“非 NULL → NULL”，因为验证器把该变化判为冲突证据，此类写入永远无法通过严格验证。`internal/db` 写入层本身仍接受该组合，属已接受 P2。
+- **`--strict` 目前是 inert 的**：verify 忽略 `ValidateRequest.Strict`，且所有 Warning 路径已令 `Coverage.Complete=false`；现有测试只证明 flag 解析、转发和退出码敏感性，不证明独立的严格语义门禁。

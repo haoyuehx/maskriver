@@ -29,20 +29,20 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 | 功能 | 说明 / 范围 | 状态 | 目标 |
 |---|---|---|---|
 | 独立 Go module、可编译 CLI help/version | 无框架依赖，标准库 CLI | 已实现 | M0 |
-| `scan` / `mask` / `validate` CLI | SQLite 单表单列路径已能真实执行 Detect→Preview→授权 Apply→Strict Validate；多表/审查存储/MySQL CLI 尚未实现 | 部分实现（PR #35 有界路径） | #9 |
-| 默认 Dry Run，`--apply` 单一写意图 | CLI 与 Runner 均要求显式 Apply + Approved；真实 SQLite 的 Preview 文件树 SHA256、Writer 能力 Spy、NULL/故障/提交未知回归见 [2026-10-18 收尾证据](m1-runner-acceptance.md)；SQL Driver Spy 尚未交付 | 部分实现（SQLite 有界路径） | #9/#11 |
+| `scan` / `mask` / `validate` / `approve` / `revoke` CLI | SQLite 多表真实路径（同一表多列由 runner 级用例覆盖）：Detect→Preview→独立进程签发审批记录→新进程 Apply→Validate；证据见 `TestCLIMultiTableWorkflow`、`TestE2EPlanIssueNewProcessApply`；MySQL CLI 未实现 | 部分实现（SQLite 多表，#9） | #9 |
+| 默认 Dry Run，`--apply` 单一写意图 | 写入需 `--approved` 声明 + `--apply` 意图 + 有效签名记录，三者缺一即拒绝；Preview 由 Writer 能力 Spy（opens/begins/updates/commits 全为 0）、驱动级 SQL Spy（`internal/db/sqlspy.go`，无写/事务语句）与文件树 SHA256 共同证明零写入；不证明并发快照 | 部分实现（SQLite 路径） | #9/#11 |
 | 配置文件、环境变量展开、参数校验 | 连接/检测/脱敏/验证分段校验 | 计划中 | M1 |
-| 连接生命周期、schema/table/column/type/PK 元数据 | SQLite/MySQL Reader/Writer，元数据与 SchemaCoverage 保守声明；不支持或可能丢精度的映射显式拒绝 | 部分实现（#5 组件） | #5 / PR #21；MySQL 业务待 #10 验证 |
+| 连接生命周期、schema/table/column/type/PK 元数据 | SQLite/MySQL Reader/Writer，元数据与 SchemaCoverage 保守声明；不支持或可能丢精度的映射显式拒绝 | 部分实现（#5 组件） | #5 / PR #21；MySQL 适配器见 #10 / PR #30 |
 | distinct 非空抽样、表/列过滤 | typed、非 NULL distinct 有界抽样；按 DataSetID/Schema/TableRef 限定访问范围 | 部分实现（#5 组件） | #5 / PR #21 |
 | SQLite 连接与真实集成 | SQLite 真实驱动执行 Reader/Writer、只读、类型、复合键分页和安全拒绝测试；以 PR #21 最终 CI 为证据 | 部分实现（#5 组件） | #5 / PR #21 |
 | MySQL 连接与真实集成 | TestMySQLAdapter 在一次性 MySQL 8.0.46 实例真实通过；包含 nine CN 策略的 typed SQL 写入/读回；其他版本与整套 CLI 流程未验收 | 部分实现（适配器实测） | #10 / PR #30 |
 | MariaDB / PostgreSQL / SQL Server / Oracle | 需独立适配与独立验证 | 未实现 | 后续评估 |
-| 参数化更新、批次事务、复合键 keyset 分页 | #5 提供按真实复合主键游标、参数绑定、乐观受影响行数检查与回滚；跨方言独立验证持续进行 | 部分实现（#5 组件） | #5 / PR #21，MySQL 待 #10 |
-| 无主键 apply 拒绝、敏感主键明确未处理 | 数据库 Writer 已对无主键及试图改主键的计划拒绝；CLI 端到端授权与拒绝仍待 Main 集成 | 部分实现（组件） | #5 / #9 |
+| 参数化更新、批次事务、复合键 keyset 分页 | #5 提供按真实复合主键游标、参数绑定、乐观受影响行数检查与回滚；跨方言独立验证持续进行 | 部分实现（#5 组件） | #5 / PR #21；MySQL 适配器见 #10 / PR #30 |
+| 无主键 apply 拒绝、敏感主键明确未处理 | 数据库 Writer 已对无主键及试图改主键的计划拒绝；CLI 端到端拒绝路径已由 `TestE2EApprovalDoesNotBypassExistingGates` 覆盖，MySQL CLI 未实现 | 部分实现（组件 + SQLite CLI 拒绝） | #5 / #9 |
 
 ## 敏感信息检测
 
-China-first 的 13 种检测规则由 PR #20（Issue #6）实现；其规则是有界、上下文敏感的组件能力，**并不代表全国 PII 全覆盖或 CLI/数据库端到端扫描已经交付**。以下“已实现”仅表示存在对应 Go 代码和合成测试，不代表生产环境准确率或安全批准。#12 的九种**纯内存有界格式约束替换**见 PR #29；数据库端到端 Apply、schema、碰撞和验证尚未完成。
+China-first 的 13 种检测规则由 PR #20（Issue #6）实现；其规则是有界、上下文敏感的组件能力，**并不代表全国 PII 全覆盖或 CLI/数据库端到端扫描已经交付**。以下“已实现”仅表示存在对应 Go 代码和合成测试，不代表生产环境准确率或安全批准。#12 的九种**纯内存有界格式约束替换**见 PR #29；这些 CN 策略的 CLI 端到端 Apply、schema/碰撞处理和独立验证尚未完成。
 
 | 功能 | 说明 / 范围 | 状态 | 目标 |
 |---|---|---|---|
@@ -62,7 +62,7 @@ China-first 的 13 种检测规则由 PR #20（Issue #6）实现；其规则是�
 | cn_address | 有序中文地址片段、道路/门牌标记，需字段上下文 | 已实现（有界） | #6 / PR #20 |
 | cn_date | 合法年-月-日、年/月/日、中文年月日和 typed Date；不识别自由文本及 MDY/DMY 字符串 | 已实现（有界） | #6 / PR #20 |
 | UNKNOWN 不等于非敏感 | 样本不足、覆盖外、冲突或不确定不得自动授权写入 | 已实现（检测组件） | #6 / PR #20 |
-| 扫描错误 fail-closed 与非零退出 | 依赖 Main 的 CLI/runner 集成，不能以组件测试代替 | 计划中 | M1/Main |
+| 扫描错误 fail-closed 与非零退出 | `runner.Scan` 在 Describe/Sample 故障与中途取消时整体失败；CLI 扫描不完整退出 1 并输出脱敏拒绝信息；证据见 `TestScanFailsClosedOnEvidenceSeamError`、`TestCLIScanFailureExitsNonZeroWithoutWrite`；MySQL CLI 未实现 | 部分实现（SQLite） | #9 |
 | 可选外部/本地 LLM 辅助分类 | 默认关闭；不得外发样本 | 未实现 | 不在 M1/M2 承诺内 |
 
 **评估证据与局限**：`internal/detect/eval_test.go` 使用 74 条自编合成 `(value, column)` 样本（38 正、36 负；8 条超出既定覆盖范围），以 `MinSamples=1` 独立检验规则/列上下文，**并非生产默认 20 样本的整列检测效果，也不是独立留出测试**。本次测得 `cn_person_name` TP=3、FP=3、FN=1，Precision=0.500、Recall=0.750、F1=0.600；包含普通词误报。部署前必须扩展独立标注数据、开展人工审核，不得默认用它批准 Apply。身份证/信用代码格式校验不是身份或登记真实性验证。规则列表不意味着覆盖一切行政区划、号码段、姓名和地址。原北美 SSN/US ZIP/NANP 等规则不属于本次 China-first 组件交付。
@@ -73,7 +73,7 @@ China-first 的 13 种检测规则由 PR #20（Issue #6）实现；其规则是�
 
 | 策略 | 说明 | 状态 | 目标 |
 |---|---|---|---|
-| null | 显式生成 SQL NULL；拒绝在非 Nullable 列上处理非 NULL 输入 | 部分实现（组件） | #7 / PR #24 |
+| null | 显式生成 SQL NULL；CLI 端到端刻意拒绝：dryRun 在 openWriter 前拒绝“非 NULL → NULL”，Preview 与 Apply 均拒绝，因该变化会被验证器判为冲突证据（`TestCLINullStrategyRefusedBeforeWrite`、`TestApplyRefusesNullReplacementBeforeWriter`）；`internal/db` 写入层仍接受该组合（已接受 P2，见[测试计划](test-plan.md)） | 部分实现（组件；CLI 拒绝） | #7 / PR #24 |
 | blank | Text/Bytes 清空；拒绝不支持的数值/日期类型 | 部分实现（组件） | #7 / PR #24 |
 | redact | 支持文本、字节和有限基本数值类型；结果未变化时拒绝 | 部分实现（组件） | #7 / PR #24 |
 | format_random | HMAC 派生的 Text ASCII/汉字有界类别替换与 Bytes 等长变换；未支持脚本拒绝。非密码学 FPE | 部分实现（有界组件） | #7 / PR #24 |
@@ -110,30 +110,30 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 | 功能 | 说明 / 边界 | 状态 | 目标 |
 |---|---|---|---|
 | 策略优先级与未知策略拒绝 | 审核结论 > 列级 > 规则级 > 默认；未知即失败 | 计划中 | M1/go-mask |
-| typed 输出、未变化结果拒绝 | 首批纯策略针对合法 Kind 输出或 fail-closed，非空未变化拒绝；目标 Schema 的最终约束仍需 runner 验证 | 部分实现（组件） | #7 / PR #24，runner 待 #9 |
+| typed 输出、未变化结果拒绝 | 首批纯策略针对合法 Kind 输出或 fail-closed，非空未变化拒绝；目标 Schema 约束由 runner preflight 拒绝 UNIQUE/CHECK/FK/触发器等冲突，并由 verify 复核 | 部分实现（组件 + runner 门禁） | #7 / PR #24、#9 |
 | 显式列级 NULL 标记 | 仅精确列生效，先于映射，不写映射 | 计划中 | M1/go-mask |
 | 策略/词典注册与来源审核 | 新词典必须单独审核来源与许可 | 计划中 | M1/go-mask |
 | 确定性：同输入同 scope 同输出 | HMAC 绑定 typed 输入/策略 ID+Version/scope/normalization/keyID；不承诺无碰撞或第三方兼容 | 部分实现（组件） | #7 / PR #24 |
 | 并发安全内存映射 | Lookup 和 atomic GetOrCreate；映射键为加密指纹，测试含并发/取消；不持久化 | 部分实现（内存组件） | #7 / PR #24 |
 | 持久映射：加盐指纹、不存原值、可复用 | 持久加盐指纹映射、加密存储及恢复仍无实现 | 计划中 | 后续 M1/Main |
-| Dry Run 零持久副作用 | 真实 SQLite Preview 的完整合成目录文件集合/SHA256 与 Writer 能力 Spy 已测；不等于 SQL Driver Spy 或并发快照保证，见 [收尾证据](m1-runner-acceptance.md) | 部分实现（文件证据） | #9/#11 |
+| Dry Run 零持久副作用 | SQLite Preview 由驱动级 SQL Spy 证明无写/事务语句（`TestPreviewIssuesNoWriteSQLThroughSQLSpy`、`TestSQLSpyReadOnlyOperationsIssueNoWrites`），并以源/目标/历史文件树 SHA256 证明零持久写入；不等于并发快照保证 | 已实现（SQLite 证据） | #9/#11 |
 | 默认隐藏预览值 | 原值显示开关须单独评审，不默认实现 | 计划中 | M1/Main |
-| 审核历史：pending/approved、审核人、过期、审计 | 最小格式优先，CSV 次之 | 计划中 | M1/Main |
+| 审核历史：签名审批、审核人标签、过期、撤销 | Ed25519 记录绑定 Plan、digest、strategy/key_id 与有序 scope；过期、未来签发、撤销、同 plan 多记录均拒绝（`internal/history/*_test.go`、`TestE2EDecisionBoundFieldChangesRefused`）；`ReviewerID` 是自填标签；无 CSV、导入导出与防回滚 | 部分实现（本地签名存储） | #9/#11 |
 | 历史导入/导出、回写与冲突检测 | 回写须备份与冲突检查 | 未实现 | 后续增量 |
-| 结构化报告与退出码 | 扫描/验证/历史报告 | 计划中 | M1/Main |
+| 结构化报告与退出码 | CLI 退出码 0/1/2 与脱敏计数摘要已测（`TestCLIArguments`、`TestCLIApplySummaryIsSanitized`）；无 JSON/CSV 结构化报告 | 部分实现（退出码） | M1/Main |
 
 ## 完整性校验
 
-**#8 验证组件边界**：`verify.New()` 只读取两个 `contracts.Reader`，不读取配置或原始密钥、不自动写入，报告不包含明文主键和值。PR #32 的原始实现经 PR #33 补强为每边最多 256 行的有界内存双向 keyset 校验。原有及新增回归均基于 fake Reader；**不能替代 #9 的真实 SQLite/MySQL CLI Scan/Preview/Apply/strict Validate 全流程安全验收**。对排序语义无法安全对齐的键显式拒绝。
+**#8 验证组件边界**：`verify.New()` 只读取两个 `contracts.Reader`，不读取配置或原始密钥、不自动写入，报告不包含明文主键和值。PR #32 的原始实现经 PR #33 补强为每边最多 256 行的有界内存双向 keyset 校验。verify 包自身的回归仍以 fake Reader 为主；真实 SQLite 多表路径由 `cmd/maskriver` 与 `internal/runner` 覆盖，MySQL CLI 仍未验收。对排序语义无法安全对齐的键显式拒绝。
 
 
 | 功能 | 说明 / 边界 | 状态 | 目标 |
 |---|---|---|---|
-| 行数校验 | Count 对比，双向键集逐项核对，数量不一致失败 | 已实现（fake Reader 组件） | #8 / PR #32、#33；真实 Workflow 待 #9 |
-| schema 校验：列类型/PK/索引/FK/unique/check | 已实现列名/类型/NULL/长度/精度/比例与计划 PK 比对；索引、FK、unique、check **尚未由本组件验证** | 部分实现（仅列与 PK） | #8 / PR #33；其他约束 #9/#11 |
-| triggers/grants 校验 | 需驱动能力支持，不在首版承诺 | 未实现 | 后续评估 |
+| 行数校验 | Count 对比，双向键集逐项核对，数量不一致失败；fake Reader 组件与真实 SQLite 多表 CLI 已测，MySQL CLI 未实现 | 已实现（组件 + SQLite CLI） | #8 / PR #32、#33；MySQL 待 #11 |
+| schema 校验：列类型/PK/索引/FK/unique/check | `schemasMatch` 比较列名/类型/NULL/长度/精度/比例、PK、索引、unique、FK、CHECK，并要求对应 `SchemaCoverage`；`schema_coverage_test.go` 覆盖，真实 SQLite CLI 已验证含 CHECK/索引的表；触发器不在 verify 内，由 runner preflight 拒绝 | 已实现（组件 + SQLite CLI） | #8 / PR #33 |
+| triggers/grants 校验 | runner preflight 拒绝任何触发器与入向 FK；verify 不做触发器校验，grants 需驱动能力支持 | 部分实现（触发器拒绝） | 后续评估 |
 | 主键对齐逐值完整性校验 | 基于冻结 Plan，双向 keyset 流式合并，已选敏感列未变化失败，字段缺失/类型/NULL 转换失败 | 已实现（fake Reader 组件） | #8 / PR #32、#33 |
-| 无键/限量覆盖/strict 模式 | RowLimit=0 有界分页全量；正数为总行预算，截断/无主键证据/分页异常不得 PASS；strict 由 contracts.Passed 拒绝 Warning | 已实现（fake Reader 组件） | #8 / PR #33 |
+| 无键/限量覆盖/strict 模式 | RowLimit=0 有界分页全量；正数为总行预算，截断/无主键证据/分页异常不得 PASS；`contracts.Passed` 在 strict 下拒绝 Warning，但 verify 忽略 `ValidateRequest.Strict`，且所有 Warning 路径已置 `Complete=false`，因此 CLI `--strict` 目前没有可区分的严格语义（`TestCLIStrictFlagWiring` 只证明接线与退出码） | 部分实现（strict 语义 inert） | #8 / #33；#9 跟进 |
 | 测试数据忽略、采样上限、形状遮蔽 | 忽略策略须显式审核 | 计划中 | M1/go-verify |
 | 稳定公共库 API | `pkg/contracts` 仅内部协作冻结，非稳定外部 SDK | 未实现 | 待契约稳定后评估 |
 
@@ -142,7 +142,7 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 | 功能 | 状态 | 目标 |
 |---|---|---|
 | 中国 PII 检测与格式约束脱敏 | 部分实现（检测 + 有界替换 + SQL 集成测试） | 检测见 #6/PR #20，九种策略见 PR #29，真实 SQLite/MySQL 8.0.46 组件级读/写/回读与只读快照测试见 PR #30；用户 CLI 工作流与独立安全评审仍属 #9/#11 |
-| 有界流式并发、背压、取消 | 部分实现（PR #36） | SQLite 单表单列：每页有界 1–16 Worker、固定队列、顺序输出、取消与故障注入回归；SQL 读写仍顺序执行；完整多表及 DB 性能评估未交付 |
+| 有界流式并发、背压、取消 | 部分实现（PR #36） | SQLite：每页有界 1–16 Worker、固定队列、顺序输出、取消与故障注入回归；SQL 读写仍顺序执行；多表 + 多 Worker 的 CLI 证据与 DB 性能评估未交付 |
 | 故障恢复、版本化 checkpoint、幂等重放 | 计划中 | M2；先解决事务提交与映射一致性 |
 | precision/recall 与吞吐/内存基准、可视化 | 部分实现（有实测合成值） | #6 的 74 条检测合成评估；PR #36 的 128 条 HMAC 合成批次 3 次重复基准、Go 版本/CI 环境、ns/op/B/op/allocs/op、CSV/JSON/SVG。1 Worker 最快；数据库端到端吞吐、延迟和持续 RSS/CPU 未验证，详见 [性能证据](performance.md) |
 | 数据目录/治理平台导出 | 未实现 | 未纳入当前承诺 |

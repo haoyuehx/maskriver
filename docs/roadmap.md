@@ -1,6 +1,6 @@
 # MaskRiver Roadmap
 
-MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段目标是：在授权且隔离的测试数据库中，以可复现方式完成发现、审核计划、预览、显式脱敏写入和严格验证。本路线图按 **2026-10-12 的 `main` 状态** 编写；实现证据详见 [Feature Matrix](feature-matrix.md)、[测试计划](test-plan.md)、[契约](contracts.md) 与对应 PR/CI。
+MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段目标是：在授权且隔离的测试数据库中，以可复现方式完成发现、审核计划、预览、显式脱敏写入和严格验证。本路线图按 **2026-10-18 的 `main` 状态** 编写；实现证据详见 [Feature Matrix](feature-matrix.md)、[测试计划](test-plan.md)、[契约](contracts.md) 与对应 PR/CI。
 
 ## 现状与里程碑
 
@@ -9,16 +9,16 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 | M0 · 项目基座 | 完成 | 独立 Go module、MIT 授权、help/version、跨平台 CI；数据库业务 CLI 仍只会安全拒绝 |
 | M1-A · 共享契约 | 完成 | `pkg/contracts` 冻结 `APIRevision=m1a-v1`、SQLite/MySQL 测试环境及基础类型 |
 | M1-B · 四个核心组件 | 已合并 | #5/#10 数据库、#6 检测、#7/#12 脱敏、#8 验证；有真实 SQLite/MySQL 适配器与 CN 策略 SQL 组件集成、fake Reader 验证器回归。**不等于端到端 CLI** |
-| M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **开发中（PR #35 首个有界路径）** | SQLite 单表单列真实 Scan/Preview/Apply/Validate 已测；多表、审核记录、SQL Spy/失败注入、独立验收仍未完成 |
+| M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **收尾中：AC 待独立验收签署** | SQLite 多表真实 Scan/Preview/签名审批/新进程 Apply/Validate 已测；`--strict` 独立严格语义、MySQL CLI 与独立 #11 验收仍未完成 |
 | M1-D · 独立安全验收 [#11](https://github.com/haoyuehx/maskriver/issues/11) | **待 #9 完成** | 第三方或团队内非作者审查、失败注入、零持久副作用证据、风险登记和发布门禁 |
-| M2 · 增强能力 | **未启动** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 有界并发/实测性能；[#14](https://github.com/haoyuehx/maskriver/issues/14) checkpoint、幂等恢复与故障注入。不得宣称已具备恢复或高吞吐保证 |
+| M2 · 增强能力 | **部分启动** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 有界 Worker 组件已合并，完整基准与端到端吞吐未验收；[#14](https://github.com/haoyuehx/maskriver/issues/14) checkpoint、幂等恢复与故障注入未启动。不得宣称已具备恢复或高吞吐保证 |
 
 ## 已交付核心能力（M1-B）
 
 - **go-db**：真实 SQLite 与隔离 MySQL 8.0.46 的 Reader/Writer、元数据、typed 值、复合键分页、乐观写入和事务回滚。MySQL 业务适配器已实际运行 `TestMySQLAdapter`，不是仅有 Fixture smoke（PR #21/#30）。未验证其他 MySQL 版本和通过 CLI 的完整工作流。
 - **go-detect**：有界 13 类 China-first 规则与三态判断（PR #20）；默认采样下的真实世界准确率没有被独立证明，`UNKNOWN` 不可授权写入。
 - **go-mask**：5 种基础策略、并发安全内存映射、9 种中国格式约束替换（PR #24/#29），以及在 SQLite/MySQL 合成表的真实 SQL 组件集成（PR #30）。无持久映射、全局唯一性、未分配号码或匿名化保证。
-- **go-verify**：基于冻结 Plan 的 Schema、行数、双向主键与所选敏感列变化校验；两端有界分页，异常 fail-closed，主要测试为 fake Reader（PR #32/#33）。真实 CLI 的独立源快照验证仍属 #9/#11。
+- **go-verify**：基于冻结 Plan 的 Schema、行数、双向主键与所选敏感列变化校验；两端有界分页，异常 fail-closed，主要测试为 fake Reader（PR #32/#33）。真实 SQLite CLI 的独立源快照验证已由 #9 覆盖；MySQL CLI 与独立 #11 验收仍待。
 
 ## M1-C：Issue #9 的交付顺序
 
@@ -64,8 +64,8 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 
 ## 不做的承诺
 
-当前仅有 SQLite 单表单列合成数据库 CLI 首个端到端路径，没有完整通用数据库 CLI、生产级 PII 识别准确率、全局匿名化、稳定公共 SDK、断点恢复或高性能并发证明。项目只处理获得授权的隔离/合成数据；保持 `m1a-v1` 契约，任何变化必须经 Main 审核并记录证据。发布状态必须以功能与实际测试为依据，而不是 Issue 标记或 CI 配置是否存在。
+当前只有 SQLite 多表合成数据库 CLI 的真实端到端路径，没有完整通用数据库 CLI、MySQL CLI、生产级 PII 识别准确率、全局匿名化、稳定公共 SDK、断点恢复、exactly-once 或高性能并发证明。项目只处理获得授权的隔离/合成数据；保持 `m1a-v1` 契约，任何变化必须经 Main 审核并记录证据。发布状态必须以功能与实际测试为依据，而不是 Issue 标记或 CI 配置是否存在。
 
 ## 2026-10-18 收尾增量
 
-#9 Runner 授权与事务安全小包补充了双门禁、NULL 保持、文件树及 Writer 能力 Spy、取消/故障/部分提交/提交确认丢失回归，见 [验收记录](m1-runner-acceptance.md)。这只完成 #9 的一个子任务；多表、持久审核、SQL Driver Spy、完整 Schema 验证与 MySQL CLI 仍未完成。#11 保持未验收，#13/#14 的阶段依赖不变。PR #36 的 Worker 组件已经合并，不能按本文件早期的“M2 未启动”重新开发。
+#9 已交付 SQLite 多表 CLI、Ed25519 审批记录（整计划绑定、有效期、撤销）、驱动级 SQL Spy、静态安全门禁与批次故障/提交未知回归，证据见 [测试计划](test-plan.md)；早期单表收尾记录见 [2026-10-18 验收记录](m1-runner-acceptance.md)。`--strict` 仍是 inert 的（verify 忽略 `ValidateRequest.Strict`），MySQL CLI、断点恢复、exactly-once 与 #11 独立验收仍未完成；已接受 P2 见测试计划。#11 保持未验收，#13/#14 的阶段依赖不变。PR #36 的 Worker 组件已经合并，不能按本文件早期的“M2 未启动”重新开发。
