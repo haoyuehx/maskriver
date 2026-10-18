@@ -5,6 +5,7 @@ package verify
 import (
 	"context"
 	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/haoyuehx/maskriver/pkg/contracts"
@@ -56,8 +57,15 @@ func (*validator) Validate(ctx context.Context, source, target contracts.Reader,
 			complete = false
 			continue
 		}
+		// Coverage.Checks is deliberately not gated: the SQLite adapter cannot
+		// parse CHECK expressions and reports Checks=false unconditionally, so
+		// treating it as a gate would reject every SQLite validation. Checks are
+		// therefore also not compared here; that residual gap is unresolved.
 		if !srcSchema.Coverage.Columns || !dstSchema.Coverage.Columns ||
-			!srcSchema.Coverage.PrimaryKey || !dstSchema.Coverage.PrimaryKey {
+			!srcSchema.Coverage.PrimaryKey || !dstSchema.Coverage.PrimaryKey ||
+			!srcSchema.Coverage.Indexes || !dstSchema.Coverage.Indexes ||
+			!srcSchema.Coverage.Unique || !dstSchema.Coverage.Unique ||
+			!srcSchema.Coverage.ForeignKeys || !dstSchema.Coverage.ForeignKeys {
 			report.Issues = append(report.Issues, issue(contracts.Warning, contracts.InsufficientEvidence, 1))
 			complete = false
 			continue
@@ -200,6 +208,119 @@ func schemasMatch(a, b contracts.TableSchema, plan contracts.TablePlan) bool {
 	for _, col := range plan.Columns {
 		typ, ok := src[col.Column.Column]
 		if !ok || !sameType(typ, col.Type) {
+			return false
+		}
+	}
+	return indexesMatch(a.Indexes, b.Indexes) &&
+		uniqueGroupsMatch(a.Unique, b.Unique) &&
+		foreignKeysMatch(a.ForeignKeys, b.ForeignKeys)
+}
+
+// constraintKey encodes ordered string lists unambiguously, so that two
+// different constraints can never share a comparison key.
+func constraintKey(lists ...[]string) string {
+	var b strings.Builder
+	for _, list := range lists {
+		b.WriteString(strconv.Itoa(len(list)))
+		b.WriteByte('|')
+		for _, part := range list {
+			b.WriteString(strconv.Itoa(len(part)))
+			b.WriteByte(':')
+			b.WriteString(part)
+		}
+	}
+	return b.String()
+}
+
+// indexesMatch compares indexes by name in any driver order. A same-name index
+// must keep its ordered column list and its uniqueness flag.
+func indexesMatch(a, b []contracts.Index) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	byName := make(map[string]contracts.Index, len(a))
+	for _, idx := range a {
+		if idx.Name == "" || len(idx.Columns) == 0 {
+			return false
+		}
+		if _, duplicate := byName[idx.Name]; duplicate {
+			return false
+		}
+		byName[idx.Name] = idx
+	}
+	for _, idx := range b {
+		other, ok := byName[idx.Name]
+		if !ok || other.Unique != idx.Unique ||
+			constraintKey(other.Columns) != constraintKey(idx.Columns) {
+			return false
+		}
+	}
+	return true
+}
+
+// uniqueGroupsMatch compares unique column groups as a set: group order is not
+// significant, column order inside a group is (it is index order).
+func uniqueGroupsMatch(a, b [][]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	keys := make(map[string]bool, len(a))
+	for _, group := range a {
+		if len(group) == 0 {
+			return false
+		}
+		key := constraintKey(group)
+		if keys[key] {
+			return false
+		}
+		keys[key] = true
+	}
+	for _, group := range b {
+		if len(group) == 0 || !keys[constraintKey(group)] {
+			return false
+		}
+	}
+	return true
+}
+
+// foreignKeysMatch compares foreign keys as a set: declared order is not
+// significant, but column pairing order and referential actions are.
+func foreignKeysMatch(a, b []contracts.ForeignKey) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	collect := func(list []contracts.ForeignKey) (map[string]bool, bool) {
+		out := make(map[string]bool, len(list))
+		for _, fk := range list {
+			if len(fk.Columns) == 0 || len(fk.Columns) != len(fk.TargetColumns) ||
+				fk.Target.Database == "" || fk.Target.Schema == "" || fk.Target.Table == "" {
+				return nil, false
+			}
+			key := constraintKey(fk.Columns, fk.TargetColumns,
+				[]string{fk.Target.Database, fk.Target.Schema, fk.Target.Table},
+				[]string{fk.OnUpdate, fk.OnDelete})
+			if out[key] {
+				return nil, false
+			}
+			out[key] = true
+		}
+		return out, true
+	}
+	src, ok := collect(a)
+	if !ok {
+		return false
+	}
+	dst, ok := collect(b)
+	if !ok {
+		return false
+	}
+	for key := range src {
+		if !dst[key] {
+			return false
+		}
+	}
+	for key := range dst {
+		if !src[key] {
 			return false
 		}
 	}
