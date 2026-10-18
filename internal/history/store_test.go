@@ -244,8 +244,10 @@ func TestApproveStoresVerifiableRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat store dir = %v", err)
 	}
-	if mode := dirInfo.Mode().Perm(); mode != storeDirPerm {
-		t.Fatalf("store dir mode = %o, want %o", mode, storeDirPerm)
+	if runtime.GOOS != "windows" {
+		if mode := dirInfo.Mode().Perm(); mode != storeDirPerm {
+			t.Fatalf("store dir mode = %o, want %o", mode, storeDirPerm)
+		}
 	}
 
 	loaded, err := f.lookup(f.plan)
