@@ -192,6 +192,10 @@ func (e *Engine) Scan(ctx context.Context, req contracts.ScanRequest) (contracts
 			})
 		}
 	}
+	// Coverage.Rows follows the existing single-scope meaning: the number of
+	// sampled values examined, summed across scopes. It is not a physical row
+	// count, so it can exceed the table's row total when a table is sampled
+	// once per column.
 	report.Coverage = contracts.Coverage{
 		Tables: int64(len(set.tables)), Columns: int64(len(set.scopes)),
 		Rows: rows, Complete: complete,
@@ -235,13 +239,24 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 	}
 	// Every scope must independently carry complete, Sensitive evidence; one
 	// weak scope refuses the whole plan instead of publishing a partial one.
+	// The refusal category is decided from the whole set, not from whichever
+	// scope happens to come first, so it cannot depend on declaration order:
+	// an evidence gap (truncation) outranks an unresolved verdict.
+	allComplete := true
+	allSensitive := true
 	for _, scope := range set.scopes {
 		if scope.sample.Truncated {
-			return empty, contracts.ErrIncomplete
+			allComplete = false
 		}
 		if scope.decision.Sensitivity != contracts.Sensitive {
-			return empty, contracts.ErrUnsafe
+			allSensitive = false
 		}
+	}
+	if !allComplete {
+		return empty, contracts.ErrIncomplete
+	}
+	if !allSensitive {
+		return empty, contracts.ErrUnsafe
 	}
 	digest, err := fileDigest(e.cfg.Source)
 	if err != nil {
@@ -273,20 +288,30 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 	}
 	schemaDigest := hashString(string(schemaJSON))
 	// The ordered scope list is part of the digest, so the same scopes in a
-	// different order bind a different plan ID.
+	// different order bind a different plan ID. A single scope keeps the
+	// original payload so existing plan IDs stay stable for unchanged configs.
 	type planScope struct{ Table, Column string }
 	ordered := make([]planScope, 0, len(set.scopes))
 	for _, scope := range set.scopes {
 		ordered = append(ordered, planScope{scope.table, scope.column.Ref.Column})
 	}
-	conf := struct {
-		Scopes         []planScope
-		Strategy       string
-		Version, KeyID string
-	}{
-		ordered, e.cfg.Strategy.ID, e.cfg.Strategy.Version, e.cfg.KeyID,
+	var configJSON []byte
+	if len(ordered) == 1 {
+		legacy := struct{ Table, Column, Strategy, Version, KeyID string }{
+			ordered[0].Table, ordered[0].Column, e.cfg.Strategy.ID,
+			e.cfg.Strategy.Version, e.cfg.KeyID,
+		}
+		configJSON, err = json.Marshal(legacy)
+	} else {
+		conf := struct {
+			Scopes         []planScope
+			Strategy       string
+			Version, KeyID string
+		}{
+			ordered, e.cfg.Strategy.ID, e.cfg.Strategy.Version, e.cfg.KeyID,
+		}
+		configJSON, err = json.Marshal(conf)
 	}
-	configJSON, err := json.Marshal(conf)
 	if err != nil {
 		return empty, contracts.ErrInvalid
 	}
@@ -296,10 +321,9 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 		SourceSnapshotID: digest,
 		TargetID:         hashString(e.cfg.Target),
 		SchemaDigest:     schemaDigest, ConfigDigest: configDigest,
-		// Reaching this point means every declared scope was untruncated and
-		// Sensitive, so ScanComplete is derived rather than assumed. Unresolved
-		// therefore stays empty by construction.
-		ScanComplete: true,
+		// Derived from the gates above, not assumed: reaching this point means
+		// every declared scope was untruncated and Sensitive.
+		ScanComplete: allComplete && allSensitive,
 		Tables:       tablePlans,
 	}
 	p.ID = hashString(p.Revision + p.SourceSnapshotID + p.TargetID +

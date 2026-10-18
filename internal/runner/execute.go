@@ -140,6 +140,11 @@ func (e *Engine) Preview(ctx context.Context, req contracts.PreviewRequest) (con
 	}
 	// Multi-table and multi-column execution is not implemented yet, so those
 	// plans must fail closed before any row is read.
+	// Structure is validated before the capability gate so a malformed plan is
+	// reported as invalid rather than unsupported.
+	if err := req.Plan.ValidateShape(); err != nil {
+		return report, err
+	}
 	if err := requireSingleScope(req.Plan); err != nil {
 		return report, err
 	}
@@ -168,6 +173,12 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 	}
 	if !req.ExplicitApply || !e.cfg.Approved || req.BatchSize < 1 || req.BatchSize > 1000 {
 		return report, contracts.ErrUnsafe
+	}
+	if err := req.Plan.ValidateShape(); err != nil {
+		return report, err
+	}
+	if err := requireSingleScope(req.Plan); err != nil {
+		return report, err
 	}
 	if err := e.checkPlan(ctx, req.Plan); err != nil {
 		return report, err
