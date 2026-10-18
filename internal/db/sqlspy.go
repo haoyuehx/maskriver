@@ -177,7 +177,7 @@ func readOnlyPragma(tokens []string) bool {
 	switch name {
 	case "table_info", "table_list", "table_xinfo", "index_list", "index_xinfo",
 		"foreign_key_list", "database_list", "collation_list", "compile_options",
-		"function_list", "pragma_list", "encoding":
+		"function_list", "pragma_list":
 	default:
 		return false
 	}
