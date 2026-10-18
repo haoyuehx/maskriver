@@ -380,3 +380,84 @@ func TestValidateConstraintOrderingIsIgnored(t *testing.T) {
 		t.Fatalf("reordered constraints must pass: issues=%v coverage=%+v", report.Issues, report.Coverage)
 	}
 }
+
+// TestValidateDuplicateUniqueGroupsStillPass is the P1 regression from review:
+// a table may legitimately carry two UNIQUE indexes over the same column list
+// (different names, identical groups). Both sides must still compare equal.
+func TestValidateDuplicateUniqueGroupsStillPass(t *testing.T) {
+	ref := peopleTable()
+	build := func() contracts.TableSchema {
+		schema := peopleSchema()
+		schema.Indexes = []contracts.Index{
+			{Name: "people_email_a", Columns: []string{"email"}, Unique: true},
+			{Name: "people_email_b", Columns: []string{"email"}, Unique: true},
+		}
+		schema.Unique = [][]string{{"email"}, {"email"}}
+		return schema
+	}
+	srcSchema, tgtSchema := build(), build()
+	src := []contracts.Row{{"id": mustValue(t, contracts.Int, "1"), "email": textV("synthetic@example.invalid")}}
+	tgt := []contracts.Row{{"id": mustValue(t, contracts.Int, "1"), "email": textV("masked@example.invalid")}}
+	source, target := newFakeReader(), newFakeReader()
+	source.addTable(ref, srcSchema, src)
+	target.addTable(ref, tgtSchema, tgt)
+
+	report, err := New().Validate(context.Background(), source, target,
+		contracts.ValidateRequest{Plan: peoplePlan(), RowLimit: 10})
+	if err != nil {
+		t.Fatalf("unexpected validate error: %v", err)
+	}
+	if !report.Passed(true) || !report.Coverage.Complete {
+		t.Fatalf("duplicate identical unique groups must pass: issues=%v coverage=%+v", report.Issues, report.Coverage)
+	}
+}
+
+// TestValidateIndexNameSubstitutionCannotPass guards the asymmetric case: the
+// same number of indexes with different names must not compare equal.
+func TestValidateIndexNameSubstitutionCannotPass(t *testing.T) {
+	ref := peopleTable()
+	srcSchema, tgtSchema := peopleSchema(), peopleSchema()
+	srcSchema.Indexes = []contracts.Index{{Name: "people_email_idx", Columns: []string{"email"}}}
+	tgtSchema.Indexes = []contracts.Index{{Name: "people_other_idx", Columns: []string{"email"}}}
+	src := []contracts.Row{{"id": mustValue(t, contracts.Int, "1"), "email": textV("synthetic@example.invalid")}}
+	tgt := []contracts.Row{{"id": mustValue(t, contracts.Int, "1"), "email": textV("masked@example.invalid")}}
+	source, target := newFakeReader(), newFakeReader()
+	source.addTable(ref, srcSchema, src)
+	target.addTable(ref, tgtSchema, tgt)
+
+	report, err := New().Validate(context.Background(), source, target,
+		contracts.ValidateRequest{Plan: peoplePlan(), RowLimit: 10})
+	if err != nil {
+		t.Fatalf("unexpected validate error: %v", err)
+	}
+	if report.Passed(true) {
+		t.Fatalf("renamed index must not pass: issues=%v", report.Issues)
+	}
+	if !hasFailIssue(report, contracts.SchemaMismatch) {
+		t.Fatalf("expected Fail/%s, got %v", contracts.SchemaMismatch, report.Issues)
+	}
+}
+
+// TestValidateDuplicateIndexNameCannotPass covers a duplicated name on one side
+// only; the multiset comparison must object in both directions.
+func TestValidateDuplicateIndexNameCannotPass(t *testing.T) {
+	ref := peopleTable()
+	srcSchema, tgtSchema := peopleSchema(), peopleSchema()
+	one := contracts.Index{Name: "people_email_idx", Columns: []string{"email"}}
+	srcSchema.Indexes = []contracts.Index{one, one}
+	tgtSchema.Indexes = []contracts.Index{one, {Name: "people_email_idx2", Columns: []string{"email"}}}
+	src := []contracts.Row{{"id": mustValue(t, contracts.Int, "1"), "email": textV("synthetic@example.invalid")}}
+	tgt := []contracts.Row{{"id": mustValue(t, contracts.Int, "1"), "email": textV("masked@example.invalid")}}
+	source, target := newFakeReader(), newFakeReader()
+	source.addTable(ref, srcSchema, src)
+	target.addTable(ref, tgtSchema, tgt)
+
+	report, err := New().Validate(context.Background(), source, target,
+		contracts.ValidateRequest{Plan: peoplePlan(), RowLimit: 10})
+	if err != nil {
+		t.Fatalf("unexpected validate error: %v", err)
+	}
+	if report.Passed(true) {
+		t.Fatalf("asymmetric duplicate index name must not pass: issues=%v", report.Issues)
+	}
+}

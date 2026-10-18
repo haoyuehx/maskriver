@@ -234,49 +234,78 @@ func constraintKey(lists ...[]string) string {
 
 // indexesMatch compares indexes by name in any driver order. A same-name index
 // must keep its ordered column list and its uniqueness flag.
+// indexesMatch compares indexes by name as a multiset. Driver row order is not
+// significant, but a duplicate name is counted on both sides so an asymmetric
+// substitution cannot slip through. A same-name index must keep its ordered
+// column list and its uniqueness flag.
 func indexesMatch(a, b []contracts.Index) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	byName := make(map[string]contracts.Index, len(a))
-	for _, idx := range a {
-		if idx.Name == "" || len(idx.Columns) == 0 {
-			return false
+	collect := func(list []contracts.Index) (map[string]int, bool) {
+		out := make(map[string]int, len(list))
+		for _, idx := range list {
+			if idx.Name == "" || len(idx.Columns) == 0 {
+				return nil, false
+			}
+			out[constraintKey([]string{idx.Name}, boolKey(idx.Unique), idx.Columns)]++
 		}
-		if _, duplicate := byName[idx.Name]; duplicate {
-			return false
-		}
-		byName[idx.Name] = idx
+		return out, true
 	}
-	for _, idx := range b {
-		other, ok := byName[idx.Name]
-		if !ok || other.Unique != idx.Unique ||
-			constraintKey(other.Columns) != constraintKey(idx.Columns) {
-			return false
-		}
+	src, ok := collect(a)
+	if !ok {
+		return false
 	}
-	return true
+	dst, ok := collect(b)
+	if !ok {
+		return false
+	}
+	return sameCounts(src, dst)
 }
 
-// uniqueGroupsMatch compares unique column groups as a set: group order is not
-// significant, column order inside a group is (it is index order).
+// uniqueGroupsMatch compares unique column groups as a multiset: group order is
+// not significant, column order inside a group is (it is index order), and a
+// repeated group is counted on both sides rather than rejected.
 func uniqueGroupsMatch(a, b [][]string) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	keys := make(map[string]bool, len(a))
-	for _, group := range a {
-		if len(group) == 0 {
-			return false
+	collect := func(list [][]string) (map[string]int, bool) {
+		out := make(map[string]int, len(list))
+		for _, group := range list {
+			if len(group) == 0 {
+				return nil, false
+			}
+			out[constraintKey(group)]++
 		}
-		key := constraintKey(group)
-		if keys[key] {
-			return false
-		}
-		keys[key] = true
+		return out, true
 	}
-	for _, group := range b {
-		if len(group) == 0 || !keys[constraintKey(group)] {
+	src, ok := collect(a)
+	if !ok {
+		return false
+	}
+	dst, ok := collect(b)
+	if !ok {
+		return false
+	}
+	return sameCounts(src, dst)
+}
+
+// boolKey renders a flag as a stable constraint component.
+func boolKey(value bool) []string {
+	if value {
+		return []string{"1"}
+	}
+	return []string{"0"}
+}
+
+// sameCounts reports whether two multisets are identical.
+func sameCounts(a, b map[string]int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for key, count := range a {
+		if b[key] != count {
 			return false
 		}
 	}
