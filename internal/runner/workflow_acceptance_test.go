@@ -19,7 +19,9 @@ import (
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
 
-func acceptanceEngine(t *testing.T, rows []string) (*Engine, func()) {
+// acceptanceFixture builds the synthetic SQLite source/target pair and the
+// matching Runtime/Key used by the workflow tests.
+func acceptanceFixture(t *testing.T, rows []string) (config.Runtime, contracts.Value) {
 	t.Helper()
 	dir := t.TempDir()
 	source, target := filepath.Join(dir, "source.db"), filepath.Join(dir, "target.db")
@@ -53,6 +55,12 @@ func acceptanceEngine(t *testing.T, rows []string) (*Engine, func()) {
 	}
 	key, _ := contracts.NewValue(contracts.Bytes, strings.Repeat("k", 32))
 	cfg := config.Runtime{Source: source, Target: target, Table: "people", Column: "email", Strategy: contracts.StrategyRef{ID: "fake_email", Version: "1"}, KeyID: "synthetic", Approved: true, MinSamples: 1, SampleLimit: 100, MinRatio: .9, BatchSize: 2, Workers: 1}
+	return cfg, key
+}
+
+func acceptanceEngine(t *testing.T, rows []string) (*Engine, func()) {
+	t.Helper()
+	cfg, key := acceptanceFixture(t, rows)
 	engine, err := Open(context.Background(), cfg, key)
 	if err != nil {
 		t.Fatal(err)
