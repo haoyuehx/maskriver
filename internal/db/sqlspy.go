@@ -95,26 +95,61 @@ func (s *SQLSpy) record(statement string) {
 
 // classifyStatement reports the leading keyword of a statement and whether it
 // carries write or transaction intent. The rule is deliberately conservative:
-// only a plain SELECT and a PRAGMA without an assignment count as read intent.
-// Everything else, including a verb this test support does not recognise,
-// counts as write intent, so a new statement shape fails the read-only
-// assertions below until a reviewer classifies it.
+// only SELECT-like statements and the read-only PRAGMA allowlist count as read
+// intent. Every statement in a multi-statement text is classified, and anything
+// this test support does not recognise counts as write intent, so a new
+// statement shape fails the read-only assertions until a reviewer classifies it.
 func classifyStatement(statement string) (string, bool) {
 	tokens, ok := scanSQLTokens(statement)
 	if !ok || len(tokens) == 0 {
 		return "", true
 	}
+	verb, write := classifyTokens(tokens)
+	if verb == "" {
+		return "", true
+	}
+	// A single Prepare call can carry several statements; each one must be read
+	// intent for the text to count as read intent.
+	for _, segment := range splitStatements(tokens) {
+		_, segmentWrite := classifyTokens(segment)
+		if segmentWrite {
+			return verb, true
+		}
+	}
+	return verb, write
+}
+
+// splitStatements splits a token stream on top-level ";" separators.
+func splitStatements(tokens []string) [][]string {
+	segments := make([][]string, 0, 1)
+	current := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		if token == ";" {
+			if len(current) > 0 {
+				segments = append(segments, current)
+			}
+			current = make([]string, 0, 8)
+			continue
+		}
+		current = append(current, token)
+	}
+	if len(current) > 0 {
+		segments = append(segments, current)
+	}
+	return segments
+}
+
+// classifyTokens classifies one statement's tokens.
+func classifyTokens(tokens []string) (string, bool) {
+	if len(tokens) == 0 {
+		return "", false
+	}
 	verb := strings.ToUpper(tokens[0])
 	switch verb {
-	case "SELECT":
+	case "SELECT", "VALUES", "EXPLAIN":
 		return verb, false
 	case "PRAGMA":
-		for _, token := range tokens[1:] {
-			if token == "=" {
-				return verb, true
-			}
-		}
-		return verb, false
+		return verb, !readOnlyPragma(tokens)
 	case "WITH":
 		for _, token := range tokens {
 			if writesData(strings.ToUpper(token)) {
@@ -124,6 +159,34 @@ func classifyStatement(statement string) (string, bool) {
 		return verb, false
 	}
 	return verb, true
+}
+
+// readOnlyPragma accepts only the PRAGMA forms this project uses for metadata
+// reads. SQLite also accepts assignment through `PRAGMA name(value)`, which has
+// no "=" token, so anything outside this allowlist is write intent.
+func readOnlyPragma(tokens []string) bool {
+	// Skip "PRAGMA" and an optional schema qualifier ("main.").
+	i := 1
+	if len(tokens) >= i+2 && tokens[i+1] == "." {
+		i += 2
+	}
+	if i >= len(tokens) {
+		return false
+	}
+	name := strings.ToLower(tokens[i])
+	switch name {
+	case "table_info", "table_list", "table_xinfo", "index_list", "index_xinfo",
+		"foreign_key_list", "database_list", "collation_list", "compile_options",
+		"function_list", "pragma_list", "encoding":
+	default:
+		return false
+	}
+	for _, token := range tokens[i+1:] {
+		if token == "=" {
+			return false
+		}
+	}
+	return true
 }
 
 // writesData lists the verbs that can change data, schema or transaction state.

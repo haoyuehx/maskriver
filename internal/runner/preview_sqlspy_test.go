@@ -19,8 +19,10 @@ func TestPreviewIssuesNoWriteSQLThroughSQLSpy(t *testing.T) {
 	cfg, key := acceptanceFixture(t, rows)
 	ctx := context.Background()
 	spy := db.NewSQLSpy()
-	engine := spyEngineReaders(t, cfg, key, spy)
+	// Baseline is taken before any connection is opened, so an open-time side
+	// effect can not hide inside the measurement.
 	before := acceptanceTreeDigest(t, cfg.Source)
+	engine := spyEngineReaders(t, cfg, key, spy)
 
 	plan, err := engine.Plan(ctx)
 	if err != nil {

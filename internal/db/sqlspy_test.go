@@ -190,3 +190,88 @@ func TestSQLSpyWriterRecordsWriteStatements(t *testing.T) {
 		t.Fatalf("write did not reach SQLite: %q", email)
 	}
 }
+
+func TestClassifyStatementIsFailClosed(t *testing.T) {
+	tests := []struct {
+		name      string
+		statement string
+		verb      string
+		write     bool
+	}{
+		{"select", "SELECT 1", "SELECT", false},
+		{"lower case select", "select 1", "SELECT", false},
+		{"leading comment", "/* note */ SELECT 1", "SELECT", false},
+		{"semicolon inside literal is not a separator", "SELECT 'a;b'", "SELECT", false},
+		{"read pragma with schema", `PRAGMA main.table_xinfo("people")`, "PRAGMA", false},
+		{"read pragma without schema", "PRAGMA index_list('people')", "PRAGMA", false},
+		{"pragma assignment with equals", "PRAGMA user_version = 5", "PRAGMA", true},
+		{"pragma assignment with parens", "PRAGMA user_version(9)", "PRAGMA", true},
+		{"pragma wal checkpoint", "PRAGMA wal_checkpoint(FULL)", "PRAGMA", true},
+		{"pragma not in allowlist", "PRAGMA writable_schema", "PRAGMA", true},
+		{"pragma then write", "PRAGMA main.table_info('people'); UPDATE people SET email='x'", "PRAGMA", true},
+		{"multi statement select then drop", "SELECT 1; DROP TABLE main.people", "SELECT", true},
+		{"multi statement select then delete", "SELECT 1;DELETE FROM people", "SELECT", true},
+		{"cte delete", "WITH x AS (SELECT 1) DELETE FROM people", "WITH", true},
+		{"cte select", "WITH x AS (SELECT 1) SELECT * FROM x", "WITH", false},
+		{"attach", "ATTACH DATABASE 'x.db' AS other", "ATTACH", true},
+		{"vacuum into", "VACUUM INTO 'copy.db'", "VACUUM", true},
+		{"begin immediate", "BEGIN IMMEDIATE", "BEGIN", true},
+		{"empty", "   ", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			verb, write := classifyStatement(tt.statement)
+			if verb != tt.verb || write != tt.write {
+				t.Fatalf("classify(%q) = (%q,%t), want (%q,%t)", tt.statement, verb, write, tt.verb, tt.write)
+			}
+		})
+	}
+}
+
+// TestSQLSpyCatchesMultiStatementWrite is the P1-1 regression: a Prepare text
+// that starts with SELECT but carries a later write must be write intent.
+func TestSQLSpyCatchesMultiStatementWrite(t *testing.T) {
+	ctx := context.Background()
+	opts := sqliteOptions(t)
+	spy := NewSQLSpy()
+	opened, err := spy.OpenWriter(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := opened.(*writer)
+	// Execute raw multi-statement text through the same path a driver statement
+	// would take, then confirm it is classified as write intent. A read-only
+	// Reader rejects the write outright, which is why the writer adapter is used
+	// here: the point is the classifier, not the read-only guard.
+	if _, execErr := writer.db.ExecContext(ctx, "SELECT 1; CREATE TABLE spy_probe (id INTEGER)"); execErr != nil {
+		t.Fatalf("raw exec: %v", execErr)
+	}
+	if writes := spy.Writes(); len(writes) == 0 {
+		t.Fatalf("multi-statement write escaped classification: %+v", spy.Statements())
+	}
+	if err = opened.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestSQLSpyCatchesPragmaAssignment is the P1-2 regression: PRAGMA name(value)
+// is SQLite's assignment form and must not be classified as a read.
+func TestSQLSpyCatchesPragmaAssignment(t *testing.T) {
+	ctx := context.Background()
+	opts := sqliteOptions(t)
+	spy := NewSQLSpy()
+	opened, err := spy.OpenWriter(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := opened.(*writer)
+	if _, execErr := writer.db.ExecContext(ctx, "PRAGMA user_version(9)"); execErr != nil {
+		t.Fatalf("pragma: %v", execErr)
+	}
+	if writes := spy.Writes(); len(writes) == 0 {
+		t.Fatalf("PRAGMA assignment escaped classification: %+v", spy.Statements())
+	}
+	if err = opened.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
