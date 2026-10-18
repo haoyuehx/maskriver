@@ -225,11 +225,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return issueDecision(ctx, command, reviewStore, plan, reviewerID, validFor, stdout, stderr)
 	}
 	if command == "validate" {
-		report, err := engine.Validate(ctx, contracts.ValidateRequest{Plan: plan, Strict: strict})
+		report, err := engine.Validate(ctx, validationRequest(plan, strict))
 		if err != nil {
 			return fail(stderr, 1)
 		}
-		passed := report.Passed(strict)
+		passed := validationPassed(report, strict)
 		fmt.Fprintf(stdout, "validate: pass=%t tables=%d rows=%d issues=%d\n",
 			passed, report.Coverage.Tables, report.Coverage.Rows, len(report.Issues))
 		if !passed {
@@ -277,6 +277,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	return 0
 }
+
+// validationRequest and validationPassed are the validate command's only two
+// uses of the --strict flag: one sends it to the validator, the other applies it
+// to the verdict. They are variables so the CLI wiring test can observe the flag
+// at runtime: the frozen verifier ignores req.Strict and never emits a complete
+// report containing only Warning issues, so no database fixture can distinguish
+// strict from non-strict through exit codes alone.
+var (
+	validationRequest = func(plan contracts.Plan, strict bool) contracts.ValidateRequest {
+		return contracts.ValidateRequest{Plan: plan, Strict: strict}
+	}
+	validationPassed = func(report contracts.ValidationReport, strict bool) bool {
+		return report.Passed(strict)
+	}
+)
 
 // openSigningStore builds the write-capable review store from deployment files.
 // The trust set and the reviewer key only meet here: the trust entry names the

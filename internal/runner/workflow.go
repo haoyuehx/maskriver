@@ -414,6 +414,12 @@ func fileDigest(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// maskColumn applies one column plan to one original value and enforces the
+// replacement contract verify re-checks after a write: a non-NULL sensitive
+// value must become a different, non-NULL value. The dry run (Preview and
+// Apply) runs this over every planned row before a Writer exists, so a plan
+// whose output could never pass validation is refused before the first write
+// instead of being discovered by a later validate.
 func (e *Engine) maskColumn(ctx context.Context, original contracts.Value, col contracts.ColumnPlan) (contracts.Value, error) {
 	if e.key.Kind() != contracts.Bytes || len(e.key.Payload()) < 32 {
 		return contracts.Value{}, contracts.ErrInvalid
@@ -425,6 +431,14 @@ func (e *Engine) maskColumn(ctx context.Context, original contracts.Value, col c
 	masked, err := strategy.Mask(ctx, original, contracts.MaskContext{Plan: col, Key: e.key})
 	if err != nil {
 		return contracts.Value{}, err
+	}
+	if !original.IsNull() && masked.IsNull() {
+		// verify reports a NULL target value for a non-NULL source value as
+		// conflicting evidence, so replacing a sensitive value with NULL is a
+		// write no later strict validation could pass. The "null" strategy is
+		// therefore not applicable to a sensitive column, even when the column
+		// is nullable and the strategy itself is willing to emit NULL.
+		return contracts.Value{}, contracts.ErrUnsafe
 	}
 	if !original.IsNull() && masked == original {
 		return contracts.Value{}, contracts.ErrUnsafe
