@@ -354,6 +354,10 @@ func TestPlanRefusesAllNullColumnWithoutWriteTransaction(t *testing.T) {
 	}
 	spy := &writerSpy{}
 	spyEngine(t, e, spy)
+	// The refusal must survive an explicit apply attempt, not just Plan.
+	if _, applyErr := e.Apply(context.Background(), contracts.ApplyRequest{Plan: plan, ExplicitApply: true, BatchSize: 2}); applyErr == nil {
+		t.Fatal("apply with a refused plan must fail")
+	}
 	if spy.opens != 0 || spy.begins != 0 || spy.updates != 0 || spy.commits != 0 {
 		t.Fatalf("refused plan performed writes: %+v", spy)
 	}
