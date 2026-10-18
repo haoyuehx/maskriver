@@ -282,7 +282,15 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 		}
 		tablePlans = append(tablePlans, tablePlan)
 	}
-	schemaJSON, err := json.Marshal(schemas)
+	// A single scope keeps the original single-object encoding so plan digests
+	// stay stable across the multi-table change; several scopes bind the ordered
+	// slice instead.
+	var schemaJSON []byte
+	if len(schemas) == 1 {
+		schemaJSON, err = json.Marshal(schemas[0])
+	} else {
+		schemaJSON, err = json.Marshal(schemas)
+	}
 	if err != nil {
 		return empty, contracts.ErrInvalid
 	}
