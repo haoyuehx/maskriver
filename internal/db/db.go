@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"net/url"
 	"os"
@@ -33,23 +34,36 @@ type writer struct {
 var _ contracts.Reader = (*reader)(nil)
 var _ contracts.Writer = (*writer)(nil)
 
+// connectorFactory builds the driver connector for an already validated driver
+// name and DSN. It is the single seam for connection creation: a nil factory
+// takes the sql.Open path that every production caller uses.
+type connectorFactory func(driverName, dsn string) (driver.Connector, error)
+
 func OpenReader(ctx context.Context, opts contracts.DatabaseOptions) (contracts.Reader, error) {
-	a, err := open(ctx, opts, true)
+	return openReader(ctx, opts, nil)
+}
+
+func OpenWriter(ctx context.Context, opts contracts.DatabaseOptions) (contracts.Writer, error) {
+	return openWriter(ctx, opts, nil)
+}
+
+func openReader(ctx context.Context, opts contracts.DatabaseOptions, connect connectorFactory) (contracts.Reader, error) {
+	a, err := open(ctx, opts, true, connect)
 	if err != nil {
 		return nil, err
 	}
 	return &reader{a}, nil
 }
 
-func OpenWriter(ctx context.Context, opts contracts.DatabaseOptions) (contracts.Writer, error) {
-	a, err := open(ctx, opts, false)
+func openWriter(ctx context.Context, opts contracts.DatabaseOptions, connect connectorFactory) (contracts.Writer, error) {
+	a, err := open(ctx, opts, false, connect)
 	if err != nil {
 		return nil, err
 	}
 	return &writer{adapter: a}, nil
 }
 
-func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool) (*adapter, error) {
+func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool, connect connectorFactory) (*adapter, error) {
 	if ctx == nil || opts.DSN.Kind() != contracts.Text || opts.DSN.Payload() == "" ||
 		opts.DatasetID == "" || opts.MaxOpenConns < 1 || opts.ConnectTimeout <= 0 ||
 		len(opts.Schemas) == 0 {
@@ -65,7 +79,7 @@ func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool) (*
 		}
 		schemas[s] = true
 	}
-	var driver, dsn string
+	var driverName, dsn string
 	switch opts.Dialect {
 	case contracts.SQLite:
 		if len(schemas) != 1 || !schemas["main"] {
@@ -76,7 +90,7 @@ func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool) (*
 		if err != nil {
 			return nil, err
 		}
-		driver = "sqlite"
+		driverName = "sqlite"
 	case contracts.MySQL:
 		cfg, err := mysql.ParseDSN(opts.DSN.Payload())
 		if err != nil {
@@ -100,13 +114,23 @@ func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool) (*
 			cfg.Params["transaction_read_only"] = "1"
 		}
 		dsn = cfg.FormatDSN()
-		driver = "mysql"
+		driverName = "mysql"
 	default:
 		return nil, contracts.ErrUnsupported
 	}
-	db, err := sql.Open(driver, dsn)
-	if err != nil {
-		return nil, contracts.ErrDatabase
+	var db *sql.DB
+	if connect == nil {
+		var err error
+		db, err = sql.Open(driverName, dsn)
+		if err != nil {
+			return nil, contracts.ErrDatabase
+		}
+	} else {
+		connector, err := connect(driverName, dsn)
+		if err != nil || connector == nil {
+			return nil, contracts.ErrDatabase
+		}
+		db = sql.OpenDB(connector)
 	}
 	db.SetMaxOpenConns(opts.MaxOpenConns)
 	db.SetMaxIdleConns(opts.MaxOpenConns)
