@@ -2,6 +2,20 @@
 
 日期：2026-10-18。关联 #9、#11。基线 `cd7ad9a340840807ab009a01903df6ed0f18f5c3`，冻结契约 `APIRevision=m1a-v1` 未改。本文是有界工作包证据，不是完整 M1、安全批准或发行结论。
 
+> **版本与时效说明（2026-10-18 追加）**
+>
+> 本文记录的是基线 `cd7ad9a` 上的 Runner 收尾证据与当时的审查发现，作为历史交付物保留，**不得删除或改写原始结论**。以下结论已被后续 PR 修正或收窄，阅读时请以当前代码与 [Test Plan](test-plan.md) 的 P2 登记为准：
+>
+> | 本文原始结论 | 当前状态 |
+> | --- | --- |
+> | P1：`verify` 只比较 Columns/PK，SQLite CHECK 覆盖缺失 | 已修正：CHECK 解析与门禁由 PR #43 交付，缺失覆盖不再 PASS |
+> | P2：`cmd/maskriver` flag 解析错误原样回显输入 | 已修正：CLI 参数泄漏清洗由 PR #39 交付 |
+> | P2：非 NULL→NULL 被 `compareRows` 判为类型冲突，Apply 成功而 validate 失败 | 已修正为写前拒绝：dryRun 的 `maskColumn` 在任何 Writer 之前返回 `ErrUnsafe`（PR #55） |
+> | UNVERIFIED：Runner 快照未绑定活跃 WAL/并发源变更 | 已修正：非 rollback-journal 源（含 WAL）被拒绝（PR #50），目标端 journal mode 仍未校验（P2-5） |
+> | 未实现：多表/多列、审核身份/过期/存储、SQL Driver Spy、MySQL CLI、checkpoint | 多表与审核存储已交付（PR #45–#55）；SQL Spy 为驱动级（`internal/db/sqlspy.go`）；MySQL CLI、checkpoint 仍 UNVERIFIED |
+>
+> 本文的“独立 AI Reviewer: Scoped PASS”只针对当时那个工作包，不构成 #9 或 #11 的验收结论。
+
 ## 当前仓库与依赖
 
 GitHub main 基线已有四个核心组件、真实 SQLite 单表单列 CLI 和 PR #36 的有界 Worker；本轮读取的 [main CI](https://github.com/haoyuehx/maskriver/actions/runs/38379436864) 中 Ubuntu/Windows 测试/vet、Ubuntu race、隔离 MySQL adapter 均成功。它们不代表本次新增提交的 CI。

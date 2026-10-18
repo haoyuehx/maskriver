@@ -7,13 +7,17 @@ MaskRiver 的测试目标：证明组件在真实数据库上按其契约工作�
 
 - `pkg/contracts/contracts_test.go`：typed Value / NULL / 精度 / 时间语义、fmt 与 JSON 遮蔽、无效 Plan 拒绝、报告 strict gate。
 - `internal/testenv/fixture_test.go`：SQLite 真实驱动与合成数据、约束、事务、只读、取消；MySQL 为 opt-in，未启动时明确 `SKIP`。
-- `cmd/maskriver/main_test.go`：help/version/非法参数、无授权拒绝，以及真实 SQLite 合成源与目标库 Scan、默认 Preview、显式 --apply --approved、strict Validate、源与目标文件哈希/唯一列和重复 Apply 拒绝（PR #35）。
+- `cmd/maskriver/main_test.go`：help/version/非法参数、无授权拒绝，以及真实 SQLite 合成源与目标库 Scan、默认 Preview、显式 `--apply --approved`、strict Validate、源与目标文件哈希/唯一列和重复 Apply 拒绝；另含多表 CLI、scan 故障退出码、`null` 策略拒绝与 `--strict` 接线回归。
+- `cmd/maskriver/approval_e2e_test.go`：以子进程执行 scan/preview/approve/新进程 apply/validate；覆盖两表整计划审批成功、仅批一张表被拒、换序/换策略/换 schema/换源快照/换目标绑定被拒，以及只读命令不创建历史目录。
+- `internal/runner/*_test.go`：真实 SQLite 多表 Plan/Preview/Apply/Validate、驱动级 SQL Spy 零写、静态安全门禁、NULL 保持、批次故障/取消/提交未知和静态拒绝顺序。
 - `internal/config/config_test.go`：零值只读与显式 Apply 意图。
 - `tools/fixture`：生成 `.local/m1a-synthetic.db`，拒绝覆盖已有文件。
 - `scripts/test_mysql.py`：可选 POSIX 本机专用禁网 MySQL；历史宿主机权限失败不是通用开发阻塞。
 - `scripts/test_mysql_container.py`：Linux 或 Ubuntu CI 一次性禁网 MySQL 8.0.46 容器，复用 marker + 私有 socket guard；现执行 TestMySQLFixture + TestMySQLAdapter 业务测试（PR #30）。
 
-`internal/detect` 已由 PR #20 合并有界 China-first 检测实现；`internal/db` 的 SQLite/MySQL Reader/Writer、keyset 分页与事务由 #5 的 PR #21 交付，是否合并和测试通过以 GitHub 最终记录为准。`internal/db/mysql_test.go` 的 `TestMySQLAdapter` 只有在传入隔离 MySQL socket 时执行；PR #30 的独立隔离 MySQL CI 现已实际执行这一业务测试并成功；本地普通测试无 socket 时仍会 SKIP。go-mask 的五种 M1 策略及内存映射由 PR #24 从 #18 原始提交整合，测试证据见 `internal/mask/mask_test.go`、`security_test.go`；是否合并以 GitHub 实际记录为准。其他尚未交付的模块 PR 不得被视为已在 `main` 交付。PR #35 的 SQLite **单表单列**真实 CLI 流程已覆盖；尚未实现多表、持久审批/审计、SQL Spy、异常提交注入和 MySQL CLI，因此不代表全部 #9/#11 验收。
+`internal/detect`、`internal/db`（SQLite/MySQL Reader/Writer、keyset 分页与事务）、`internal/mask`（五种 M1 策略、内存映射与九种中国格式替换）和 `internal/verify` 均已在 `main` 交付，测试证据见各自包内测试。`internal/db/mysql_test.go` 的 `TestMySQLAdapter` 只有在传入隔离 MySQL socket 时执行；Ubuntu CI 的一次性 MySQL 8.0.46 容器会执行这一适配器业务测试，本地普通测试无 socket 时仍会 SKIP。
+
+当前真实 SQLite CLI 证据覆盖单表与多表：`cmd/maskriver/main_test.go` 的 `TestCLIRealSQLiteWorkflow`、`TestCLIMultiTableWorkflow`、`TestCLINullStrategyRefusedBeforeWrite`、`TestCLIStrictFlagWiring`、`TestCLIScanFailureExitsNonZeroWithoutWrite`，以及 `cmd/maskriver/approval_e2e_test.go` 的子进程审批/新进程 apply 用例。MySQL 仍只有适配器组件测试，用户 CLI 全流程未实现/未验证；`--strict` 目前没有可区分的严格语义（见下文“#9 真实 SQLite CLI 与签名审批（当前证据）”）。因此这些证据不代表 #9/#11 的全部验收，也不代表 M1 完成或发布。
 
 ```sh
 gofmt -l cmd internal pkg tools
@@ -37,7 +41,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - Mock、编译通过、跳过都不能替代真实数据库验证。
 - 工作树/模型诊断是可选工具检查，不是开发启动或业务验收门禁。
 
-## 第一阶段验收矩阵（尚未实现）
+## 第一阶段验收矩阵（M1 验收目标；已覆盖项见各专项证据）
 
 | 范围 | 关键用例 |
 |---|---|
@@ -69,7 +73,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 
 ## 脱敏策略组件专项验收（#7 / 原 PR #18 / PR #24）
 
-- 五种策略 `null`、`blank`、`redact`、`format_random`、`fake_email` 仅实现纯内存有界切片，统一入口 `mask.NewStrategy`、`mask.NewMemoryMapping`，并验证冻结 `m1a-v1` 签名；不实现中国身份证/银行卡/信用代码校验位保持替换或密码学 FPE（仍为 #12）。
+- 五种策略 `null`、`blank`、`redact`、`format_random`、`fake_email` 仅实现纯内存有界切片，统一入口 `mask.NewStrategy`、`mask.NewMemoryMapping`，并验证冻结 `m1a-v1` 签名；不实现中国身份证/银行卡/信用代码校验位保持替换或密码学 FPE（#12 的九种格式替换已由后续 PR #29 交付，见下节）。
 - 测试覆盖：合法 `Bytes` 密钥且 >=32 字节，Text 密钥拒绝；ctx nil/取消；NULL 与空串；非 Nullable 列 null 拒绝；非空敏感输入不得保持不变；未知策略及不支持的 Kind 拒绝；HMAC keyed domain 隔离；仅支持部分 ASCII/汉字类的 Text 形状保持、任意 Bytes 等长；中文与二进制短输入边界；`fake_email` 只输出 keyed HMAC 和固定域名，不附原始值 CRC32。
 - 内存映射采用键控指纹与原子 get-or-create 的单赢家语义；lookup 不写入；并发与 `go test -race ./internal/mask/...` 在最终 PR Head 的 Ubuntu CI 验证。暂不承诺持久映射、跨库 exactly-once、唯一性/碰撞或参照完整性。
 - 最终 CI 需执行 `gofmt -l`、`go test -count=1 ./...`、`go vet ./...`、Ubuntu race，记录真实结果。仅 CI 配置就绪或 MySQL fixture 通过不能替代运行态组件验收。
@@ -81,7 +85,8 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - **安全测试**：密钥 Bytes 且至少 32B，类型及策略/Scope/KeyID 绑定，取消与 nil context，NULL 保持、非 NULL 不得不变、目标长度不匹配拒绝，明确校验位错误/非闰日/错误号段/无效地址负例；合成输入不进入错误与日志，策略不访问数据库。
 - **逐规则评估**：`TestCNFormatSyntheticEvaluation` 的开发时手工构造集合含 21 个正例、28 个负例（九条规则），测试格式接受结果并校验替换输出能再次通过对应格式规则。初轮 PR #29 CI 实测九条规则总 TP=21、FP=0、FN=0；逐规则 P/R 均为 1.000。这个小规模自编集合不是独立留出评估，更不是生产 PII 检测准确率或匿名化证明；检测规则的独立指标仍见 `internal/detect/eval_test.go`。
 - **可复现命令**：`go test -count=1 -v ./internal/mask/...`、`go test -count=1 ./...`、`go vet ./...`、`go test -race ./internal/mask/...`、`gofmt -l internal/mask`；最终 PR Head 的 Ubuntu/Windows GitHub CI 应全部成功。先前通过的旧 SHA 不算最新提交通过。
-- **真实 SQL 组件集成**：PR #30 在 SQLite 真实快照做日期策略的只读文件哈希对比、optimistic UPDATE/COMMIT、独立 SQL 回读和源快照不变性校验；另对全部九种策略在实际 SQLite 和 MySQL 8.0.46 表上做 typed Page → mask → WriteTx → 持久化读回及行数/主键检查。- **仍未验证**：CLI 全链路 Scan/Preview/Apply/strict Validate、SQL spy、跨列唯一/PK-FK、持久映射及所有目标列的字节长度限制，属于 #9/#11。生成格式有效的身份证、银行卡、手机号等号码并不保证无人持有、不会被投递/联系，也不保证匿名性；只能处理授权的合成/隔离测试数据。
+- **真实 SQL 组件集成**：PR #30 在 SQLite 真实快照做日期策略的只读文件哈希对比、optimistic UPDATE/COMMIT、独立 SQL 回读和源快照不变性校验；另对全部九种策略在实际 SQLite 和 MySQL 8.0.46 表上做 typed Page → mask → WriteTx → 持久化读回及行数/主键检查。
+- **仍未验证**：九种 CN 策略经 CLI 全链路的 Scan/Preview/Apply/strict Validate、针对 CN 策略的 SQL Spy 断言、跨列唯一/PK-FK、持久映射及所有目标列的字节长度限制，属于 #9/#11；通用 SQL Spy 已由 `internal/db` 与 `internal/runner` 的预览回归覆盖，但不是 CN 策略专项证据。生成格式有效的身份证、银行卡、手机号等号码并不保证无人持有、不会被投递/联系，也不保证匿名性；只能处理授权的合成/隔离测试数据。
 
 更多覆盖范围与限制见 [#12 中国格式组件说明](issue12-cn-replacement.md)。
 
@@ -92,7 +97,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - **契约**：`RowLimit=0` 执行全量有界分页；正数表示总行预算，超过时 `PartialCoverage` + `Complete=false`；负数或 nil ctx/reader 拒绝。缺失 schema/PK 能力、类型不符、计划列缺失、重复键/倒退游标/空页面等必须失败关闭；完整空表可通过。
 - **回归**：`internal/verify/verify_test.go` 保留原始 PR #32 的 fake-Reader 用例；`verify_safety_test.go` 新增 520 行分页、Issue 聚合、非法游标、计划/schema 错配、nil Context、缺少字段、刚好达到总行预算和截断拒绝。仅冻结 `Plan` 中的敏感列查验非 NULL 值变化，NULL 语义异常不通过。
 - **门禁**：`gofmt -l internal/verify`、`go test -count=1 -v ./internal/verify`、`go test -count=1 ./...`、`go vet ./...`、`go test -race ./...`（Linux CI）；记录最终 PR Head 三项 CI 真实结论，不把初期 green 当作末次 green。
-- **剩余未验收**：全量 DB schema 的 Index/FK/Unique/CHECK/Trigger 安全不变量以及真实 CLI/runner 的独立源快照严格 Validate 仍属 #9/#11。以上测试是 fake Reader **不是实际数据库全流程验证**，不能将 #8 组件通过描述成 M1 完成。
+- **剩余未验收**：真实 MySQL CLI 的独立源快照严格 Validate、触发器/grant 校验与 #11 独立安全验收仍属后续；verify 包自身仍以 fake Reader 为主，真实 SQLite 多表路径由 `cmd/maskriver` 与 `internal/runner` 覆盖，不能将 #8 组件通过描述成 M1 完成。
 
 ## 特别安全门禁
 
@@ -115,9 +120,53 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 `internal/runner/workflow_acceptance_test.go` 使用真实 SQLite source/target，包装现有 Writer/WriteTx 接口作实例级能力与事务 Spy：
 
 - 未 Approved、无 ExplicitApply、篡改 Plan、Preview 目标不一致：不打开 Writer。
-- Preview：读取全部计划行，fixture 目录（source/target/key/sentinel）文件集合及 SHA256 不变，Writer/Begin/Update/Commit 为零；这**不是 SQL Driver Spy**。
+- Preview：读取全部计划行，fixture 目录（source/target/key/sentinel）文件集合及 SHA256 不变，Writer/Begin/Update/Commit 为零；驱动级 SQL Spy 回归（`TestPreviewIssuesNoWriteSQLThroughSQLSpy`、`TestMultiTablePreviewIssuesNoWriteSQLThroughSQLSpy`、`TestSQLSpyReadOnlyOperationsIssueNoWrites`）另行确认实际 SQL 无写/事务语句。
 - 混合 NULL 跨批次只更新非 NULL，NULL 保持；130 行全 NULL 跨页不打开 Writer。Preview 计读取行，receipt 只计实际更新行。
 - Begin/Update/受影响行数不符/取消：错误返回，SQL 回读无未提交变化，Writer 关闭；Rollback 使用未取消、有 deadline 的独立清理 context。驱动可能不遵守该 deadline，不承诺硬超时。
 - 第二批失败保留首批 receipt，SQL 回读确认已提交前缀；包装 ErrCommitUnknown 可识别，不自动重试或声称回滚。真实 SQLite 提交后模拟确认丢失，证明实际写入与保守报告的区别。
 
-命令：`go test -count=1 -v ./internal/runner`、`go test -count=1 ./...`、`go vet ./...`、`go test -race ./...`。本机 Linux/Go 1.26.3 已执行；MySQL 无隔离 socket 时仍 SKIP，不能以本包替代 MySQL CLI 或完整 #11 验收。完整边界及未解决发现见 [Runner 收尾证据](m1-runner-acceptance.md)。
+命令：`go test -count=1 -v ./internal/runner`、`go test -count=1 ./...`、`go vet ./...`、`go test -race ./...`。本机 Linux/Go 1.26.3 已执行；MySQL 无隔离 socket 时仍 SKIP，不能以本包替代 MySQL CLI 或完整 #11 验收。2026-10-18 的早期记录见 [Runner 收尾证据](m1-runner-acceptance.md)；其中若干边界已被后续提交改变（CHECK 元数据、多表、SQL Spy、审批记录），以本文件和当前代码为准。
+
+## #9 真实 SQLite CLI 与签名审批（当前证据）
+
+以下路径已在真实 SQLite 合成快照上端到端执行；证据以测试名为准，不复制旧文档结论。
+
+- **工作流**：`TestCLIRealSQLiteWorkflow`（单表 25 行、串行/并行结果一致、重复 Apply 拒绝）、`TestCLIMultiTableWorkflow`（两表两个 scope 的 scan→preview→apply→strict validate）、`TestE2EPlanIssueNewProcessApply`（preview → 独立子进程 approve → 新进程 preview/apply → 新进程 strict validate）、`TestE2ETwoTableDecisionCoversWholePlan`。
+- **审批绑定**：`approve` 用 Ed25519 私钥签发记录，记录绑定 plan_id、source_snapshot_id、target_id、schema_digest、config_digest、strategy/version、key_id 与有序 scope 列表（`newRecord`、`checkBinding`）。`--approved` 只是声明，`--apply` 才是写意图，两者都必需且都不充分；还需要 `history.Store.Lookup` 验证签名、绑定、有效期与撤销后返回记录（`TestE2EInvalidDecisionsRefused`）。
+- **整计划语义**：两表计划必须整体审批；仅批一张表不能授权整计划（`TestE2EPartialDecisionDoesNotAuthorizeWholePlan`）。换序、换策略、改 schema、改源快照、改目标绑定都会生成不同 Plan，原记录因此失效（`TestE2EDecisionBoundFieldChangesRefused`；存储层对应 `TestLookupRejectsScopeReorder`、`TestLookupRejectsChangedBoundField`、`TestLookupRejectsPartialMultiTableApproval`）。
+- **信任边界**：`apply` 只加载部署预置 trust file 中的公钥（`history.LoadTrustFile`），路径上不接收审核私钥；`TestApplyPathTakesNoReviewerPrivateKey` 固定这一接口面，`TestOpenRejectsPrivateKeyThatDoesNotMatchTrustedKey` 拒绝私钥与信任项不匹配。同一操作者同时控制 trust file 与审核私钥时工具不阻止，`ReviewerID` 只是自填标签；这是本地签名边界，不是 RBAC。
+- **`null` 策略**：`Engine.maskColumn` 在 dryRun 中拒绝非 NULL → NULL，Preview 与 Apply 都在打开 Writer 前失败（`TestCLINullStrategyRefusedBeforeWrite`、`TestApplyRefusesNullReplacementBeforeWriter`）。`internal/db` 写入层仍接受该组合（P2-1）。
+- **静态门禁**：UNKNOWN 扫描在 Plan 阶段 `ErrUnsafe`；无稳定主键或覆盖不全 `ErrIncomplete`；被脱敏列位于 UNIQUE `ErrUnsafe`、CHECK/FK/被引用 FK/任意触发器 `ErrUnsupported`；非 rollback-journal 源 `ErrIncomplete`（WAL 已由 `TestWALSourceIsRefusedBySnapshotIdentity` 覆盖；MEMORY/OFF 按同一代码路径拒绝，无专项 CLI 用例）；未知策略 `ErrInvalid`；调用方提供的 Plan 与重新计算的 Plan 不一致（快照/schema/策略）`ErrConflict`；截断扫描 `ErrIncomplete`；严格验证覆盖不足（`SchemaCoverage` 缺失、`PartialCoverage`）以 `Warning` + `Coverage.Complete=false` 退出 1。证据：`TestPlanRefusesNonSensitiveColumnEvenWhenApproved`、`TestPreflightRefusesTriggerOnPlannedTable`、`TestPreflightRefusesUniqueConstraintOnModifiedColumn`、`TestPreflightRefusesCheckOnModifiedColumn`、`TestPreflightRefusesForeignKeyOnModifiedColumn`、`TestPreflightRefusesIncomingReferenceFromUnplannedTable`、`TestE2EApprovalDoesNotBypassExistingGates`。
+- **批次语义**：`BatchReceipt` 只在 Commit 成功后追加；失败保留已提交前缀但 `Complete=false`；`ErrCommitUnknown` 标记 `CommitOutcomeUnknown`，不重试也不声称回滚；没有跨批全局原子性；表在运行中被清空使前后 Count 不一致 → `ErrConflict`。证据：`TestApplyRetainsReceiptForEarlierCommittedBatch`、`TestApplyWrappedCommitUnknownIsNotReportedAsRolledBack`、`TestApplyRefusesTableEmptiedBeforeItsTurn`。
+- **`--strict` 现状**：`verify` 忽略 `ValidateRequest.Strict`；所有 Warning 路径已把 `Coverage.Complete` 置 false，因此 `contracts.Passed` 无论 strict 都不接受这些报告。CLI 测试只证明 flag 解析、转发（`validationRequest`）与退出码敏感性（`TestCLIStrictFlagWiring`），以及 `Passed` 对 Warning 的判定（`TestValidationPassedHonorsStrictWarning`）；没有数据库 fixture 能区分 strict 与非 strict。不得把它描述为已具备独立严格语义门禁。
+
+## 真实支持与仅组件级证据
+
+- **真实 SQLite CLI 端到端**：上节列出的 `cmd/maskriver` 用例，以及 `internal/runner` 中真实 SQLite + Writer/WriteTx 包装 spy 的多表/故障用例。
+- **真实 SQLite 组件级**：`internal/db` 的 Reader/Writer、分页、事务与驱动级 SQL Spy；`internal/history` 的真实文件存储（不连接数据库）；`internal/mask`、`internal/detect` 为纯内存组件；同一表多列的 Plan/Preview/Apply 由 `TestPreviewCoversEveryColumnOfOneTable`、`TestApplyWritesEveryPlannedColumnOfOneTable` 覆盖，不是 CLI 级证据。
+- **fake Reader / 仅适配器**：`internal/verify` 的 schema/行数/keyset 回归使用 fake Reader；MySQL 只有 `TestMySQLAdapter` 适配器组件测试，没有 MySQL CLI。
+- 组件测试通过不等于用户 CLI 路径或生产可用；MySQL CLI 与完整 #11 独立验收不在已测范围。
+
+## UNVERIFIED 清单
+
+- MySQL CLI 端到端：未实现/未验证；只有隔离 MySQL 8.0.46 适配器测试。
+- 断点恢复/checkpoint、跨进程幂等重放、exactly-once：未实现；不得从批次事务或审批记录推断。
+- 生产级检测准确率：只有 74 条自编样本（38 正、36 负，8 条超出覆盖），姓名 P=0.500/R=0.750；不是独立留出评估。
+- 持久映射、全局唯一性/匿名化、参照完整性：未实现/未验证。
+- macOS CI：仓库 CI 只跑 Ubuntu/Windows；未宣称 macOS 覆盖。
+- `--strict` 独立严格语义、独立 #11 安全验收：未完成。
+
+## 已知残余缺陷（已接受 P2）
+
+以下问题已记录并接受为 P2，不阻塞 #9 的 AC 文档收口；均需后续 Issue 关闭（编号待登记，预计在 #9 收尾后另立）。
+
+| 编号 | 位置/现象 | 影响 | 限制/现状 | 后续 |
+|---|---|---|---|---|
+| P2-1 | `internal/db` 写入层仍接受非 NULL→NULL | 绕过 CLI 直接调用 Writer 的调用者可能写入永远无法通过严格验证的行；CLI 路径已在上游拒绝 | `TestApplyRefusesNullReplacementBeforeWriter` 只固定 CLI/Runner 行为 | 后续 Issue（编号待登记） |
+| P2-2 | 部分扫描拒绝测试的 `spy.opens != 0` 断言无法失败 | `TestPlanRefusesNonSensitiveColumnEvenWhenApproved`、`TestPlanRefusesTruncatedSampleEvenWhenApproved` 在 Plan 失败后仍用空 Plan 调 Apply，Apply 先做形状校验就返回，Writer 计数与扫描闸门无关，不能捕获闸门回归 | 扫描本身结构上不打开 Writer，产品行为未受影响 | 后续 Issue（编号待登记） |
+| P2-3 | 取消测试未覆盖 `gather` 的 ctx 检查 | `TestScanFailsClosedOnMidScanCancellation` 在第二次 `Sample` 内触发并由 Reader 返回 `context.Canceled`；`gather` 循环顶部的 `ctx.Err()` 短路没有单独用例 | 已测取消路径仍有效；取消传播证据不完整 | 后续 Issue（编号待登记） |
+| P2-4 | `main.go` 为测试 seam 引入两个可变包级函数变量 | `TestCLIStrictFlagWiring` 依赖替换 `validationRequest`/`validationPassed`，测试修改全局状态，不能并行 | 生产行为不受影响，只影响测试隔离 | 后续 Issue（编号待登记） |
+| P2-5 | CLI e2e 的 `targetDigest` 忽略 sidecar | 只哈希目标主文件；WAL 目标可能把提交写入 `-wal` 而字节断言不可见 | 当前 fixture 使用 rollback journal；源端 WAL 被拒绝，目标端 journal mode 未校验 | 后续 Issue（编号待登记） |
+| P2-6 | 历史存储不检测整体回滚/撤销回滚 | 能写 store 目录者可恢复旧的有效审批或撤销前文件；过期仍限制窗口 | 本地文件存储不是透明日志；部署需外发记录摘要/过期信息 | 后续 Issue（编号待登记） |
+| P2-8 | Runner 侧审批时间窗口没有时钟偏移容差 | `internal/runner/approval.go` 要求 `IssuedAt <= now`，而 `internal/history/record.go` 允许 5 分钟未来签发容差；若审核方时钟略快，刚签发的记录在 Runner 复核处被拒绝 | fail-closed，不会误授权写入；仅在时钟轻微漂移时降低可用性（需要等待或重签） | 后续 Issue（编号待登记）；届时统一两处容差语义 |
+| P2-7 | typed-nil seam 防护不完整 | runner 的 `ApprovalQuery` 已用 `nilApprovalQuery` 防护；`internal/db` 的注入式连接 seam 只有 `nil` 判断，没有等价的 typed-nil 回归 | 影响限于测试/自定义注入路径；生产使用 `nil` 工厂 | 后续 Issue（编号待登记） |
