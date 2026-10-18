@@ -20,8 +20,9 @@ func (e *adapter) sqliteChecks(ctx context.Context, ref contracts.TableRef) ([]s
 		return nil, false, dbErrorOrCategory(err)
 	}
 	if !ddl.Valid {
-		// Virtual and shadow tables store no CREATE TABLE text. Report the CHECK
-		// class as unverified instead of failing the whole Describe.
+		// Defensive only: SQLite normally stores DDL for virtual and shadow
+		// tables too. If the text is missing, report the CHECK class as
+		// unverified instead of failing the whole Describe.
 		return nil, false, nil
 	}
 	checks, ok := scanSQLChecks(ddl.String)
