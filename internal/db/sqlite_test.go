@@ -192,9 +192,11 @@ func TestSQLiteWriteTransactions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Row 1 has a NULL nickname and row 3 a non-NULL one. A NULL original may
+	// only stay NULL, so the optimistic update has to target row 3.
 	updated := contracts.RowChange{
-		Key:         []contracts.Value{testValue(t, contracts.Int, "1")},
-		Expected:    contracts.Row{"nickname": {}},
+		Key:         []contracts.Value{testValue(t, contracts.Int, "3")},
+		Expected:    contracts.Row{"nickname": testValue(t, contracts.Text, "合成样本-03")},
 		Replacement: contracts.Row{"nickname": testValue(t, contracts.Text, "synthetic-new")},
 	}
 	n, err := tx.Update(ctx, []contracts.RowChange{updated})

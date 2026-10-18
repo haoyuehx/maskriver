@@ -210,8 +210,9 @@ func TestPreviewLimitIsPerTable(t *testing.T) {
 	}
 }
 
-// TestPreviewMixedNullColumnsNeverFabricates keeps a NULL original out of the
-// preview replacement while still reporting the row.
+// TestPreviewMixedNullColumnsNeverFabricates keeps a NULL original NULL in the
+// preview: the column is carried in both rows so the change matches the plan,
+// and no value is invented for it.
 func TestPreviewMixedNullColumnsNeverFabricates(t *testing.T) {
 	cfg := scopeFixture(t,
 		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NULL, backup_email TEXT NULL)`,
@@ -240,26 +241,31 @@ func TestPreviewMixedNullColumnsNeverFabricates(t *testing.T) {
 	if got, ok := changes[0].Replacement["email"]; !ok || got.IsNull() {
 		t.Fatalf("row 1 email replacement present=%t", ok)
 	}
-	if _, ok := changes[0].Expected["backup_email"]; ok {
-		t.Fatal("row 1 fabricated an expected value for a NULL original")
+	if got, ok := changes[0].Expected["backup_email"]; !ok || !got.IsNull() {
+		t.Fatalf("row 1 backup_email expected present=%t, want an explicit NULL", ok)
 	}
-	if _, ok := changes[0].Replacement["backup_email"]; ok {
-		t.Fatal("row 1 fabricated a replacement for a NULL original")
+	if got, ok := changes[0].Replacement["backup_email"]; !ok || !got.IsNull() {
+		t.Fatalf("row 1 backup_email replacement present=%t, want an explicit NULL", ok)
 	}
 	// Row 2: email NULL, backup_email set.
-	if _, ok := changes[1].Expected["email"]; ok {
-		t.Fatal("row 2 fabricated an expected value for a NULL original")
+	if got, ok := changes[1].Expected["email"]; !ok || !got.IsNull() {
+		t.Fatalf("row 2 email expected present=%t, want an explicit NULL", ok)
 	}
-	if _, ok := changes[1].Replacement["email"]; ok {
-		t.Fatal("row 2 fabricated a replacement for a NULL original")
+	if got, ok := changes[1].Replacement["email"]; !ok || !got.IsNull() {
+		t.Fatalf("row 2 email replacement present=%t, want an explicit NULL", ok)
 	}
 	if got, ok := changes[1].Replacement["backup_email"]; !ok || got.IsNull() {
 		t.Fatalf("row 2 backup_email replacement present=%t", ok)
 	}
-	// Row 3: every planned column NULL, so the row carries no claimed change.
-	if len(changes[2].Expected) != 0 || len(changes[2].Replacement) != 0 {
-		t.Fatalf("all-NULL row claims Expected=%v Replacement=%v",
-			changes[2].Expected, changes[2].Replacement)
+	// Row 3: every planned column is NULL, so the row claims no change; the
+	// column set is still complete and the primary key is still carried.
+	for _, name := range []string{"email", "backup_email"} {
+		if got, ok := changes[2].Expected[name]; !ok || !got.IsNull() {
+			t.Fatalf("all-NULL row expected %s present=%t, want an explicit NULL", name, ok)
+		}
+		if got, ok := changes[2].Replacement[name]; !ok || !got.IsNull() {
+			t.Fatalf("all-NULL row replacement %s present=%t, want an explicit NULL", name, ok)
+		}
 	}
 	if len(changes[2].Key) != 1 {
 		t.Fatalf("all-NULL row key=%v, want the primary key", changes[2].Key)

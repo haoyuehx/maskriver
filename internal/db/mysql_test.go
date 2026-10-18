@@ -159,9 +159,11 @@ func TestMySQLAdapter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Row 1 has a NULL nickname and row 2 an empty one. A NULL original may only
+	// stay NULL, so the optimistic update has to target row 2.
 	change := contracts.RowChange{
-		Key:         []contracts.Value{testValue(t, contracts.Int, "1")},
-		Expected:    contracts.Row{"nickname": {}},
+		Key:         []contracts.Value{testValue(t, contracts.Int, "2")},
+		Expected:    contracts.Row{"nickname": testValue(t, contracts.Text, "")},
 		Replacement: contracts.Row{"nickname": testValue(t, contracts.Text, "mysql-synthetic")},
 	}
 	if _, err = tx.Update(ctx, []contracts.RowChange{change}); err != nil {
