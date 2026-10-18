@@ -381,10 +381,12 @@ func (e *Engine) maskColumn(ctx context.Context, original contracts.Value, col c
 	return masked, nil
 }
 
+// Validate re-checks the supplied plan against the live snapshots and then runs
+// the read-only verifier over every planned table. Validate never writes, so the
+// write-only single-scope gate does not apply; all constraint logic (schema,
+// key sets, PK/FK/UNIQUE/CHECK/index gates, row counts and unchanged values)
+// stays in verify and is not duplicated here.
 func (e *Engine) Validate(ctx context.Context, req contracts.ValidateRequest) (contracts.ValidationReport, error) {
-	if err := requireSingleScope(req.Plan); err != nil {
-		return contracts.ValidationReport{}, err
-	}
 	if err := req.Plan.ValidateShape(); err != nil {
 		return contracts.ValidationReport{}, err
 	}
