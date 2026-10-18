@@ -2,10 +2,10 @@ package runner
 
 // Regression tests for work package B2a: Preview must describe every planned
 // column of a row, including NULL originals, and the writer must accept that
-// description and assign only the columns that change. Apply itself still
-// refuses multi-scope plans (see TestMultiScopeApplyIsRefusedWithoutWriter), so
-// the multi-column cases are exercised through the shared visit/WriteTx seam.
-// Every fixture is synthetic and lives in t.TempDir().
+// description and assign only the columns that change. Apply executes
+// multi-column and multi-table plans since work package B2b-2 (see
+// multi_apply_test.go); the writer-level cases here stay at the shared
+// visit/WriteTx seam. Every fixture is synthetic and lives in t.TempDir().
 
 import (
 	"context"

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
 
 // cliExec runs synthetic DDL/DML against one disposable CLI fixture file.
@@ -367,10 +369,11 @@ func scopePair(t *testing.T) (string, string) {
 	return source, target
 }
 
-// TestCLIRepeatedScopeFlag covers the multi-scope declaration form: repeated
-// -scope values scan every declared scope, while mask and validate stay
-// fail-closed with ErrUnsupported until multi-scope execution exists.
-func TestCLIRepeatedScopeFlag(t *testing.T) {
+// TestCLIMultiTableWorkflow is the B2b-2 end-to-end case: scan, preview, apply
+// and validate really run over a two-table fixture through the CLI, the exit
+// codes follow the documented 0/1/2 contract, and no output may name a path, a
+// synthetic value or the key.
+func TestCLIMultiTableWorkflow(t *testing.T) {
 	source, target := scopePair(t)
 	keyFile := filepath.Join(filepath.Dir(source), "key.bin")
 	if err := os.WriteFile(keyFile, []byte(strings.Repeat("K", 40)), 0600); err != nil {
@@ -380,10 +383,14 @@ func TestCLIRepeatedScopeFlag(t *testing.T) {
 		t.Helper()
 		var out, errOut bytes.Buffer
 		if got := run(args, &out, &errOut); got != code {
-			t.Fatalf("%v exit=%d wanted=%d; sanitized output=%s", args, got, code, errOut.String())
+			t.Fatalf("%v exit=%d wanted=%d; sanitized output=%s", args, got, code, out.String()+errOut.String())
 		}
 		all := out.String() + errOut.String()
-		for _, secret := range []string{"alpha@example.invalid", source, target} {
+		for _, secret := range []string{
+			"alpha@example.invalid", "beta@example.invalid",
+			"gamma@example.invalid", "delta@example.invalid",
+			strings.Repeat("K", 40), source, target,
+		} {
 			if strings.Contains(all, secret) {
 				t.Fatalf("CLI leaked %q: %q", secret, all)
 			}
@@ -393,30 +400,97 @@ func TestCLIRepeatedScopeFlag(t *testing.T) {
 	if got := sanitized(0, "scan", "--source", source, "--target", target, "--scope", "people.email", "--min-samples", "1"); !strings.Contains(got, "complete=true columns=1") {
 		t.Fatalf("single scope scan output=%q", got)
 	}
+	// --min-samples 1 keeps detection deterministic so no assertion can pass by
+	// accident through an UNKNOWN verdict.
 	if got := sanitized(0, "scan", "--source", source, "--target", target,
 		"--scope", "people.email", "--scope", "contacts.email", "--min-samples", "1"); !strings.Contains(got, "complete=true columns=2") {
 		t.Fatalf("repeated scope scan output=%q", got)
 	}
 	common := []string{"--strategy", "fake_email", "--key-id", "synthetic-key", "--key-file", keyFile}
-	// Multi-scope Preview is supported since work package B1, so it must really
-	// run and report both tables instead of being refused. --min-samples 1 keeps
-	// detection deterministic so the assertion cannot pass by accident through
-	// an UNKNOWN verdict.
-	previewArgs := append([]string{"mask", "--source", source, "--target", target}, common...)
-	previewArgs = append(previewArgs, "--scope", "people.email", "--scope", "contacts.email", "--min-samples", "1")
+	twoScopes := []string{"--scope", "people.email", "--scope", "contacts.email", "--min-samples", "1"}
+	previewArgs := append(append([]string{"mask", "--source", source, "--target", target}, common...), twoScopes...)
+	beforeApply, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got := sanitized(0, previewArgs...); !strings.Contains(got, "preview: dry-run=true") {
 		t.Fatalf("multi-scope preview output=%q", got)
 	}
-	// Apply is still fail-closed for multi-scope until work package B2.
-	applyArgs := append([]string{}, previewArgs...)
-	applyArgs = append(applyArgs, "--approved", "--apply")
-	if got := sanitized(1, applyArgs...); !strings.Contains(got, "operation refused") && !strings.Contains(got, "apply: complete=false") {
-		t.Fatalf("multi-scope apply output=%q", got)
+	afterPreview, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
 	}
-	validateArgs := append([]string{"validate", "--source", source, "--target", target}, common...)
-	validateArgs = append(validateArgs, "--scope", "people.email", "--scope", "contacts.email", "--min-samples", "1")
+	if sha256.Sum256(beforeApply) != sha256.Sum256(afterPreview) {
+		t.Fatal("multi-scope preview changed the target copy")
+	}
+	validateArgs := append(append([]string{"validate", "--source", source, "--target", target}, common...), twoScopes...)
+	// Both tables are still unmasked, so strict validation can not pass yet.
 	sanitized(1, validateArgs...)
+	applyArgs := append(append([]string{}, previewArgs...), "--approved", "--apply")
+	applied := sanitized(0, applyArgs...)
+	// Default batch size 64 covers each two-row table in one batch, so the
+	// summary must show one committed batch and two rows per table position.
+	for _, want := range []string{
+		"apply: complete=true committed_batches=2 committed_rows=4 outcome_unknown=false",
+		"apply: table 1 batches=1 rows=2",
+		"apply: table 2 batches=1 rows=2",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("apply summary missing %q: %q", want, applied)
+		}
+	}
+	if got := sanitized(0, append(append([]string{}, validateArgs...), "--approved", "--strict")...); !strings.Contains(got, "pass=true") {
+		t.Fatalf("strict post-write validation output=%q", got)
+	}
+	// A second apply would mask already-masked rows: the dry run refuses it.
+	sanitized(1, applyArgs...)
 	sanitized(2, "scan", "--source", source, "--target", target, "--scope", "people.email", "--table", "people")
 	sanitized(2, "scan", "--source", source, "--target", target, "--scope", "people.email", "--column", "email")
 	sanitized(2, "scan", "--source", source, "--target", target, "--scope", "people.email", "--scope", "people.email")
+}
+
+// TestCLIApplySummaryIsSanitized pins the failure summary the CLI prints for an
+// incomplete or unknown-outcome apply: table positions and counts only, with
+// complete=false and outcome_unknown, and nothing that could name a table, a
+// value, a key or a path.
+func TestCLIApplySummaryIsSanitized(t *testing.T) {
+	plan := contracts.Plan{Tables: []contracts.TablePlan{
+		{Table: contracts.TableRef{Database: "maskriver", Schema: "main", Table: "people"}},
+		{Table: contracts.TableRef{Database: "maskriver", Schema: "main", Table: "contacts"}},
+	}}
+	report := contracts.ApplyReport{
+		Committed: []contracts.BatchReceipt{
+			{Table: plan.Tables[0].Table, Ordinal: 1, Rows: 2},
+			{Table: plan.Tables[0].Table, Ordinal: 2, Rows: 1},
+			{Table: plan.Tables[1].Table, Ordinal: 1, Rows: 3},
+		},
+		CommitOutcomeUnknown: true,
+	}
+	lines := applySummary(plan, report)
+	text := strings.Join(lines, "\n")
+	for _, want := range []string{
+		"apply: complete=false committed_batches=3 committed_rows=6 outcome_unknown=true",
+		"apply: table 1 batches=2 rows=3",
+		"apply: table 2 batches=1 rows=3",
+		"apply: last_committed table=2 batch=1 rows=3",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("summary missing %q: %q", want, text)
+		}
+	}
+	for _, forbidden := range []string{"people", "contacts", "/", "key", "maskriver.local"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("summary contains forbidden %q: %q", forbidden, text)
+		}
+	}
+	// A complete run has no interruption to locate, so it reports the accounted
+	// work only.
+	complete := applySummary(plan, contracts.ApplyReport{Committed: report.Committed, Complete: true})
+	completeText := strings.Join(complete, "\n")
+	if !strings.Contains(completeText, "apply: complete=true committed_batches=3 committed_rows=6") {
+		t.Fatalf("complete summary=%q", completeText)
+	}
+	if strings.Contains(completeText, "last_committed") {
+		t.Fatalf("complete summary claims an interrupted position: %q", completeText)
+	}
 }

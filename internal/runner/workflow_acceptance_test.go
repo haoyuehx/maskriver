@@ -75,19 +75,26 @@ type writerSpy struct {
 	opens, begins, updates, commits int
 	rollbacks                       int
 	beginErr, updateErr, commitErr  error
+	beginErrAt, updateErrAt         int
 	commitErrAt                     int
 	commitThenErr                   bool
 	forcedRows                      *int64
 	cancel                          context.CancelFunc
+	cancelAt                        int
 	closes                          int
 	rollbackDeadline                bool
 	rollbackContextErr              error
 	rollbackDeadlineRemaining       time.Duration
+	// begun records the table of every Begin call in call order, which is the
+	// instrumentation a test uses to prove execution really reached a later
+	// table or batch instead of refusing earlier.
+	begun []contracts.TableRef
 }
 
 func (w *writerSpy) Begin(ctx context.Context, p contracts.TablePlan) (contracts.WriteTx, error) {
 	w.begins++
-	if w.beginErr != nil {
+	w.begun = append(w.begun, p.Table)
+	if w.beginErr != nil && (w.beginErrAt == 0 || w.begins == w.beginErrAt) {
 		return nil, w.beginErr
 	}
 	tx, e := w.Writer.Begin(ctx, p)
@@ -109,14 +116,14 @@ type txSpy struct {
 
 func (tx *txSpy) Update(c context.Context, changes []contracts.RowChange) (int64, error) {
 	tx.spy.updates++
-	if tx.spy.updateErr != nil {
+	if tx.spy.updateErr != nil && (tx.spy.updateErrAt == 0 || tx.spy.updates == tx.spy.updateErrAt) {
 		return 0, tx.spy.updateErr
 	}
 	if tx.spy.forcedRows != nil {
 		return *tx.spy.forcedRows, nil
 	}
 	n, err := tx.WriteTx.Update(c, changes)
-	if tx.spy.cancel != nil {
+	if tx.spy.cancel != nil && (tx.spy.cancelAt == 0 || tx.spy.updates == tx.spy.cancelAt) {
 		tx.spy.cancel()
 	}
 	return n, err
