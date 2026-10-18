@@ -379,11 +379,45 @@ func (s *Store) write(ctx context.Context, record Record) error {
 		_ = os.Remove(stagedName)
 		return err
 	}
-	if err := s.rename(stagedName, target); err != nil {
+	if err := s.renameIntoPlace(stagedName, target, raw); err != nil {
 		_ = os.Remove(stagedName)
 		return unsafeError(errWrite)
 	}
 	return s.syncDir()
+}
+
+// renameIntoPlace makes the staged file the record. The store has no lock file
+// and is last-writer-wins, so a concurrent write may replace the target first.
+// On Windows a replace can also fail transiently with a sharing violation while
+// another handle is open, which is not a durable failure: retry briefly, and if
+// the target already holds exactly these bytes the write already succeeded.
+func (s *Store) renameIntoPlace(stagedName, target string, raw []byte) error {
+	var lastErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		if err := s.rename(stagedName, target); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		if existing, err := os.ReadFile(target); err == nil && bytesEqual(existing, raw) {
+			_ = os.Remove(stagedName)
+			return nil
+		}
+		time.Sleep(time.Duration(attempt+1) * 5 * time.Millisecond)
+	}
+	return lastErr
+}
+
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // syncDir durably records the rename on platforms that can flush a directory.

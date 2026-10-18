@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -202,4 +203,32 @@ func TestOversizedRecordRejected(t *testing.T) {
 	}
 	_, err = f.lookup(f.plan)
 	requireCategory(t, err, contracts.ErrUnsafe)
+}
+
+// TestLookupRejectsNonCanonicalPayloadEncoding pins the load-bearing canonical
+// check: a record must be refused when its signed payload is a valid but
+// non-canonical encoding, even though the signature verifies over those exact
+// bytes. Deleting the re-encode comparison must fail this test.
+func TestLookupRejectsNonCanonicalPayloadEncoding(t *testing.T) {
+	f := newFixture(t)
+	f.approve(t)
+	path := filepath.Join(f.dir, f.plan.ID+recordSuffix)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := bytes.SplitN(raw, []byte("\n"), 3)
+	if len(parts) != 3 {
+		t.Fatalf("unexpected record layout")
+	}
+	// A trailing newline is valid JSON but not the canonical encoding.
+	nonCanonical := append(append([]byte(nil), parts[2]...), '\n')
+	signature := ed25519.Sign(f.private, nonCanonical)
+	record := bytes.Join([][]byte{parts[0], []byte(hex.EncodeToString(signature)), nonCanonical}, []byte("\n"))
+	if err := os.WriteFile(path, record, storeFilePerm); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.lookup(f.plan); err == nil {
+		t.Fatal("non-canonical payload encoding must be refused")
+	}
 }
