@@ -40,14 +40,26 @@ func (a *testApproval) Lookup(_ context.Context, plan contracts.Plan) (history.R
 	if a.err != nil {
 		return history.Record{}, a.err
 	}
-	return history.Record{
+	record := history.Record{
+		Version:          history.RecordVersion,
 		PlanID:           plan.ID,
 		SourceSnapshotID: plan.SourceSnapshotID,
 		TargetID:         plan.TargetID,
 		SchemaDigest:     plan.SchemaDigest,
 		ConfigDigest:     plan.ConfigDigest,
 		Scopes:           recordScopes(plan),
-	}, nil
+		IssuedAt:         time.Now().Add(-time.Minute),
+		ExpiresAt:        time.Now().Add(time.Hour),
+	}
+	// The record format binds one strategy pair and key for the whole plan, so
+	// the double echoes the first planned column exactly like history.newRecord.
+	if len(plan.Tables) != 0 && len(plan.Tables[0].Columns) != 0 {
+		column := plan.Tables[0].Columns[0]
+		record.StrategyID = column.Strategy.ID
+		record.StrategyVersion = column.Strategy.Version
+		record.KeyID = column.KeyID
+	}
+	return record, nil
 }
 
 func recordScopes(plan contracts.Plan) []history.Scope {
@@ -343,6 +355,81 @@ func TestApplyRefusesEveryUnauthenticatedDecision(t *testing.T) {
 		}))
 		assertApplyRefusedBeforeWriter(t, e, plan, contracts.ErrUnsafe)
 	})
+}
+
+// nilApproval dereferences its receiver, so a typed-nil instance would panic if
+// Apply ever called Lookup on it instead of failing closed.
+type nilApproval struct{ calls int }
+
+func (q *nilApproval) Lookup(context.Context, contracts.Plan) (history.Record, error) {
+	q.calls++
+	return history.Record{}, nil
+}
+
+// TestApplyRefusesUnusableApprovalSeam requires every abnormal dependency state
+// - a nil interface, a typed-nil pointer, a nil function seam and a seam that
+// fails with an unknown error - to refuse the run with contracts.ErrUnsafe
+// before any Writer exists. A typed-nil pointer used to panic inside Lookup.
+func TestApplyRefusesUnusableApprovalSeam(t *testing.T) {
+	t.Run("typed-nil pointer", func(t *testing.T) {
+		e, _ := acceptanceEngine(t, []string{"a@example.invalid"})
+		plan := mustPlan(t, e)
+		var query *nilApproval
+		e.SetApprovalQuery(query)
+		assertApplyRefusedBeforeWriter(t, e, plan, contracts.ErrUnsafe)
+	})
+	t.Run("nil function", func(t *testing.T) {
+		e, _ := acceptanceEngine(t, []string{"a@example.invalid"})
+		plan := mustPlan(t, e)
+		var seam approvalFunc
+		e.SetApprovalQuery(seam)
+		assertApplyRefusedBeforeWriter(t, e, plan, contracts.ErrUnsafe)
+	})
+	t.Run("unknown seam failure", func(t *testing.T) {
+		e, _ := acceptanceEngine(t, []string{"a@example.invalid"})
+		plan := mustPlan(t, e)
+		e.SetApprovalQuery(approvalFunc(func(context.Context, contracts.Plan) (history.Record, error) {
+			return history.Record{}, errors.New("approval seam unavailable")
+		}))
+		assertApplyRefusedBeforeWriter(t, e, plan, contracts.ErrUnsafe)
+	})
+}
+
+// TestApplyRefusesRecordFailingRunnerRecheck simulates a buggy Lookup seam that
+// returns a record the store would never have released: wrong record version,
+// expired, issued in the future, revoked after the lookup, or bound to another
+// strategy pair or key. The engine must re-derive those fields itself instead of
+// trusting the seam, and refuse before a Writer exists.
+func TestApplyRefusesRecordFailingRunnerRecheck(t *testing.T) {
+	revokedAt := time.Now()
+	cases := []struct {
+		name   string
+		mutate func(*history.Record)
+	}{
+		{"wrong record version", func(r *history.Record) { r.Version = "history-record-v0" }},
+		{"expired record", func(r *history.Record) { r.ExpiresAt = time.Now().Add(-time.Minute) }},
+		{"future-issued record", func(r *history.Record) { r.IssuedAt = time.Now().Add(time.Hour) }},
+		{"revoked after lookup", func(r *history.Record) { r.RevokedAt = &revokedAt }},
+		{"strategy id", func(r *history.Record) { r.StrategyID = "other-strategy" }},
+		{"strategy version", func(r *history.Record) { r.StrategyVersion = "99" }},
+		{"key id", func(r *history.Record) { r.KeyID = "other-key" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _ := acceptanceEngine(t, []string{"a@example.invalid", "b@example.invalid"})
+			plan := mustPlan(t, e)
+			store, _ := newReviewer(t, 0x51).issue(t, plan, time.Now())
+			e.SetApprovalQuery(approvalFunc(func(ctx context.Context, requested contracts.Plan) (history.Record, error) {
+				record, err := store.Lookup(ctx, requested)
+				if err != nil {
+					return record, err
+				}
+				tc.mutate(&record)
+				return record, nil
+			}))
+			assertApplyRefusedBeforeWriter(t, e, plan, contracts.ErrUnsafe)
+		})
+	}
 }
 
 // TestReadOnlyWorkflowsNeverTouchApprovalStore proves Scan, Plan, Preview and
