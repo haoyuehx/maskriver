@@ -301,13 +301,23 @@ func TestCLIRepeatedScopeFlag(t *testing.T) {
 		t.Fatalf("repeated scope scan output=%q", got)
 	}
 	common := []string{"--strategy", "fake_email", "--key-id", "synthetic-key", "--key-file", keyFile}
-	maskArgs := append([]string{"mask", "--source", source, "--target", target}, common...)
-	maskArgs = append(maskArgs, "--scope", "people.email", "--scope", "contacts.email")
-	if got := sanitized(1, maskArgs...); !strings.Contains(got, "operation refused") {
+	// Multi-scope Preview is supported since work package B1, so it must really
+	// run and report both tables instead of being refused. --min-samples 1 keeps
+	// detection deterministic so the assertion cannot pass by accident through
+	// an UNKNOWN verdict.
+	previewArgs := append([]string{"mask", "--source", source, "--target", target}, common...)
+	previewArgs = append(previewArgs, "--scope", "people.email", "--scope", "contacts.email", "--min-samples", "1")
+	if got := sanitized(0, previewArgs...); !strings.Contains(got, "preview: dry-run=true") {
 		t.Fatalf("multi-scope preview output=%q", got)
 	}
+	// Apply is still fail-closed for multi-scope until work package B2.
+	applyArgs := append([]string{}, previewArgs...)
+	applyArgs = append(applyArgs, "--approved", "--apply")
+	if got := sanitized(1, applyArgs...); !strings.Contains(got, "operation refused") && !strings.Contains(got, "apply: complete=false") {
+		t.Fatalf("multi-scope apply output=%q", got)
+	}
 	validateArgs := append([]string{"validate", "--source", source, "--target", target}, common...)
-	validateArgs = append(validateArgs, "--scope", "people.email", "--scope", "contacts.email")
+	validateArgs = append(validateArgs, "--scope", "people.email", "--scope", "contacts.email", "--min-samples", "1")
 	sanitized(1, validateArgs...)
 	sanitized(2, "scan", "--source", source, "--target", target, "--scope", "people.email", "--table", "people")
 	sanitized(2, "scan", "--source", source, "--target", target, "--scope", "people.email", "--column", "email")
