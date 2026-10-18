@@ -599,3 +599,145 @@ func TestCLIApplySummaryIsSanitized(t *testing.T) {
 		t.Fatalf("complete summary claims an interrupted position: %q", completeText)
 	}
 }
+
+// TestCLIScanFailureExitsNonZeroWithoutWrite covers the CLI half of the #9 scan
+// failure gap. The command constructs its own readers, so a Reader wrapper with
+// an injected fault can not cross the command boundary; the runner-level
+// injection lives in internal/runner. What the command must still guarantee is
+// that a Describe failure from the real SQLite adapter exits non-zero and changes
+// neither snapshot.
+func TestCLIScanFailureExitsNonZeroWithoutWrite(t *testing.T) {
+	f := newE2EFixture(t, e2eOneTable...)
+	// The target is a valid SQLite file without the declared table, so Scan fails
+	// while reading the target schema rather than before any database work.
+	if err := os.Remove(f.target); err != nil {
+		t.Fatal(err)
+	}
+	cliExec(t, f.target, `CREATE TABLE unrelated (id INTEGER PRIMARY KEY)`)
+	before := f.targetDigest(t)
+	args := []string{"scan", "--source", f.source, "--target", f.target,
+		"--scope", "people.email", "--min-samples", "1"}
+	var out, errOut bytes.Buffer
+	if code := run(args, &out, &errOut); code != 1 {
+		t.Fatalf("scan exit=%d, want 1; output=%q", code, out.String()+errOut.String())
+	}
+	if f.targetDigest(t) != before {
+		t.Fatal("failed scan changed the target")
+	}
+	output := out.String() + errOut.String()
+	if !strings.Contains(output, "operation refused") {
+		t.Fatalf("failed scan was not reported as a refusal: %q", output)
+	}
+	for _, secret := range f.secrets {
+		if secret != "" && strings.Contains(output, secret) {
+			t.Fatalf("failed scan leaked a fixture secret or path")
+		}
+	}
+}
+
+// TestCLINullStrategyRefusedBeforeWrite is the #9 regression for the null
+// strategy. `mask --strategy null --apply` used to exit 0 and write NULL over
+// every target value, and only the following strict validate rejected the
+// result. The replacement can never pass validation, so the dry run must refuse
+// it before a Writer opens and the target must stay byte-identical.
+func TestCLINullStrategyRefusedBeforeWrite(t *testing.T) {
+	f := newE2EFixture(t,
+		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NULL)`,
+		`INSERT INTO people VALUES (1, 'e2e-alpha@example.invalid'), (2, 'e2e-beta@example.invalid'), (3, 'e2e-gamma@example.invalid')`,
+	)
+	plan := []string{"--source", f.source, "--target", f.target,
+		"--strategy", "null", "--key-id", "synthetic-key", "--min-samples", "1",
+		"--scope", "people.email"}
+	approve := append(append([]string{"approve"}, plan...), f.review.reviewFlags()...)
+	approve = append(approve, "--reviewer-id", "reviewer@synthetic.example")
+	// The plan itself is buildable and the review decision is stored: the
+	// refusal under test is the write gate, not the approval gate.
+	f.run(t, 0, approve...)
+	before := f.targetDigest(t)
+	f.run(t, 1, append(append([]string{"mask"}, plan...), "--key-file", f.keyFile)...)
+	if f.targetDigest(t) != before {
+		t.Fatal("refused null-strategy preview changed the target")
+	}
+	apply := append(append([]string{"mask"}, plan...), "--key-file", f.keyFile)
+	apply = append(apply, f.review.applyFlags()...)
+	apply = append(apply, "--approved", "--apply")
+	f.run(t, 1, apply...)
+	if f.targetDigest(t) != before {
+		t.Fatal("refused null-strategy apply changed the target")
+	}
+	// The target still holds every original value, so validation rejects an
+	// unchanged target and not a written NULL replacement.
+	f.run(t, 1, append(append([]string{"validate"}, plan...), "--key-file", f.keyFile, "--strict")...)
+	if f.targetDigest(t) != before {
+		t.Fatal("refused null-strategy run changed the target")
+	}
+}
+
+// TestCLIStrictFlagWiring is the #9 regression for mutation M3: a --strict
+// wiring that stops forwarding the flag or stops applying its verdict survived
+// every earlier test. The two seams are replaced with recorders that also call
+// the real implementation, so the command is observed end to end.
+func TestCLIStrictFlagWiring(t *testing.T) {
+	f := newE2EFixture(t, e2eOneTable...)
+	scopes := []string{"people.email"}
+	var requestStrict, passedStrict []bool
+	request, passed := validationRequest, validationPassed
+	t.Cleanup(func() { validationRequest, validationPassed = request, passed })
+	validationRequest = func(plan contracts.Plan, strict bool) contracts.ValidateRequest {
+		req := request(plan, strict)
+		requestStrict = append(requestStrict, req.Strict)
+		return req
+	}
+	validationPassed = func(report contracts.ValidationReport, strict bool) bool {
+		passedStrict = append(passedStrict, strict)
+		return passed(report, strict)
+	}
+	validate := func(wantCode int, strictArg string) {
+		t.Helper()
+		requestStrict, passedStrict = nil, nil
+		args := append([]string{"validate"}, f.planArgs(scopes...)...)
+		args = append(args, "--key-file", f.keyFile, strictArg)
+		var out, errOut bytes.Buffer
+		if code := run(args, &out, &errOut); code != wantCode {
+			t.Fatalf("validate %s exit=%d want=%d; output=%q",
+				strictArg, code, wantCode, out.String()+errOut.String())
+		}
+		if len(requestStrict) != 1 || len(passedStrict) != 1 {
+			t.Fatalf("validate %s bypassed the strict wiring: request=%v passed=%v",
+				strictArg, requestStrict, passedStrict)
+		}
+		want := strictArg == "--strict"
+		if requestStrict[0] != want || passedStrict[0] != want {
+			t.Fatalf("validate %s forwarded strict=%t/%t, want %t",
+				strictArg, requestStrict[0], passedStrict[0], want)
+		}
+	}
+	// The target is still unmasked, so the verdict is false under both settings;
+	// a verdict hardcoded to pass would turn this exit into 0.
+	validate(1, "--strict")
+	validate(1, "--strict=false")
+	f.run(t, 0, f.approveArgs(scopes...)...)
+	f.run(t, 0, f.applyArgs(scopes...)...)
+	// A completed apply validates cleanly under both settings; a verdict
+	// hardcoded to fail would turn these exits into 1.
+	validate(0, "--strict")
+	validate(0, "--strict=false")
+}
+
+// TestValidationPassedHonorsStrictWarning pins the strict semantics the CLI
+// depends on. verify currently never emits a complete report containing only a
+// warning, which is exactly why this decision is tested directly instead of
+// through a database fixture.
+func TestValidationPassedHonorsStrictWarning(t *testing.T) {
+	report := contracts.ValidationReport{
+		PlanID:   "synthetic-plan",
+		Coverage: contracts.Coverage{Complete: true, Tables: 1, Columns: 1, Rows: 1},
+		Issues:   []contracts.Issue{{Status: contracts.Warning, Code: contracts.Unsupported, Count: 1}},
+	}
+	if validationPassed(report, true) {
+		t.Fatal("strict validation accepted a warning-only report")
+	}
+	if !validationPassed(report, false) {
+		t.Fatal("non-strict validation refused a warning-only complete report")
+	}
+}
