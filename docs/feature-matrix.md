@@ -30,7 +30,7 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 |---|---|---|---|
 | 独立 Go module、可编译 CLI help/version | 无框架依赖，标准库 CLI | 已实现 | M0 |
 | `scan` / `mask` / `validate` / `approve` / `revoke` CLI | SQLite 多表真实路径（同一表多列由 runner 级用例覆盖）：Detect→Preview→独立进程签发审批记录→新进程 Apply→Validate；证据见 `TestCLIMultiTableWorkflow`、`TestE2EPlanIssueNewProcessApply`；MySQL CLI 未实现 | 部分实现（SQLite 多表，#9） | #9 |
-| 默认 Dry Run，`--apply` 单一写意图 | 写入需 `--approved` 声明 + `--apply` 意图 + 有效签名记录，三者缺一即拒绝；Preview 由 Writer 能力 Spy（opens/begins/updates/commits 全为 0）、驱动级 SQL Spy（`internal/db/sqlspy.go`，无写/事务语句）与文件树 SHA256 共同证明零写入；不证明并发快照 | 部分实现（SQLite 路径） | #9/#11 |
+| 默认 Dry Run，`--apply` 为写意图（需与声明、记录三者同时成立） | 写入需 `--approved` 声明 + `--apply` 意图 + 有效签名记录，三者缺一即拒绝；Preview 由 Writer 能力 Spy（opens/begins/updates/commits 全为 0）、驱动级 SQL Spy（`internal/db/sqlspy.go`，无写/事务语句）与文件树 SHA256 共同证明零写入；不证明并发快照 | 部分实现（SQLite 路径） | #9/#11 |
 | 配置文件、环境变量展开、参数校验 | 连接/检测/脱敏/验证分段校验 | 计划中 | M1 |
 | 连接生命周期、schema/table/column/type/PK 元数据 | SQLite/MySQL Reader/Writer，元数据与 SchemaCoverage 保守声明；不支持或可能丢精度的映射显式拒绝 | 部分实现（#5 组件） | #5 / PR #21；MySQL 适配器见 #10 / PR #30 |
 | distinct 非空抽样、表/列过滤 | typed、非 NULL distinct 有界抽样；按 DataSetID/Schema/TableRef 限定访问范围 | 部分实现（#5 组件） | #5 / PR #21 |

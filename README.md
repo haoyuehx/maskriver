@@ -23,7 +23,7 @@ go build -o bin/maskriver ./cmd/maskriver
 
 `scan`、`mask`、`validate`、`approve`、`revoke` 已支持明确限定的 **SQLite 多表**合成测试工作流（同一表多列另有 runner 级用例）；必须提供两个各自存在且不同的绝对路径数据库文件，默认只读。MySQL CLI 尚未实现；非法配置或未获批准的写入一律拒绝。
 `mask` 默认 Dry Run。写入需要三者同时成立：`--approved`（操作者声明）、`--apply`（写意图）和一条由 `approve` 独立签发并绑定当前 Plan 的 Ed25519 审批记录；前两者单独或组合都不充分。`apply` 只从部署预置 trust file 加载可信公钥，不接收审核私钥；`revoke` 撤销已有记录。Preview 由驱动级 SQL Spy 与文件树 SHA256 证明零写入。写入使用批次事务，故障后不保证跨批全局原子，未实现断点恢复。
-可复现路径见 `cmd/maskriver/approval_e2e_test.go` 的 `TestE2EPlanIssueNewProcessApply`、`TestCLIMultiTableWorkflow` 与 `TestCLIRealSQLiteWorkflow`。
+可复现路径见 `cmd/maskriver/approval_e2e_test.go` 的 `TestE2EPlanIssueNewProcessApply`（子进程签发与加载），以及 `cmd/maskriver/main_test.go` 的 `TestCLIMultiTableWorkflow` 与 `TestCLIRealSQLiteWorkflow`。
 直接运行编译后的二进制可观察原始退出码；`go run` 会包装子进程退出状态。
 
 ## 四人跨平台协作
