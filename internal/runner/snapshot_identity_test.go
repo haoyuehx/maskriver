@@ -232,3 +232,60 @@ func digestOf(t *testing.T, path string) string {
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
+
+// nonQuiescentReader wraps a real Reader and replaces only the journal-mode
+// probe with the non-quiescent answer db.Quiescent returns for MEMORY and OFF.
+type nonQuiescentReader struct {
+	contracts.Reader
+	caps capabilityReader
+}
+
+func (r *nonQuiescentReader) Quiescent(context.Context) error { return contracts.ErrIncomplete }
+
+func (r *nonQuiescentReader) HasTriggers(ctx context.Context, ref contracts.TableRef) (bool, error) {
+	return r.caps.HasTriggers(ctx, ref)
+}
+
+// TestNonQuiescentJournalSourceIsRefusedBeforePlanAndWriter covers the MEMORY/OFF
+// hardening at the runner level. journal_mode is a per-connection property and
+// only WAL is stored in the file (measured: a file closed in MEMORY or OFF mode
+// reopens as "delete"), so the fixed read-only DSN can not hand this runner a
+// MEMORY or OFF source; TestQuiescentJournalModes pins that probe decision against
+// the real adapter, and this fixture replaces only that one probe on an otherwise
+// real engine. What it proves is the ordering: a source that can not prove a
+// quiescent file snapshot yields no plan and reaches no Writer.
+func TestNonQuiescentJournalSourceIsRefusedBeforePlanAndWriter(t *testing.T) {
+	e, _ := acceptanceEngine(t, []string{"a@example.invalid", "b@example.invalid"})
+	ctx := context.Background()
+	plan := mustPlan(t, e)
+	caps, ok := e.source.(capabilityReader)
+	if !ok {
+		t.Fatal("fixture reader has no internal capabilities")
+	}
+	e.source = &nonQuiescentReader{Reader: e.source, caps: caps}
+
+	before := acceptanceTreeDigest(t, e.cfg.Target)
+	refused, err := e.Plan(ctx)
+	if !errors.Is(err, contracts.ErrIncomplete) {
+		t.Fatalf("non-quiescent source plan error=%v, want ErrIncomplete", err)
+	}
+	if refused.ID != "" || refused.SourceSnapshotID != "" || refused.SchemaDigest != "" ||
+		refused.ConfigDigest != "" || len(refused.Tables) != 0 {
+		t.Fatalf("refused plan must stay empty: %+v", refused)
+	}
+	if strings.Contains(err.Error(), "example.invalid") {
+		t.Fatalf("snapshot refusal leaked a value: %v", err)
+	}
+
+	spy := &writerSpy{}
+	spyEngine(t, e, spy)
+	if _, err = e.Apply(ctx, contracts.ApplyRequest{Plan: plan, ExplicitApply: true, BatchSize: 2}); !errors.Is(err, contracts.ErrIncomplete) {
+		t.Fatalf("apply error=%v, want ErrIncomplete", err)
+	}
+	if spy.opens != 0 || spy.begins != 0 || spy.updates != 0 || spy.commits != 0 {
+		t.Fatalf("non-quiescent source used the Writer: %+v", spy)
+	}
+	if after := acceptanceTreeDigest(t, e.cfg.Target); !reflect.DeepEqual(before, after) {
+		t.Fatal("non-quiescent source refusal changed the target fixture tree")
+	}
+}

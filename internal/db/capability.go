@@ -29,6 +29,19 @@ import (
 //
 // A hot rollback journal never reaches this probe: a read-only session can not
 // roll it back, so opening or describing the database already fails closed.
+//
+// Only the rollback-journal modes that write a journal file are accepted. In
+// MEMORY mode the rollback journal lives in process memory, and in OFF mode
+// there is no journal at all, so neither mode leaves an on-disk journal that
+// restores the main file after an interrupted transaction; OFF additionally
+// gives up SQLite's atomic commit/rollback guarantee. Accepting them claimed a
+// quiescent file snapshot those modes can not provide.
+//
+// What this check can NOT prove: a rollback-journal mode does not prove the
+// absence of concurrent external writers. Another connection can commit between
+// this probe and the read that follows, so the source must still be an isolated,
+// quiescent copy; the probe only refuses a source whose journal mode can not
+// keep the main file complete.
 func (a *adapter) Quiescent(ctx context.Context) error {
 	if err := a.check(ctx); err != nil {
 		return err
@@ -41,11 +54,12 @@ func (a *adapter) Quiescent(ctx context.Context) error {
 		return dbError(err)
 	}
 	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "delete", "truncate", "persist", "memory", "off":
+	case "delete", "truncate", "persist":
 		return nil
 	}
-	// "wal" keeps committed frames outside the main file until a checkpoint, and
-	// an unknown future mode can not be assumed to behave differently.
+	// "memory" and "off" keep no on-disk rollback journal (see above), "wal"
+	// keeps committed frames outside the main file until a checkpoint, and an
+	// unknown future mode can not be assumed to behave differently.
 	return contracts.ErrIncomplete
 }
 

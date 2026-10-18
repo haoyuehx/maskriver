@@ -355,3 +355,150 @@ func TestCheckPlanBindingRejectsMismatchedScopes(t *testing.T) {
 		t.Fatalf("wrong primary key error=%v, want ErrInvalid", err)
 	}
 }
+
+// execOnTarget runs statements on the target snapshot only, the way an
+// out-of-band writer or a drifted copy would.
+func execOnTarget(t *testing.T, cfg config.Runtime, statements ...string) {
+	t.Helper()
+	database, err := sql.Open("sqlite", "file:"+cfg.Target+"?mode=rwc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range statements {
+		if _, err = database.Exec(statement); err != nil {
+			_ = database.Close()
+			t.Fatalf("target statement %q: %v", statement, err)
+		}
+	}
+	if err = database.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestPreflightRefusesTargetOnlyIncomingReference is the B2b-2 regression: the
+// write lands in the target, so a referencing table - or a foreign key on a
+// table that exists in both - that exists only on the target still guards the
+// rows this plan changes. Enumerating the source alone missed it; before the fix
+// the plan opened a Writer, began a transaction and only the driver refused the
+// UPDATE (ErrDatabase), which relies on the writer DSN keeping foreign_keys=1.
+func TestPreflightRefusesTargetOnlyIncomingReference(t *testing.T) {
+	t.Run("referencing table only on the target", func(t *testing.T) {
+		cfg := preflightFixture(t, twoPeopleRows...)
+		execOnTarget(t, cfg,
+			`CREATE TABLE children (id INTEGER PRIMARY KEY, person_email TEXT NULL REFERENCES people(email))`,
+			`INSERT INTO children VALUES (1, 'a@example.invalid')`,
+		)
+		engine := scopeEngine(t, cfg)
+		assertApplyRefused(t, engine, mustPlan(t, engine), contracts.ErrUnsupported)
+	})
+
+	t.Run("foreign key only in the target schema", func(t *testing.T) {
+		cfg := preflightFixture(t, append(append([]string(nil), twoPeopleRows...),
+			`CREATE TABLE children (id INTEGER PRIMARY KEY, person_email TEXT NULL)`,
+			`INSERT INTO children VALUES (1, 'a@example.invalid')`,
+		)...)
+		execOnTarget(t, cfg,
+			`DROP TABLE children`,
+			`CREATE TABLE children (id INTEGER PRIMARY KEY, person_email TEXT NULL REFERENCES people(email))`,
+			`INSERT INTO children VALUES (1, 'a@example.invalid')`,
+		)
+		engine := scopeEngine(t, cfg)
+		assertApplyRefused(t, engine, mustPlan(t, engine), contracts.ErrUnsupported)
+	})
+}
+
+// TestPreflightRefusesCaseVariantIncomingReference is the second B2b-2
+// regression: SQLite resolves identifiers case-insensitively, so
+// REFERENCES PEOPLE (EMAIL) points at table people, column email, but
+// PRAGMA foreign_key_list reports the names exactly as the DDL wrote them. The
+// exact-match comparison missed the reference and the plan reached the writer.
+func TestPreflightRefusesCaseVariantIncomingReference(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		reference string
+	}{
+		{"table name", `REFERENCES PEOPLE (email)`},
+		{"column name", `REFERENCES people (EMAIL)`},
+		{"table and column name", `REFERENCES PEOPLE (EMAIL)`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := scopeEngine(t, preflightFixture(t,
+				`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NULL)`,
+				`INSERT INTO people VALUES (1, 'a@example.invalid'), (2, 'b@example.invalid')`,
+				`CREATE TABLE children (id INTEGER PRIMARY KEY, person_email TEXT NULL `+tc.reference+`)`,
+				`INSERT INTO children VALUES (1, 'a@example.invalid')`,
+			))
+			assertApplyRefused(t, engine, mustPlan(t, engine), contracts.ErrUnsupported)
+		})
+	}
+}
+
+// TestPreflightRefusesIncomingReferenceFromUnplannedTable pins the normal case
+// and proves which gate refuses it: the referencing table is in neither the plan
+// nor the planned table's own schema, and the planned column carries no unique
+// or foreign-key constraint, so only the incoming-reference gate can refuse.
+func TestPreflightRefusesIncomingReferenceFromUnplannedTable(t *testing.T) {
+	engine := scopeEngine(t, preflightFixture(t,
+		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NULL)`,
+		`INSERT INTO people VALUES (1, 'a@example.invalid'), (2, 'b@example.invalid')`,
+		`CREATE TABLE children (id INTEGER PRIMARY KEY, person_email TEXT NULL REFERENCES people(email))`,
+	))
+	ctx := context.Background()
+	plan := mustPlan(t, engine)
+	schemas, err := engine.describePlanTables(ctx, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = engine.checkTableCapabilities(ctx, plan.Tables[0], schemas["people"]); err != nil {
+		t.Fatalf("planned table capabilities=%v, want nil: only the incoming-reference gate may refuse this fixture", err)
+	}
+	if err = engine.checkIncomingReferences(ctx, plan); !errors.Is(err, contracts.ErrUnsupported) {
+		t.Fatalf("checkIncomingReferences=%v, want ErrUnsupported", err)
+	}
+	assertApplyRefused(t, engine, plan, contracts.ErrUnsupported)
+}
+
+// TestPreflightIncomingReferenceAlreadyBlockedByAnotherGate records the shapes
+// that need no incoming-reference fix, and proves the blocking gate with a direct
+// call instead of asserting it: an incoming reference SQLite can enforce needs a
+// unique parent key, so the UNIQUE gate refuses the plan with ErrUnsafe before
+// the incoming check runs, and a primary-key parent can never be planned at all.
+func TestPreflightIncomingReferenceAlreadyBlockedByAnotherGate(t *testing.T) {
+	ctx := context.Background()
+	t.Run("unique parent column", func(t *testing.T) {
+		engine := scopeEngine(t, preflightFixture(t,
+			`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NULL UNIQUE)`,
+			`INSERT INTO people VALUES (1, 'a@example.invalid'), (2, 'b@example.invalid')`,
+			`CREATE TABLE children (id INTEGER PRIMARY KEY, person_email TEXT NULL REFERENCES people(email))`,
+			`INSERT INTO children VALUES (1, 'a@example.invalid')`,
+		))
+		plan := mustPlan(t, engine)
+		schemas, err := engine.describePlanTables(ctx, plan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = engine.checkTableCapabilities(ctx, plan.Tables[0], schemas["people"]); !errors.Is(err, contracts.ErrUnsafe) {
+			t.Fatalf("checkTableCapabilities=%v, want ErrUnsafe from the unique gate", err)
+		}
+		assertApplyRefused(t, engine, plan, contracts.ErrUnsafe)
+	})
+
+	t.Run("primary key parent", func(t *testing.T) {
+		// REFERENCES people without a column list targets the primary key, which a
+		// plan can never include: the scope itself is refused during Plan.
+		cfg := scopeFixture(t,
+			`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NULL)`,
+			`INSERT INTO people VALUES (1, 'a@example.invalid'), (2, 'b@example.invalid')`,
+			`CREATE TABLE children (id INTEGER PRIMARY KEY, person_id INTEGER NULL REFERENCES people)`,
+		)
+		cfg.Table, cfg.Column = "people", "id"
+		engine := scopeEngine(t, cfg)
+		plan, err := engine.Plan(ctx)
+		if !errors.Is(err, contracts.ErrUnsafe) {
+			t.Fatalf("primary-key scope plan error=%v, want ErrUnsafe", err)
+		}
+		if plan.ID != "" {
+			t.Fatalf("refused plan must stay empty: %+v", plan)
+		}
+	})
+}
