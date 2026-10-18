@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -510,5 +511,26 @@ func TestValidateDuplicateIndexNameCannotPass(t *testing.T) {
 	}
 	if report.Passed(true) {
 		t.Fatalf("asymmetric duplicate index name must not pass: issues=%v", report.Issues)
+	}
+}
+
+// TestValidateSQLiteCheckLiteralWhitespaceIsNotCollapsed is the P1 regression
+// from review of PR #43: whitespace inside a string literal is part of the
+// constraint. 'alpha  beta' and 'alpha beta' are different expressions and must
+// not compare equal.
+func TestValidateSQLiteCheckLiteralWhitespaceIsNotCollapsed(t *testing.T) {
+	const ddl = `CREATE TABLE accounts (id INTEGER PRIMARY KEY, email TEXT NOT NULL,
+		CHECK (email <> '%s'))`
+	source := openSQLiteFixture(t, strings.Replace(ddl, "%s", "alpha  beta", 1),
+		`INSERT INTO accounts (id, email) VALUES (1,'synthetic@example.invalid')`)
+	target := openSQLiteFixture(t, strings.Replace(ddl, "%s", "alpha beta", 1),
+		`INSERT INTO accounts (id, email) VALUES (1,'masked@example.invalid')`)
+
+	report := validateAccounts(t, source, target)
+	if report.Passed(true) || report.Passed(false) {
+		t.Fatalf("CHECK literals differing only by whitespace must not pass: issues=%v", report.Issues)
+	}
+	if !hasFailIssue(report, contracts.SchemaMismatch) {
+		t.Fatalf("expected Fail/%s, got %v", contracts.SchemaMismatch, report.Issues)
 	}
 }

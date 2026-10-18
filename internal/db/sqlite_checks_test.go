@@ -79,6 +79,17 @@ func TestScanSQLChecksExtraction(t *testing.T) {
 			ddl:  `CREATE TABLE t (x INT CHECK (x > 0)`,
 			ok:   false,
 		},
+		{
+			name: "line comment to end of input keeps a balanced statement",
+			ddl:  `CREATE TABLE t (x INT CHECK (x > 0)) -- trailing`,
+			want: []string{"( x > 0 )"},
+			ok:   true,
+		},
+		{
+			name: "line comment to end of input does not skip the balance check",
+			ddl:  `CREATE TABLE t (x INT CHECK (x > 0) -- trailing`,
+			ok:   false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

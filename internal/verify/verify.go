@@ -241,8 +241,56 @@ func checksMatch(a, b []string) bool {
 	return true
 }
 
+// normalizeCheck collapses whitespace runs OUTSIDE quoted runs only. Collapsing
+// inside a literal would make 'alpha  beta' and 'alpha beta' compare equal, which
+// is a false PASS on a semantically different constraint.
 func normalizeCheck(expr string) string {
-	return strings.Join(strings.Fields(expr), " ")
+	var b strings.Builder
+	b.Grow(len(expr))
+	var quote byte
+	pendingSpace := false
+	for i := 0; i < len(expr); i++ {
+		c := expr[i]
+		if quote != 0 {
+			b.WriteByte(c)
+			if c == quote {
+				if i+1 < len(expr) && expr[i+1] == quote {
+					b.WriteByte(expr[i+1])
+					i++
+					continue
+				}
+				quote = 0
+			}
+			continue
+		}
+		switch c {
+		case ' ', '\t', '\n', '\r':
+			pendingSpace = b.Len() > 0
+			continue
+		case '\'', '"', '`':
+			quote = c
+		case '[':
+			if pendingSpace {
+				b.WriteByte(' ')
+				pendingSpace = false
+			}
+			// Bracket identifiers are emitted verbatim up to the closing ']'.
+			end := strings.IndexByte(expr[i:], ']')
+			if end < 0 {
+				b.WriteString(expr[i:])
+				return b.String()
+			}
+			b.WriteString(expr[i : i+end+1])
+			i += end
+			continue
+		}
+		if pendingSpace {
+			b.WriteByte(' ')
+			pendingSpace = false
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
 
 // constraintKey encodes ordered string lists unambiguously, so that two

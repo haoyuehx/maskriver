@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 
 	"github.com/haoyuehx/maskriver/pkg/contracts"
@@ -12,13 +13,18 @@ import (
 // the only source. The scan is deliberately conservative: any construct it
 // cannot tokenise unambiguously reports coverage=false instead of guessing.
 func (e *adapter) sqliteChecks(ctx context.Context, ref contracts.TableRef) ([]string, bool, error) {
-	var ddl string
+	var ddl sql.NullString
 	row := e.db.QueryRowContext(ctx,
 		"SELECT sql FROM main.sqlite_master WHERE type='table' AND name=?", ref.Table)
 	if err := row.Scan(&ddl); err != nil {
 		return nil, false, dbErrorOrCategory(err)
 	}
-	checks, ok := scanSQLChecks(ddl)
+	if !ddl.Valid {
+		// Virtual and shadow tables store no CREATE TABLE text. Report the CHECK
+		// class as unverified instead of failing the whole Describe.
+		return nil, false, nil
+	}
+	checks, ok := scanSQLChecks(ddl.String)
 	return checks, ok, nil
 }
 
@@ -64,7 +70,9 @@ func scanSQLTokens(sql string) ([]string, bool) {
 		case c == '-' && i+1 < len(sql) && sql[i+1] == '-':
 			newline := strings.IndexByte(sql[i:], '\n')
 			if newline < 0 {
-				return tokens, true // line comment to end of input is complete
+				// Comment to end of input is complete, but the statement balance
+				// still has to hold.
+				return tokens, depth == 0
 			}
 			i += newline + 1
 		case c == '/' && i+1 < len(sql) && sql[i+1] == '*':
