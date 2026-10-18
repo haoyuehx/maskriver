@@ -32,6 +32,11 @@ func TestCLIArguments(t *testing.T) {
 		{"unknown flag", []string{"mask", "--unknown"}, 2, "invalid arguments"},
 		{"positional rejected", []string{"mask", "unexpected"}, 2, "invalid arguments"},
 		{"scan apply rejected", []string{"scan", "--apply"}, 2, "invalid arguments"},
+		{"scan scope without paths", []string{"scan", "--scope", "people.email"}, 2, "operation refused"},
+		{"scope without separator", []string{"scan", "--scope", "people"}, 2, "invalid arguments"},
+		{"scope empty column", []string{"mask", "--scope", "people."}, 2, "invalid arguments"},
+		{"scope empty table", []string{"validate", "--scope", ".email"}, 2, "invalid arguments"},
+		{"scope extra separator", []string{"mask", "--scope", "a.b.c"}, 2, "invalid arguments"},
 		{"extra version args", []string{"version", "extra"}, 2, "invalid arguments"},
 	}
 	for _, tt := range tests {
@@ -61,6 +66,7 @@ func TestCLIFlagParseErrorsAreSanitized(t *testing.T) {
 		{"approved bool", []string{"validate", "--key-file", marker, "--approved=" + marker}},
 		{"apply bool", []string{"mask", "--source=" + marker, "--apply=" + marker}},
 		{"strict bool", []string{"validate", "--strict=" + marker}},
+		{"scope format", []string{"scan", "--scope", marker}},
 		{"unknown flag name", []string{"mask", "--" + marker}},
 	}
 	for _, tt := range tests {
@@ -96,9 +102,9 @@ func TestCLIHelpPrintsCompleteStaticFlags(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{"mask long help", []string{"mask", "--help"}, []string{"Usage: maskriver mask [flags]", "-source", "-target", "-workers", "-batch-size", "-strategy", "-key-file", "-approved", "-apply"}},
-		{"mask short help", []string{"mask", "-h"}, []string{"Usage: maskriver mask [flags]", "-source", "-target", "-workers", "-batch-size", "-key-file", "-approved", "-apply"}},
-		{"validate help", []string{"validate", "--help"}, []string{"Usage: maskriver validate [flags]", "-source", "-target", "-strict"}},
+		{"mask long help", []string{"mask", "--help"}, []string{"Usage: maskriver mask [flags]", "-source", "-target", "-scope", "-workers", "-batch-size", "-strategy", "-key-file", "-approved", "-apply"}},
+		{"mask short help", []string{"mask", "-h"}, []string{"Usage: maskriver mask [flags]", "-source", "-target", "-scope", "-workers", "-batch-size", "-key-file", "-approved", "-apply"}},
+		{"validate help", []string{"validate", "--help"}, []string{"Usage: maskriver validate [flags]", "-source", "-target", "-scope", "-strict"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -232,4 +238,78 @@ func TestCLIRealSQLiteWorkflow(t *testing.T) {
 	if got := run(args, &bytes.Buffer{}, &bytes.Buffer{}); got != 2 {
 		t.Fatal("same source and target must be rejected")
 	}
+}
+
+// scopePair writes identical synthetic source/target copies holding two tables
+// with one sensitive column each, so a repeated -scope can be exercised end to
+// end without depending on the single-table fixture seeder.
+func scopePair(t *testing.T) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	source, target := filepath.Join(dir, "source.db"), filepath.Join(dir, "target.db")
+	for _, path := range []string{source, target} {
+		database, err := sql.Open("sqlite", "file:"+path+"?mode=rwc")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, statement := range []string{
+			`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NULL)`,
+			`INSERT INTO people VALUES (1, 'alpha@example.invalid'), (2, 'beta@example.invalid')`,
+			`CREATE TABLE contacts (id INTEGER PRIMARY KEY, email TEXT NULL)`,
+			`INSERT INTO contacts VALUES (1, 'gamma@example.invalid'), (2, 'delta@example.invalid')`,
+		} {
+			if _, err = database.Exec(statement); err != nil {
+				_ = database.Close()
+				t.Fatalf("fixture statement failed: %v", err)
+			}
+		}
+		if err = database.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return source, target
+}
+
+// TestCLIRepeatedScopeFlag covers the multi-scope declaration form: repeated
+// -scope values scan every declared scope, while mask and validate stay
+// fail-closed with ErrUnsupported until multi-scope execution exists.
+func TestCLIRepeatedScopeFlag(t *testing.T) {
+	source, target := scopePair(t)
+	keyFile := filepath.Join(filepath.Dir(source), "key.bin")
+	if err := os.WriteFile(keyFile, []byte(strings.Repeat("K", 40)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sanitized := func(code int, args ...string) string {
+		t.Helper()
+		var out, errOut bytes.Buffer
+		if got := run(args, &out, &errOut); got != code {
+			t.Fatalf("%v exit=%d wanted=%d; sanitized output=%s", args, got, code, errOut.String())
+		}
+		all := out.String() + errOut.String()
+		for _, secret := range []string{"alpha@example.invalid", source, target} {
+			if strings.Contains(all, secret) {
+				t.Fatalf("CLI leaked %q: %q", secret, all)
+			}
+		}
+		return all
+	}
+	if got := sanitized(0, "scan", "--source", source, "--target", target, "--scope", "people.email", "--min-samples", "1"); !strings.Contains(got, "complete=true columns=1") {
+		t.Fatalf("single scope scan output=%q", got)
+	}
+	if got := sanitized(0, "scan", "--source", source, "--target", target,
+		"--scope", "people.email", "--scope", "contacts.email", "--min-samples", "1"); !strings.Contains(got, "complete=true columns=2") {
+		t.Fatalf("repeated scope scan output=%q", got)
+	}
+	common := []string{"--strategy", "fake_email", "--key-id", "synthetic-key", "--key-file", keyFile}
+	maskArgs := append([]string{"mask", "--source", source, "--target", target}, common...)
+	maskArgs = append(maskArgs, "--scope", "people.email", "--scope", "contacts.email")
+	if got := sanitized(1, maskArgs...); !strings.Contains(got, "operation refused") {
+		t.Fatalf("multi-scope preview output=%q", got)
+	}
+	validateArgs := append([]string{"validate", "--source", source, "--target", target}, common...)
+	validateArgs = append(validateArgs, "--scope", "people.email", "--scope", "contacts.email")
+	sanitized(1, validateArgs...)
+	sanitized(2, "scan", "--source", source, "--target", target, "--scope", "people.email", "--table", "people")
+	sanitized(2, "scan", "--source", source, "--target", target, "--scope", "people.email", "--column", "email")
+	sanitized(2, "scan", "--source", source, "--target", target, "--scope", "people.email", "--scope", "people.email")
 }
