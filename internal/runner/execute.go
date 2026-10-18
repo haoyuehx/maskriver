@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/haoyuehx/maskriver/internal/db"
@@ -237,6 +238,13 @@ func (e *Engine) Preview(ctx context.Context, req contracts.PreviewRequest) (con
 // static DDL capabilities of every planned table. A table or column combination
 // this gate can not prove writable refuses the whole plan; a partial write is
 // never authorized.
+//
+// This gate proves STATIC conditions only, and only at the moment it runs. Schema
+// and rows can still change between preflight and the first UPDATE, so the time
+// of check to time of use window is not eliminated: the full dry run narrows it
+// to the rows it just read, and the per-batch expected-value write keeps a
+// changed row from being overwritten silently, but neither makes the source or
+// target snapshot immutable for the length of the run.
 func (e *Engine) preflight(ctx context.Context, plan contracts.Plan) error {
 	if err := plan.ValidateShape(); err != nil {
 		return err
@@ -415,46 +423,60 @@ func (e *Engine) checkTableCapabilities(ctx context.Context, table contracts.Tab
 // foreign key points at. The reference lives in the referencing table, not in
 // the planned table's schema, so every table of the dataset is described.
 //
+// Both snapshots are enumerated, mirroring the trigger rule: the write lands in
+// the target, so a referencing table - or a foreign key on a table present in
+// both - that exists only on the target still guards the rows this plan changes.
+// Enumerating the source alone missed that case and left the refusal to the
+// driver, after a Writer had already begun a transaction.
+//
+// Names are compared case-insensitively because SQLite resolves identifiers that
+// way: REFERENCES PEOPLE (EMAIL) points at table people, column email, while
+// PRAGMA foreign_key_list reports the names exactly as the DDL spelled them. The
+// fold is ASCII-only like SQLite's, and a wider match can only cause an extra
+// refusal, never a missed one.
+//
 // A table whose foreign-key class was not fully described is ErrIncomplete: an
-// unverified table can not be read as "references nothing". Masking a
-// referenced column yields a fresh value that is not proven to still resolve,
-// so the plan is refused with ErrUnsupported instead of guessed at. A reference
-// is matched by target table name inside the described dataset; a name match
-// across schemas can only cause an extra refusal, never a missed one.
+// unverified table can not be read as "references nothing". Masking a referenced
+// column yields a fresh value that is not proven to still resolve, so the plan is
+// refused with ErrUnsupported instead of guessed at. A reference is matched by
+// target table name inside the described dataset; a name match across schemas can
+// only cause an extra refusal, never a missed one.
 func (e *Engine) checkIncomingReferences(ctx context.Context, plan contracts.Plan) error {
 	modified := make(map[string]map[string]bool, len(plan.Tables))
 	for _, table := range plan.Tables {
 		columns := make(map[string]bool, len(table.Columns))
 		for _, col := range table.Columns {
-			columns[col.Column.Column] = true
+			columns[strings.ToLower(col.Column.Column)] = true
 		}
-		modified[table.Table.Table] = columns
+		modified[strings.ToLower(table.Table.Table)] = columns
 	}
-	tables, err := e.source.Tables(ctx, nil)
-	if err != nil {
-		return err
-	}
-	for _, ref := range tables {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		schema, err := e.source.Describe(ctx, ref)
+	for _, side := range []contracts.Reader{e.source, e.target} {
+		tables, err := side.Tables(ctx, nil)
 		if err != nil {
 			return err
 		}
-		if !schema.Coverage.ForeignKeys {
-			return contracts.ErrIncomplete
-		}
-		for _, fk := range schema.ForeignKeys {
-			columns, planned := modified[fk.Target.Table]
-			if !planned {
-				continue
+		for _, ref := range tables {
+			if err := ctx.Err(); err != nil {
+				return err
 			}
-			// An empty TargetColumns list means the parent's primary key, which a
-			// plan can never modify (see ValidateShape's PK refusal).
-			for _, name := range fk.TargetColumns {
-				if columns[name] {
-					return contracts.ErrUnsupported
+			schema, err := side.Describe(ctx, ref)
+			if err != nil {
+				return err
+			}
+			if !schema.Coverage.ForeignKeys {
+				return contracts.ErrIncomplete
+			}
+			for _, fk := range schema.ForeignKeys {
+				columns, planned := modified[strings.ToLower(fk.Target.Table)]
+				if !planned {
+					continue
+				}
+				// An empty TargetColumns list means the parent's primary key, which a
+				// plan can never modify (see ValidateShape's PK refusal).
+				for _, name := range fk.TargetColumns {
+					if columns[strings.ToLower(name)] {
+						return contracts.ErrUnsupported
+					}
 				}
 			}
 		}

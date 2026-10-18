@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,20 +60,73 @@ func capabilityFile(t *testing.T, name, template string, statements ...string) s
 	return path
 }
 
-// TestQuiescentJournalModes pins the snapshot-identity probe: a rollback-journal
-// source is accepted and a WAL source is refused, because only the former keeps
-// every committed row in the main .db file the plan digest hashes.
+// capabilityJournalMode puts the adapter's pooled connection into mode, the way
+// a session pragma would. journal_mode is a per-connection property (only WAL is
+// stored in the file header), so a file fixture can not carry MEMORY, OFF,
+// TRUNCATE or PERSIST into a later session: the mode has to be set on the
+// connection the probe reads. These fixtures pin MaxOpenConns to 1, so this
+// statement and the following probe share one connection.
+func capabilityJournalMode(t *testing.T, ctx context.Context, opened contracts.Reader, mode string) {
+	t.Helper()
+	adapter, ok := opened.(*reader)
+	if !ok {
+		t.Fatal("fixture is not the SQLite adapter")
+	}
+	var applied string
+	if err := adapter.db.QueryRowContext(ctx, "PRAGMA journal_mode="+mode).Scan(&applied); err != nil {
+		t.Fatalf("set journal_mode=%s: %v", mode, err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(applied), mode) {
+		t.Fatalf("journal_mode=%s was applied as %q", mode, applied)
+	}
+}
+
+// TestQuiescentJournalModes pins the snapshot-identity probe. DELETE, TRUNCATE
+// and PERSIST are accepted: each keeps a rollback journal on disk for the length
+// of a write transaction, so the main .db file alone is a transaction-atomic
+// image that the plan digest can describe. WAL is refused because committed rows
+// stay in the -wal sidecar until a checkpoint. MEMORY and OFF are refused too:
+// neither keeps a disk rollback journal, MEMORY holds it in process memory that
+// dies with the process, and OFF gives up SQLite's atomic commit/rollback
+// guarantee, so an interrupted write can leave a torn main file that no journal
+// restores. This probe used to accept both modes; those two subtests fail
+// against that earlier behaviour.
+//
+// What this probe can NOT prove: a rollback journal says nothing about other
+// connections. An external writer can commit between the probe and the read that
+// follows, so the source must still be an isolated, quiescent copy.
 func TestQuiescentJournalModes(t *testing.T) {
 	ctx := context.Background()
-	t.Run("rollback journal", func(t *testing.T) {
-		path := capabilityFile(t, "rollback.db", "file:%s?mode=rwc",
-			`CREATE TABLE t (id INTEGER PRIMARY KEY, email TEXT)`)
-		reader := capabilityReaderFor(t, path)
-		caps := reader.(capabilityProbes)
-		if err := caps.Quiescent(ctx); err != nil {
-			t.Fatalf("quiescent rollback-journal source refused: %v", err)
-		}
-	})
+	for _, mode := range []string{"delete", "truncate", "persist"} {
+		t.Run("rollback journal "+mode, func(t *testing.T) {
+			path := capabilityFile(t, mode+".db", "file:%s?mode=rwc",
+				`CREATE TABLE t (id INTEGER PRIMARY KEY, email TEXT)`)
+			opened := capabilityReaderFor(t, path)
+			caps := opened.(capabilityProbes)
+			capabilityJournalMode(t, ctx, opened, mode)
+			if err := caps.Quiescent(ctx); err != nil {
+				t.Fatalf("%s rollback-journal source refused: %v", mode, err)
+			}
+		})
+	}
+
+	for _, mode := range []string{"memory", "off"} {
+		t.Run("no rollback journal "+mode, func(t *testing.T) {
+			path := capabilityFile(t, mode+".db", "file:%s?mode=rwc",
+				`CREATE TABLE t (id INTEGER PRIMARY KEY, email TEXT)`)
+			opened := capabilityReaderFor(t, path)
+			caps := opened.(capabilityProbes)
+			capabilityJournalMode(t, ctx, opened, mode)
+			err := caps.Quiescent(ctx)
+			if !errors.Is(err, contracts.ErrIncomplete) {
+				t.Fatalf("%s source error=%v, want ErrIncomplete", mode, err)
+			}
+			// The refusal is a category error: no path, table or value reaches it.
+			if err.Error() != contracts.ErrIncomplete.Error() {
+				t.Fatalf("%s refusal leaked detail: %q", mode, err.Error())
+			}
+		})
+	}
 
 	t.Run("wal", func(t *testing.T) {
 		path := capabilityFile(t, "wal.db", "file:%s?mode=rwc&_pragma=journal_mode(wal)",
