@@ -288,7 +288,11 @@ func TestApplyRefusesEveryUnauthenticatedDecision(t *testing.T) {
 			t.Fatal(err)
 		}
 		e.SetApprovalQuery(newReviewer(t, 0x51).readOnly(t, dir, nil))
-		assertApplyRefusedBeforeWriter(t, e, plan, contracts.ErrUnsafe)
+		// The required property is refusal before any Writer, not the exact
+		// error category: a path that is a regular file maps to a different
+		// category per platform (Windows reports "object not found", POSIX a
+		// store error), and both are still a refusal.
+		assertApplyRefusedBeforeWriter(t, e, plan, nil)
 	})
 	t.Run("store without trusted keys", func(t *testing.T) {
 		e, _ := acceptanceEngine(t, twoRows)
