@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"reflect"
 	"time"
 
 	"github.com/haoyuehx/maskriver/internal/db"
@@ -37,9 +38,11 @@ func planColumns(table contracts.TablePlan) []string {
 // each table, matching the two snapshots by the same stable primary key.
 //
 // budget is a PER-TABLE row budget: it restarts at every table, so an earlier
-// table can never starve a later one. Coverage counts only fully visited
-// tables, while Rows counts every row the visit actually examined, including
-// rows of a table that was truncated. Complete is claimed only when every
+// table can never starve a later one; 0 means no row limit. The page size is
+// capped at maxPage independently of the budget.
+//
+// Coverage counts only fully visited tables, while Rows counts every row the
+// visit actually examined, including rows of a table that was truncated. Complete is claimed only when every
 // planned table was visited to its end, so a truncated, empty, drifted or
 // cancelled visit always reports Complete=false.
 //
@@ -210,13 +213,10 @@ func (e *Engine) Preview(ctx context.Context, req contracts.PreviewRequest) (con
 	if ctx == nil {
 		return report, contracts.ErrInvalid
 	}
-	// Preview reads every planned table and column, so the write-only
-	// single-scope gate does not apply here. Structure is still validated
-	// before anything else is read.
-	if err := req.Plan.ValidateShape(); err != nil {
-		return report, err
-	}
-	if err := e.checkPlan(ctx, req.Plan); err != nil {
+	// Preview is Apply's dry run, so the same static capability gate runs here:
+	// a plan that can not be applied is refused before any row is read. The
+	// write-only single-scope gate still does not apply to Preview.
+	if err := e.preflight(ctx, req.Plan); err != nil {
 		return report, err
 	}
 	// No Writer is opened, even for nonempty preview.
@@ -227,27 +227,273 @@ func (e *Engine) Preview(ctx context.Context, req contracts.PreviewRequest) (con
 	return report, err
 }
 
+// preflight is the whole-plan static capability gate. Apply runs it before it
+// creates any Writer, and Preview runs the same gate so a plan that could never
+// be applied is refused before any row is read.
+//
+// Every fact the gate needs is re-derived from the live database and the
+// declared scopes instead of trusted from the supplied plan: shape, the
+// recomputed plan identity, the live schemas with complete coverage, and the
+// static DDL capabilities of every planned table. A table or column combination
+// this gate can not prove writable refuses the whole plan; a partial write is
+// never authorized.
+func (e *Engine) preflight(ctx context.Context, plan contracts.Plan) error {
+	if err := plan.ValidateShape(); err != nil {
+		return err
+	}
+	if err := e.checkPlan(ctx, plan); err != nil {
+		return err
+	}
+	schemas, err := e.describePlanTables(ctx, plan)
+	if err != nil {
+		return err
+	}
+	if err := e.checkPlanBinding(plan, schemas); err != nil {
+		return err
+	}
+	for _, table := range plan.Tables {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := e.checkTableCapabilities(ctx, table, schemas[table.Table.Table]); err != nil {
+			return err
+		}
+	}
+	return e.checkIncomingReferences(ctx, plan)
+}
+
+// describePlanTables requires a complete live description of every planned
+// table on both snapshots. describe already proves source==target for those
+// tables and a stable primary key; the coverage check adds the constraint
+// classes the capability rules read, because a class that was not described
+// must not be read as absent.
+func (e *Engine) describePlanTables(ctx context.Context, plan contracts.Plan) (map[string]contracts.TableSchema, error) {
+	schemas := make(map[string]contracts.TableSchema, len(plan.Tables))
+	for _, table := range plan.Tables {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		schema, err := e.describe(ctx, table.Table.Table)
+		if err != nil {
+			return nil, err
+		}
+		if !completeCoverage(schema.Coverage) {
+			return nil, contracts.ErrIncomplete
+		}
+		schemas[table.Table.Table] = schema
+	}
+	return schemas, nil
+}
+
+// completeCoverage reports whether Describe verified every schema class the
+// static capability rules depend on.
+func completeCoverage(c contracts.SchemaCoverage) bool {
+	return c.Columns && c.PrimaryKey && c.Indexes && c.Unique && c.ForeignKeys && c.Checks
+}
+
+// checkPlanBinding re-verifies the plan's own binding against the declared
+// scopes and the live schema. ValidateShape runs first, but the plan is caller
+// supplied, so nothing is assumed: every planned column must belong to its own
+// table, the declared scope list must be covered exactly once in declared
+// order, and every planned column must match the live declared type.
+func (e *Engine) checkPlanBinding(plan contracts.Plan, schemas map[string]contracts.TableSchema) error {
+	// Plan groups scopes by first appearance of their table and keeps the
+	// declared column order inside each table, so the same grouping is rebuilt
+	// here from the declared configuration.
+	type expectedTable struct {
+		name    string
+		columns []string
+	}
+	var expected []expectedTable
+	index := make(map[string]int, len(plan.Tables))
+	for _, scope := range e.cfg.ResolvedScopes() {
+		i, seen := index[scope.Table]
+		if !seen {
+			i = len(expected)
+			index[scope.Table] = i
+			expected = append(expected, expectedTable{name: scope.Table})
+		}
+		expected[i].columns = append(expected[i].columns, scope.Column)
+	}
+	if len(plan.Tables) != len(expected) {
+		return contracts.ErrInvalid
+	}
+	for i, table := range plan.Tables {
+		if table.Table.Table != expected[i].name || len(table.Columns) != len(expected[i].columns) {
+			return contracts.ErrInvalid
+		}
+		schema, ok := schemas[table.Table.Table]
+		if !ok || !reflect.DeepEqual(table.PrimaryKey, schema.PrimaryKey) {
+			return contracts.ErrInvalid
+		}
+		for j, col := range table.Columns {
+			if col.Column.TableRef != table.Table || col.Column.Column != expected[i].columns[j] {
+				return contracts.ErrInvalid
+			}
+			live, ok := columnByName(schema, col.Column.Column)
+			if !ok || live.Type != col.Type {
+				return contracts.ErrInvalid
+			}
+		}
+	}
+	return nil
+}
+
+// checkTableCapabilities applies the static DDL rules for one planned table.
+//
+// UNIQUE: masking is deterministic but not proven collision-free, so a modified
+// column inside a unique index or constraint can collide and break it. Refuse
+// with ErrUnsafe.
+// CHECK: the masked value may violate a CHECK expression that mentions the
+// column, and this gate does not evaluate SQL expressions. Refuse with
+// ErrUnsupported.
+// FOREIGN KEY: a modified column that is itself a foreign-key column points at
+// another table's key, and the replacement is a fresh value. Refuse with
+// ErrUnsupported.
+// TRIGGER: a trigger body is arbitrary SQL, so any trigger on a table this plan
+// writes is refused; SQLite DDL does not attribute a trigger to a column, so an
+// "unrelated" trigger is not provable. See db.HasTriggers.
+// A plain non-unique index carries no constraint: changing an indexed column
+// only makes SQLite maintain that index, and no value can violate it, so plain
+// indexes are allowed rather than refused.
+func (e *Engine) checkTableCapabilities(ctx context.Context, table contracts.TablePlan, schema contracts.TableSchema) error {
+	modified := make(map[string]bool, len(table.Columns))
+	for _, col := range table.Columns {
+		modified[col.Column.Column] = true
+	}
+	// Triggers must be absent on BOTH snapshots: the write lands in the target,
+	// so a trigger that exists only there still fires silently. Checking the
+	// source alone was a fail-open gap.
+	for _, side := range []contracts.Reader{e.source, e.target} {
+		caps, err := sourceCapabilities(side)
+		if err != nil {
+			return err
+		}
+		has, err := caps.HasTriggers(ctx, table.Table)
+		if err != nil {
+			return err
+		}
+		if has {
+			return contracts.ErrUnsupported
+		}
+	}
+	for _, unique := range schema.Unique {
+		for _, name := range unique {
+			if modified[name] {
+				return contracts.ErrUnsafe
+			}
+		}
+	}
+	for _, index := range schema.Indexes {
+		if !index.Unique {
+			continue
+		}
+		for _, name := range index.Columns {
+			if modified[name] {
+				return contracts.ErrUnsafe
+			}
+		}
+	}
+	for _, check := range schema.Checks {
+		for name := range modified {
+			if db.CheckMentionsColumn(check, name) {
+				return contracts.ErrUnsupported
+			}
+		}
+	}
+	for _, fk := range schema.ForeignKeys {
+		for _, name := range fk.Columns {
+			if modified[name] {
+				return contracts.ErrUnsupported
+			}
+		}
+	}
+	return nil
+}
+
+// checkIncomingReferences refuses a plan that modifies a column another table's
+// foreign key points at. The reference lives in the referencing table, not in
+// the planned table's schema, so every table of the dataset is described.
+//
+// A table whose foreign-key class was not fully described is ErrIncomplete: an
+// unverified table can not be read as "references nothing". Masking a
+// referenced column yields a fresh value that is not proven to still resolve,
+// so the plan is refused with ErrUnsupported instead of guessed at. A reference
+// is matched by target table name inside the described dataset; a name match
+// across schemas can only cause an extra refusal, never a missed one.
+func (e *Engine) checkIncomingReferences(ctx context.Context, plan contracts.Plan) error {
+	modified := make(map[string]map[string]bool, len(plan.Tables))
+	for _, table := range plan.Tables {
+		columns := make(map[string]bool, len(table.Columns))
+		for _, col := range table.Columns {
+			columns[col.Column.Column] = true
+		}
+		modified[table.Table.Table] = columns
+	}
+	tables, err := e.source.Tables(ctx, nil)
+	if err != nil {
+		return err
+	}
+	for _, ref := range tables {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		schema, err := e.source.Describe(ctx, ref)
+		if err != nil {
+			return err
+		}
+		if !schema.Coverage.ForeignKeys {
+			return contracts.ErrIncomplete
+		}
+		for _, fk := range schema.ForeignKeys {
+			columns, planned := modified[fk.Target.Table]
+			if !planned {
+				continue
+			}
+			// An empty TargetColumns list means the parent's primary key, which a
+			// plan can never modify (see ValidateShape's PK refusal).
+			for _, name := range fk.TargetColumns {
+				if columns[name] {
+					return contracts.ErrUnsupported
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// dryRun proves the target still matches the source over every planned row and
+// column. It reads only and never opens a Writer.
+func (e *Engine) dryRun(ctx context.Context, plan contracts.Plan) error {
+	_, err := e.visit(ctx, plan, 0, func(contracts.RowChange) error { return nil })
+	return err
+}
+
 func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contracts.ApplyReport, error) {
 	var report contracts.ApplyReport
 	report.PlanID = req.Plan.ID
 	if ctx == nil {
 		return report, contracts.ErrInvalid
 	}
-	if !req.ExplicitApply || !e.cfg.Approved || req.BatchSize < 1 || req.BatchSize > 1000 {
-		return report, contracts.ErrUnsafe
-	}
+	// Structure is validated before authorization, the same order Preview and
+	// Validate use, so a malformed plan is always reported as malformed.
 	if err := req.Plan.ValidateShape(); err != nil {
 		return report, err
 	}
+	if !req.ExplicitApply || !e.cfg.Approved || req.BatchSize < 1 || req.BatchSize > 1000 {
+		return report, contracts.ErrUnsafe
+	}
+	// The write-capability gate runs before the more expensive static preflight:
+	// a plan Apply can not execute at all is refused first.
 	if err := requireSingleScope(req.Plan); err != nil {
 		return report, err
 	}
-	if err := e.checkPlan(ctx, req.Plan); err != nil {
+	if err := e.preflight(ctx, req.Plan); err != nil {
 		return report, err
 	}
 	// Full dry run completes and proves the target matches source BEFORE
 	// opening a Writer. Unknown/partial scans refuse to enter this path.
-	if _, err := e.Preview(ctx, contracts.PreviewRequest{Plan: req.Plan}); err != nil {
+	if err := e.dryRun(ctx, req.Plan); err != nil {
 		return report, err
 	}
 	opts, err := e.cfg.DatabaseOptions(false)

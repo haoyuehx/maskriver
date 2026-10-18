@@ -174,6 +174,11 @@ func readOnlyPragma(tokens []string) bool {
 		return false
 	}
 	name := strings.ToLower(tokens[i])
+	if name == "journal_mode" {
+		// A bare journal_mode read is the only read form: journal_mode(value)
+		// changes the mode without an "=" token.
+		return i+1 == len(tokens)
+	}
 	switch name {
 	case "table_info", "table_list", "table_xinfo", "index_list", "index_xinfo",
 		"foreign_key_list", "database_list", "collation_list", "compile_options",
