@@ -111,6 +111,13 @@ func (t *writeTx) Update(ctx context.Context, changes []contracts.RowChange) (in
 		t.abortLocked()
 		return 0, err
 	}
+	// Callers must never ask for an empty batch: the frozen Writer contract
+	// requires every item in a batch to affect exactly one row, so an empty
+	// call is a caller bug rather than a successful no-op.
+	if len(changes) == 0 {
+		t.abortLocked()
+		return 0, contracts.ErrInvalid
+	}
 	var total int64
 	for _, change := range changes {
 		if err := t.validateChange(change); err != nil {

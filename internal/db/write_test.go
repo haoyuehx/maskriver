@@ -347,3 +347,29 @@ func TestWriteTxRequiresEveryPlannedColumn(t *testing.T) {
 		})
 	}
 }
+
+// TestUpdateRejectsEmptyBatch pins the frozen Writer contract: every item in a
+// batch must affect exactly one row, so an empty batch is a caller bug and must
+// not be reported as a successful no-op.
+func TestUpdateRejectsEmptyBatch(t *testing.T) {
+	ctx := context.Background()
+	opts, _ := writeFixture(t,
+		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NOT NULL)`,
+		`INSERT INTO people VALUES (1, 'a@example.invalid')`,
+	)
+	writer, err := OpenWriter(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	tx, err := writer.Begin(ctx, writePlan(t, ctx, writer, "people", []string{"id"}, "email"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, err := tx.Update(ctx, nil); !errors.Is(err, contracts.ErrInvalid) || n != 0 {
+		t.Fatalf("empty batch update=%d err=%v, want 0/ErrInvalid", n, err)
+	}
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+}
