@@ -2,16 +2,32 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/haoyuehx/maskriver/internal/testenv"
 )
+
+// cliExec runs synthetic DDL/DML against one disposable CLI fixture file.
+func cliExec(t *testing.T, path string, statements ...string) {
+	t.Helper()
+	database, err := sql.Open("sqlite", "file:"+path+"?mode=rwc&_pragma=foreign_keys(1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range statements {
+		if _, err = database.Exec(statement); err != nil {
+			_ = database.Close()
+			t.Fatalf("fixture statement failed: %v", err)
+		}
+	}
+	if err = database.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestCLIArguments(t *testing.T) {
 	tests := []struct {
@@ -134,12 +150,31 @@ func TestCLIRealSQLiteWorkflow(t *testing.T) {
 	source := filepath.Join(dir, "source.db")
 	target := filepath.Join(dir, "target.db")
 	keyFile := filepath.Join(dir, "key.bin")
-	seed, err := sql.Open("sqlite", "file:"+source+"?mode=rwc&_pragma=foreign_keys(1)")
+	// The planned column must not be UNIQUE. Since work package B2b-1 the write
+	// preflight refuses to mask a column that a UNIQUE constraint could collide
+	// on (internal/runner/execute.go, checkTableCapabilities), so the shared
+	// testenv.Seed fixture, whose people.email is UNIQUE, can no longer be the
+	// CLI end-to-end input. This local fixture keeps the same workflow coverage
+	// with a UNIQUE column that is not planned, a plain index on the planned
+	// column, and a CHECK on an unrelated column.
+	cliExec(t, source,
+		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NOT NULL, handle TEXT NOT NULL UNIQUE, nickname TEXT NULL, CHECK (id > 0))`,
+		`CREATE INDEX people_email ON people(email)`,
+	)
+	seed, err := sql.Open("sqlite", "file:"+source+"?mode=rw")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = testenv.Seed(context.Background(), seed, "sqlite"); err != nil {
-		t.Fatal("seed fixture failed", err)
+	for i := 1; i <= 25; i++ {
+		var nickname any
+		if i > 1 {
+			// One NULL nickname keeps a nullable non-planned column in the schema.
+			nickname = fmt.Sprintf("synthetic-%02d", i)
+		}
+		if _, err = seed.Exec(`INSERT INTO people(id,email,handle,nickname) VALUES(?,?,?,?)`,
+			i, fmt.Sprintf("fixture-%02d@example.invalid", i), fmt.Sprintf("handle-%02d", i), nickname); err != nil {
+			t.Fatal("seed fixture failed", err)
+		}
 	}
 	if err = seed.Close(); err != nil {
 		t.Fatal(err)
@@ -237,6 +272,68 @@ func TestCLIRealSQLiteWorkflow(t *testing.T) {
 		"--table", "people", "--column", "email"}
 	if got := run(args, &bytes.Buffer{}, &bytes.Buffer{}); got != 2 {
 		t.Fatal("same source and target must be rejected")
+	}
+}
+
+// TestCLIRefusesUniquePlannedColumn documents the intentional product limit
+// introduced by work package B2b-1: masking a column that a UNIQUE constraint
+// could collide on is refused before any write (see internal/runner/execute.go,
+// checkTableCapabilities). The refusal must be sanitized and must leave the
+// target byte-identical, for preview and for an explicit --apply alike.
+func TestCLIRefusesUniquePlannedColumn(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source.db")
+	target := filepath.Join(dir, "target.db")
+	keyFile := filepath.Join(dir, "key.bin")
+	cliExec(t, source, `CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE)`)
+	seed, err := sql.Open("sqlite", "file:"+source+"?mode=rw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 20; i++ {
+		if _, err = seed.Exec(`INSERT INTO people VALUES(?,?)`, i, fmt.Sprintf("fixture-%02d@example.invalid", i)); err != nil {
+			t.Fatal("seed fixture failed", err)
+		}
+	}
+	if err = seed.Close(); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(target, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(keyFile, []byte(strings.Repeat("K", 40)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	base := []string{"--source", source, "--target", target, "--table", "people", "--column", "email",
+		"--min-samples", "1", "--strategy", "fake_email", "--key-id", "synthetic-key", "--key-file", keyFile}
+	for _, extras := range [][]string{{}, {"--apply", "--approved"}} {
+		args := append(append([]string{"mask"}, base...), extras...)
+		var out, errOut bytes.Buffer
+		if got := run(args, &out, &errOut); got == 0 {
+			t.Fatalf("%v exited 0, want a refusal", extras)
+		}
+		all := out.String() + errOut.String()
+		// Preview refuses through fail(), an explicit --apply through its own
+		// sanitized batch report; neither may name a path, key or value.
+		if !strings.Contains(all, "operation refused") && !strings.Contains(all, "apply: complete=false") {
+			t.Fatalf("refusal output=%q, want a sanitized refusal", all)
+		}
+		for _, secret := range []string{"fixture-01@example.invalid", strings.Repeat("K", 40), source, target} {
+			if strings.Contains(all, secret) {
+				t.Fatalf("CLI leaked %q: %q", secret, all)
+			}
+		}
+	}
+	after, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sha256.Sum256(original) != sha256.Sum256(after) {
+		t.Fatal("refused CLI run changed the target copy")
 	}
 }
 

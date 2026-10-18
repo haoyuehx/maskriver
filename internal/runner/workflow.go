@@ -67,6 +67,24 @@ func tableRef(name string) contracts.TableRef {
 	return contracts.TableRef{Database: "maskriver", Schema: "main", Table: name}
 }
 
+// capabilityReader is the internal db capability set beyond the frozen
+// contracts.Reader surface. The m1a-v1 DTOs have no journal-mode or trigger
+// metadata, and the preflight must not claim a snapshot or an absence it can
+// not prove, so those probes live in internal/db and are required here. A
+// Reader without them fails closed with ErrUnsupported.
+type capabilityReader interface {
+	Quiescent(context.Context) error
+	HasTriggers(context.Context, contracts.TableRef) (bool, error)
+}
+
+func sourceCapabilities(r contracts.Reader) (capabilityReader, error) {
+	caps, ok := r.(capabilityReader)
+	if !ok {
+		return nil, contracts.ErrUnsupported
+	}
+	return caps, nil
+}
+
 // evidence accumulates the agreed schema of every scoped table and the sampled
 // detection evidence of every declared scope, all in declared order.
 type evidenceSet struct {
@@ -214,6 +232,15 @@ func scanComplete(sample contracts.Sample, decision contracts.Decision) bool {
 // and the declared scope list. The digest is evidence binding, NOT write
 // authorization.
 //
+// Snapshot identity: SourceSnapshotID is the SHA-256 of the whole main .db
+// file, so it changes whenever that file changes. That is only an identity of
+// the snapshot when the main file is the whole committed state, which is why a
+// source whose journal mode can keep committed data in a sidecar (WAL) is
+// refused before the digest is computed; see db.Quiescent. It is still not a
+// proof against concurrent external writers on a rollback-journal database, so
+// the source must be a quiescent isolated copy. TargetID is the digest of the
+// target PATH only and says nothing about the target's contents.
+//
 // Plan always scans every scope, even when cfg.Approved is set: approval is an
 // extra intent signal, never a substitute for detection evidence. A dedicated
 // reviewed-decision store does not exist yet, so an approval can not be
@@ -257,6 +284,12 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 	}
 	if !allSensitive {
 		return empty, contracts.ErrUnsafe
+	}
+	// A source that is not provably quiescent has no snapshot identity: the
+	// main-file digest could stay constant while committed rows live in a WAL
+	// sidecar, so the digest would not describe the data this plan read.
+	if err := e.requireQuiescentSnapshot(ctx); err != nil {
+		return empty, err
 	}
 	digest, err := fileDigest(e.cfg.Source)
 	if err != nil {
@@ -330,8 +363,12 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 	p := contracts.Plan{
 		Revision:         contracts.APIRevision,
 		SourceSnapshotID: digest,
-		TargetID:         hashString(e.cfg.Target),
-		SchemaDigest:     schemaDigest, ConfigDigest: configDigest,
+		// TargetID binds the target PATH, not the target's initial contents: it
+		// proves which file Apply would write and nothing about that file's
+		// state. Target equivalence is proven by the mandatory full dry run, not
+		// by this digest.
+		TargetID:     hashString(e.cfg.Target),
+		SchemaDigest: schemaDigest, ConfigDigest: configDigest,
 		// Derived from the gates above, not assumed: reaching this point means
 		// every declared scope was untruncated and Sensitive.
 		ScanComplete: allComplete && allSensitive,
@@ -343,6 +380,16 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 		return empty, err
 	}
 	return p, nil
+}
+
+// requireQuiescentSnapshot refuses a source whose journal mode can keep
+// committed data outside the main .db file.
+func (e *Engine) requireQuiescentSnapshot(ctx context.Context) error {
+	caps, err := sourceCapabilities(e.source)
+	if err != nil {
+		return err
+	}
+	return caps.Quiescent(ctx)
 }
 
 func hashString(value string) string {

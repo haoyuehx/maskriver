@@ -197,12 +197,13 @@ func (t *writeTx) validateChange(change contracts.RowChange) error {
 
 // assignedColumns reports the planned columns one UPDATE must assign, in plan
 // order. A NULL expected value is never assigned, because the original stays
-// NULL; a non-NULL column is assigned only when its replacement differs from it.
+// NULL. Every validated non-NULL column has a replacement that differs from it
+// (validateChange refuses an unchanged replacement), so it is always assigned.
 // An empty result means the row has nothing to write.
 func (t *writeTx) assignedColumns(change contracts.RowChange) []string {
 	names := make([]string, 0, len(t.ordered))
 	for _, name := range t.ordered {
-		if change.Expected[name].IsNull() || change.Expected[name] == change.Replacement[name] {
+		if change.Expected[name].IsNull() {
 			continue
 		}
 		names = append(names, name)
