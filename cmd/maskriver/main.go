@@ -45,7 +45,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	command := args[0]
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	// The standard parser includes invalid values and unknown flag names in
+	// its errors. Keep those details away from user-visible output.
+	flags.SetOutput(io.Discard)
 	cfg := config.Runtime{}
 	var source, target, keyFile string
 	var apply, strict bool
@@ -71,15 +73,20 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if command == "validate" {
 		flags.BoolVar(&strict, "strict", true, "refuse any incomplete or warning coverage")
 	}
+	// Usage always follows the FlagSet output stream so that help is printed
+	// exactly once: discarded during Parse, then re-enabled only for -h.
 	flags.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: maskriver %s [flags]\n", command)
+		out := flags.Output()
+		fmt.Fprintf(out, "Usage: maskriver %s [flags]\n", command)
 		flags.PrintDefaults()
 	}
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
+			flags.SetOutput(stderr)
+			flags.Usage()
 			return 0
 		}
-		return 2
+		return usageError(stderr)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr)

@@ -29,9 +29,9 @@ func TestCLIArguments(t *testing.T) {
 		{"validate missing paths", []string{"validate"}, 2, "operation refused"},
 		{"command help", []string{"mask", "--help"}, 0, "Usage:"},
 		{"unknown", []string{"unknown"}, 2, "invalid arguments"},
-		{"unknown flag", []string{"mask", "--unknown"}, 2, "flag provided but not defined"},
+		{"unknown flag", []string{"mask", "--unknown"}, 2, "invalid arguments"},
 		{"positional rejected", []string{"mask", "unexpected"}, 2, "invalid arguments"},
-		{"scan apply rejected", []string{"scan", "--apply"}, 2, "flag provided but not defined"},
+		{"scan apply rejected", []string{"scan", "--apply"}, 2, "invalid arguments"},
 		{"extra version args", []string{"version", "extra"}, 2, "invalid arguments"},
 	}
 	for _, tt := range tests {
@@ -42,6 +42,82 @@ func TestCLIArguments(t *testing.T) {
 			}
 			if !strings.Contains(out.String()+errOut.String(), tt.text) {
 				t.Fatalf("missing %q in safe output", tt.text)
+			}
+		})
+	}
+}
+
+func TestCLIFlagParseErrorsAreSanitized(t *testing.T) {
+	const marker = "SYNTHETIC-DSN-DO-NOT-ECHO"
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"workers integer", []string{"mask", "--workers", marker}},
+		{"min samples integer", []string{"scan", "--source", marker, "--min-samples", marker}},
+		{"sample limit integer", []string{"scan", "--sample-limit=" + marker}},
+		{"batch size integer", []string{"mask", "--target", marker, "--batch-size=" + marker}},
+		{"min ratio float", []string{"scan", "--min-ratio", marker}},
+		{"approved bool", []string{"validate", "--key-file", marker, "--approved=" + marker}},
+		{"apply bool", []string{"mask", "--source=" + marker, "--apply=" + marker}},
+		{"strict bool", []string{"validate", "--strict=" + marker}},
+		{"unknown flag name", []string{"mask", "--" + marker}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			if code := run(tt.args, &out, &errOut); code != 2 {
+				t.Fatalf("exit=%d, want 2", code)
+			}
+			for streamName, stream := range map[string]string{"stdout": out.String(), "stderr": errOut.String()} {
+				if strings.Contains(stream, marker) {
+					t.Fatalf("synthetic marker leaked to %s: %q", streamName, stream)
+				}
+			}
+			if !strings.Contains(errOut.String(), "invalid arguments") {
+				t.Fatalf("missing sanitized parse error: %q", errOut.String())
+			}
+			// The upstream flag package wording also embeds user-supplied values.
+			for _, leaked := range []string{"invalid value", "parse error", "flag provided but not defined"} {
+				if strings.Contains(errOut.String(), leaked) {
+					t.Fatalf("raw flag parser detail %q reached stderr: %q", leaked, errOut.String())
+				}
+			}
+			if out.Len() != 0 {
+				t.Fatalf("parse failure wrote to stdout: %q", out.String())
+			}
+		})
+	}
+}
+
+func TestCLIHelpPrintsCompleteStaticFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"mask long help", []string{"mask", "--help"}, []string{"Usage: maskriver mask [flags]", "-source", "-target", "-workers", "-batch-size", "-strategy", "-key-file", "-approved", "-apply"}},
+		{"mask short help", []string{"mask", "-h"}, []string{"Usage: maskriver mask [flags]", "-source", "-target", "-workers", "-batch-size", "-key-file", "-approved", "-apply"}},
+		{"validate help", []string{"validate", "--help"}, []string{"Usage: maskriver validate [flags]", "-source", "-target", "-strict"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			if code := run(tt.args, &out, &errOut); code != 0 {
+				t.Fatalf("exit=%d, want 0", code)
+			}
+			text := out.String() + errOut.String()
+			for _, item := range tt.want {
+				if !strings.Contains(text, item) {
+					t.Errorf("help missing %q", item)
+				}
+			}
+			if out.Len() != 0 {
+				t.Errorf("help wrote to stdout: %q", out.String())
+			}
+			// Help must be emitted once: the parse-time banner is discarded.
+			if n := strings.Count(text, tt.want[0]); n != 1 {
+				t.Errorf("usage banner printed %d times, want 1: %q", n, text)
 			}
 		})
 	}
