@@ -5,6 +5,7 @@ package verify
 import (
 	"context"
 	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/haoyuehx/maskriver/pkg/contracts"
@@ -56,8 +57,15 @@ func (*validator) Validate(ctx context.Context, source, target contracts.Reader,
 			complete = false
 			continue
 		}
+		// Coverage.Checks is deliberately not gated: the SQLite adapter cannot
+		// parse CHECK expressions and reports Checks=false unconditionally, so
+		// treating it as a gate would reject every SQLite validation. Checks are
+		// therefore also not compared here; that residual gap is unresolved.
 		if !srcSchema.Coverage.Columns || !dstSchema.Coverage.Columns ||
-			!srcSchema.Coverage.PrimaryKey || !dstSchema.Coverage.PrimaryKey {
+			!srcSchema.Coverage.PrimaryKey || !dstSchema.Coverage.PrimaryKey ||
+			!srcSchema.Coverage.Indexes || !dstSchema.Coverage.Indexes ||
+			!srcSchema.Coverage.Unique || !dstSchema.Coverage.Unique ||
+			!srcSchema.Coverage.ForeignKeys || !dstSchema.Coverage.ForeignKeys {
 			report.Issues = append(report.Issues, issue(contracts.Warning, contracts.InsufficientEvidence, 1))
 			complete = false
 			continue
@@ -203,7 +211,134 @@ func schemasMatch(a, b contracts.TableSchema, plan contracts.TablePlan) bool {
 			return false
 		}
 	}
+	return indexesMatch(a.Indexes, b.Indexes) &&
+		uniqueGroupsMatch(a.Unique, b.Unique) &&
+		foreignKeysMatch(a.ForeignKeys, b.ForeignKeys)
+}
+
+// constraintKey encodes ordered string lists unambiguously, so that two
+// different constraints can never share a comparison key.
+func constraintKey(lists ...[]string) string {
+	var b strings.Builder
+	for _, list := range lists {
+		b.WriteString(strconv.Itoa(len(list)))
+		b.WriteByte('|')
+		for _, part := range list {
+			b.WriteString(strconv.Itoa(len(part)))
+			b.WriteByte(':')
+			b.WriteString(part)
+		}
+	}
+	return b.String()
+}
+
+// indexesMatch compares indexes by name as a multiset. Driver row order is not
+// significant, but a duplicate name is counted on both sides so an asymmetric
+// substitution cannot slip through. A same-name index must keep its ordered
+// column list and its uniqueness flag.
+func indexesMatch(a, b []contracts.Index) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	collect := func(list []contracts.Index) (map[string]int, bool) {
+		out := make(map[string]int, len(list))
+		for _, idx := range list {
+			if idx.Name == "" || len(idx.Columns) == 0 {
+				return nil, false
+			}
+			out[constraintKey([]string{idx.Name}, boolKey(idx.Unique), idx.Columns)]++
+		}
+		return out, true
+	}
+	src, ok := collect(a)
+	if !ok {
+		return false
+	}
+	dst, ok := collect(b)
+	if !ok {
+		return false
+	}
+	return sameCounts(src, dst)
+}
+
+// uniqueGroupsMatch compares unique column groups as a multiset: group order is
+// not significant, column order inside a group is (it is index order), and a
+// repeated group is counted on both sides rather than rejected.
+func uniqueGroupsMatch(a, b [][]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	collect := func(list [][]string) (map[string]int, bool) {
+		out := make(map[string]int, len(list))
+		for _, group := range list {
+			if len(group) == 0 {
+				return nil, false
+			}
+			out[constraintKey(group)]++
+		}
+		return out, true
+	}
+	src, ok := collect(a)
+	if !ok {
+		return false
+	}
+	dst, ok := collect(b)
+	if !ok {
+		return false
+	}
+	return sameCounts(src, dst)
+}
+
+// boolKey renders a flag as a stable constraint component.
+func boolKey(value bool) []string {
+	if value {
+		return []string{"1"}
+	}
+	return []string{"0"}
+}
+
+// sameCounts reports whether two multisets are identical.
+func sameCounts(a, b map[string]int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for key, count := range a {
+		if b[key] != count {
+			return false
+		}
+	}
 	return true
+}
+
+// foreignKeysMatch compares foreign keys as a multiset: declared order is not
+// significant, but column pairing order and referential actions are, and a
+// repeated descriptor is counted on both sides rather than rejected.
+func foreignKeysMatch(a, b []contracts.ForeignKey) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	collect := func(list []contracts.ForeignKey) (map[string]int, bool) {
+		out := make(map[string]int, len(list))
+		for _, fk := range list {
+			if len(fk.Columns) == 0 || len(fk.Columns) != len(fk.TargetColumns) ||
+				fk.Target.Database == "" || fk.Target.Schema == "" || fk.Target.Table == "" {
+				return nil, false
+			}
+			out[constraintKey(fk.Columns, fk.TargetColumns,
+				[]string{fk.Target.Database, fk.Target.Schema, fk.Target.Table},
+				[]string{fk.OnUpdate, fk.OnDelete})]++
+		}
+		return out, true
+	}
+	src, ok := collect(a)
+	if !ok {
+		return false
+	}
+	dst, ok := collect(b)
+	if !ok {
+		return false
+	}
+	return sameCounts(src, dst)
 }
 
 func keyCollationsDiffer(a, b contracts.TableSchema, keys []string) bool {

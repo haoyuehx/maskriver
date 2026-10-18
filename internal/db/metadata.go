@@ -186,6 +186,12 @@ func (a *adapter) sqliteDescribe(ctx context.Context, ref contracts.TableRef) (c
 					qerr = contracts.ErrUnsupported
 					break
 				}
+				// The frozen Index DTO carries no sort direction, so a
+				// non-ascending index column can not be compared. Report the
+				// class as unverified instead of claiming it matched.
+				if desc != 0 {
+					indexCoverage = false
+				}
 				cols[seqno] = name.String
 			}
 		}

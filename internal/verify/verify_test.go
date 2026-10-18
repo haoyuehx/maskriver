@@ -221,7 +221,11 @@ func peopleSchema() contracts.TableSchema {
 			{Ref: contracts.ColumnRef{TableRef: t, Column: "name"}, Type: contracts.Type{Kind: contracts.Text, Nullable: true}},
 		},
 		PrimaryKey: []string{"id"},
-		Coverage:   contracts.SchemaCoverage{Columns: true, PrimaryKey: true},
+		// The fixtures model an adapter that reported every constraint class it
+		// can expose, so the coverage gate only trips when a test clears a flag.
+		Coverage: contracts.SchemaCoverage{
+			Columns: true, PrimaryKey: true, Indexes: true, ForeignKeys: true, Unique: true,
+		},
 	}
 }
 
