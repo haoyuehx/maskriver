@@ -185,17 +185,61 @@ func run(args []string, stdout, stderr io.Writer) int {
 	report, err := engine.Apply(ctx, contracts.ApplyRequest{
 		Plan: plan, ExplicitApply: true, BatchSize: cfg.BatchSize,
 	})
+	// The summary names tables by their 1-based position in the plan and reports
+	// only counts: the report carries no value, primary key, path, DSN or key
+	// material, so none can be printed.
 	if err != nil {
-		fmt.Fprintf(stderr, "apply: complete=false committed_batches=%d outcome_unknown=%t\n",
-			len(report.Committed), report.CommitOutcomeUnknown)
+		for _, line := range applySummary(plan, report) {
+			fmt.Fprintln(stderr, line)
+		}
 		return 1
 	}
-	fmt.Fprintf(stdout, "apply: complete=%t committed_batches=%d\n",
-		report.Complete, len(report.Committed))
+	for _, line := range applySummary(plan, report) {
+		fmt.Fprintln(stdout, line)
+	}
 	if !report.Complete {
 		return 1
 	}
 	return 0
+}
+
+// applySummary renders the sanitized accounting of one Apply call: the plan
+// position of every table (1-based, in plan order), the batches committed for it
+// and the rows those batches wrote, the last committed batch position, and the
+// completeness/unknown-outcome flags of the run. Table positions are printed
+// instead of table names so the summary stays free of database identifiers.
+func applySummary(plan contracts.Plan, report contracts.ApplyReport) []string {
+	positions := make(map[contracts.TableRef]int, len(plan.Tables))
+	batches := make([]int64, len(plan.Tables))
+	rows := make([]int64, len(plan.Tables))
+	var committedRows int64
+	for i, table := range plan.Tables {
+		positions[table.Table] = i + 1
+	}
+	for _, receipt := range report.Committed {
+		committedRows += receipt.Rows
+		position, ok := positions[receipt.Table]
+		if !ok {
+			continue
+		}
+		batches[position-1]++
+		rows[position-1] += receipt.Rows
+	}
+	lines := []string{fmt.Sprintf(
+		"apply: complete=%t committed_batches=%d committed_rows=%d outcome_unknown=%t",
+		report.Complete, len(report.Committed), committedRows, report.CommitOutcomeUnknown)}
+	for i := range plan.Tables {
+		lines = append(lines, fmt.Sprintf("apply: table %d batches=%d rows=%d",
+			i+1, batches[i], rows[i]))
+	}
+	// The last committed batch position is what locates an interruption: a
+	// complete run has nothing to locate.
+	if n := len(report.Committed); n > 0 && !report.Complete {
+		last := report.Committed[n-1]
+		lines = append(lines, fmt.Sprintf("apply: last_committed table=%d batch=%d rows=%d",
+			positions[last.Table], last.Ordinal, last.Rows))
+	}
+	return lines
 }
 
 // scopeFlag collects repeated -scope table.column values in declaration order.

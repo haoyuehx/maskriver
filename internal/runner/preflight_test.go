@@ -273,12 +273,12 @@ func TestPreflightRefusesIncompleteCoverage(t *testing.T) {
 	}
 }
 
-// TestPreflightRefusesWholePlanWhenSecondTableIsUnsupported proves the gate is
-// whole-plan: table people is provably writable, but the plan is refused because
-// the second table has a trigger. Apply still stops earlier at the
-// single-scope write gate (see TestMultiScopeApplyIsRefusedWithoutWriter), so
-// the whole-plan result is observed through the shared preflight and Preview;
-// no Writer is opened in either path.
+// TestPreflightRefusesWholePlanWhenSecondTableIsUnsupported is the B2b-2
+// second-table static refusal: table people is provably writable, but the plan is
+// refused because the second table has a trigger. Apply executes multiple tables
+// since B2b-2, so this is the case where the whole plan must be refused before
+// the first table is written: no Writer capability, no target change, and the
+// same gate stops Preview.
 func TestPreflightRefusesWholePlanWhenSecondTableIsUnsupported(t *testing.T) {
 	cfg := scopeFixture(t,
 		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NULL)`,

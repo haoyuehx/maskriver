@@ -13,18 +13,6 @@ import (
 
 const maxPage = 128
 
-// requireSingleScope is the fail-closed WRITE capability gate. Preview and
-// Validate read every planned table and column, but writing several tables or
-// several columns in one run (work package B2) is not implemented yet, so Apply
-// must refuse such a plan with ErrUnsupported instead of acting on a subset
-// with partial coverage.
-func requireSingleScope(plan contracts.Plan) error {
-	if len(plan.Tables) == 1 && len(plan.Tables[0].Columns) == 1 {
-		return nil
-	}
-	return contracts.ErrUnsupported
-}
-
 // planColumns is the minimum projection a table visit needs: the primary key
 // followed by every planned column, in plan order.
 func planColumns(table contracts.TablePlan) []string {
@@ -214,9 +202,9 @@ func (e *Engine) Preview(ctx context.Context, req contracts.PreviewRequest) (con
 	if ctx == nil {
 		return report, contracts.ErrInvalid
 	}
-	// Preview is Apply's dry run, so the same static capability gate runs here:
-	// a plan that can not be applied is refused before any row is read. The
-	// write-only single-scope gate still does not apply to Preview.
+	// Preview is Apply's dry run, so the same whole-plan static capability gate
+	// runs here: a plan that can not be applied is refused before any row is
+	// read.
 	if err := e.preflight(ctx, req.Plan); err != nil {
 		return report, err
 	}
@@ -491,6 +479,23 @@ func (e *Engine) dryRun(ctx context.Context, plan contracts.Plan) error {
 	return err
 }
 
+// Apply writes every planned table and every planned column of the supplied
+// plan. One Writer serves the whole run, one transaction covers each batch, and
+// every batch reads BOTH snapshots with the same page request: a source-only
+// read would let a concurrently changed target row be overwritten silently, so
+// the target page is compared value-by-value against the source page through the
+// shared visit seam before anything is written.
+//
+// The gates run in a fixed order and all of them pass before a Writer is opened:
+// shape, write authorization, the whole-plan static preflight, and a full dry run
+// over every planned table. A plan is therefore never executed on a subset of its
+// tables, and a table this run can not prove writable refuses the whole plan.
+//
+// Committed work is never hidden: the receipt of a batch is appended only after
+// its Commit returned success, so a later failure keeps the earlier receipts in
+// the report and leaves Complete false. A Commit whose outcome is unknown is
+// neither retried nor treated as rolled back; execution stops and the report says
+// CommitOutcomeUnknown.
 func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contracts.ApplyReport, error) {
 	var report contracts.ApplyReport
 	report.PlanID = req.Plan.ID
@@ -505,16 +510,12 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 	if !req.ExplicitApply || !e.cfg.Approved || req.BatchSize < 1 || req.BatchSize > 1000 {
 		return report, contracts.ErrUnsafe
 	}
-	// The write-capability gate runs before the more expensive static preflight:
-	// a plan Apply can not execute at all is refused first.
-	if err := requireSingleScope(req.Plan); err != nil {
-		return report, err
-	}
 	if err := e.preflight(ctx, req.Plan); err != nil {
 		return report, err
 	}
-	// Full dry run completes and proves the target matches source BEFORE
-	// opening a Writer. Unknown/partial scans refuse to enter this path.
+	// Full dry run completes and proves the target matches source over every
+	// planned row and column BEFORE opening a Writer. Unknown/partial scans
+	// refuse to enter this path.
 	if err := e.dryRun(ctx, req.Plan); err != nil {
 		return report, err
 	}
@@ -526,110 +527,173 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 	if openWriter == nil {
 		openWriter = db.OpenWriter
 	}
-	var writer contracts.Writer
-
-	table := req.Plan.Tables[0]
-	cols := append([]string(nil), table.PrimaryKey...)
-	for _, c := range table.Columns {
-		cols = append(cols, c.Column.Column)
+	run := &applyRun{engine: e, report: &report, batch: req.BatchSize}
+	run.open = func(ctx context.Context) (contracts.Writer, error) { return openWriter(ctx, opts) }
+	defer run.close()
+	// Tables are visited in plan order, each with its own keyset cursor and its
+	// own 1-based batch ordinal sequence. Any failure stops the run: a plan is
+	// never partially reordered or resumed.
+	for _, table := range req.Plan.Tables {
+		if err := run.applyTable(ctx, table); err != nil {
+			return report, err
+		}
 	}
+	report.Complete = true
+	return report, nil
+}
+
+// applyRun is the state of one Apply call. Every planned table shares the same
+// Writer, which is opened on the first batch that has a row to write, so a run
+// with nothing to write opens no Writer at all.
+type applyRun struct {
+	engine *Engine
+	report *contracts.ApplyReport
+	open   func(context.Context) (contracts.Writer, error)
+	writer contracts.Writer
+	batch  int
+}
+
+func (r *applyRun) close() {
+	if r.writer != nil {
+		_ = r.writer.Close()
+	}
+}
+
+// writerFor returns the single Writer of the run, opening it on first use.
+func (r *applyRun) writerFor(ctx context.Context) (contracts.Writer, error) {
+	if r.writer != nil {
+		return r.writer, nil
+	}
+	if r.open == nil {
+		return nil, contracts.ErrInvalid
+	}
+	writer, err := r.open(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.writer = writer
+	return writer, nil
+}
+
+// applyTable writes one planned table in batch-sized pages, each page in its own
+// transaction. The cursor restarts at the first key for every table, and the
+// batch ordinal restarts at 1, so a receipt names a position inside its own table.
+func (r *applyRun) applyTable(ctx context.Context, table contracts.TablePlan) error {
+	cols := planColumns(table)
 	var after []contracts.Value
 	var ordinal int64
 	for {
 		if err := ctx.Err(); err != nil {
-			return report, err
+			return err
 		}
-		page, err := e.source.Page(ctx, contracts.PageRequest{
+		request := contracts.PageRequest{
 			Table: table.Table, Columns: cols, KeyColumns: table.PrimaryKey,
-			After: after, Limit: req.BatchSize,
-		})
+			After: after, Limit: r.batch,
+		}
+		left, err := r.engine.source.Page(ctx, request)
 		if err != nil {
-			return report, err
+			return err
 		}
-		if len(page.Rows) == 0 {
-			return report, contracts.ErrIncomplete
-		}
-		if len(table.Columns) != 1 {
-			return report, contracts.ErrUnsupported
-		}
-		col := table.Columns[0]
-		name := col.Column.Column
-		originals := make([]contracts.Value, 0, len(page.Rows))
-		indexes := make([]int, 0, len(page.Rows))
-		for i, row := range page.Rows {
-			v, ok := row[name]
-			if !ok {
-				return report, contracts.ErrIncomplete
-			}
-			if v.IsNull() {
-				// A NULL original stays NULL, so it is neither masked nor written
-				// and the row is excluded from the batch.
-				continue
-			}
-			originals = append(originals, v)
-			indexes = append(indexes, i)
-		}
-		masked, err := e.maskBatch(ctx, originals, col, e.cfg.Workers)
+		right, err := r.engine.target.Page(ctx, request)
 		if err != nil {
-			return report, err
+			return err
 		}
-		changes := make([]contracts.RowChange, 0, len(indexes))
-		for j, i := range indexes {
-			change := contracts.RowChange{
-				Expected:    contracts.Row{name: originals[j]},
-				Replacement: contracts.Row{name: masked[j]},
-			}
-			for _, pk := range table.PrimaryKey {
-				v, ok := page.Rows[i][pk]
-				if !ok || v.IsNull() {
-					return report, contracts.ErrIncomplete
-				}
-				change.Key = append(change.Key, v)
-			}
-			changes = append(changes, change)
+		// Both snapshots must return the same page: a diverging page, a diverging
+		// end marker or a diverging cursor means the target no longer matches the
+		// source, and continuing would mask rows whose current value is unknown.
+		if len(left.Rows) != len(right.Rows) || left.Done != right.Done || len(left.Rows) > r.batch {
+			return contracts.ErrConflict
 		}
-		if len(changes) > 0 {
-			if writer == nil {
-				writer, err = openWriter(ctx, opts)
-				if err != nil {
-					return report, err
-				}
-				defer writer.Close()
+		if len(left.Rows) == 0 {
+			// An exhausted table has nothing to write and needs no receipt.
+			if left.Done {
+				return nil
 			}
-			tx, err := writer.Begin(ctx, table)
-			if err != nil {
-				return report, err
-			}
-			n, err := tx.Update(ctx, changes)
-			if err != nil || n != int64(len(changes)) {
-				_ = rollbackBounded(tx)
-				if err == nil {
-					err = contracts.ErrConflict
-				}
-				return report, err
-			}
-			if err = tx.Commit(ctx); err != nil {
-				if errors.Is(err, contracts.ErrCommitUnknown) {
-					report.CommitOutcomeUnknown = true
-				} else {
-					_ = rollbackBounded(tx)
-				}
-				return report, err
-			}
+			return contracts.ErrIncomplete
+		}
+		changes, err := r.engine.pageChanges(ctx, table, left.Rows, right.Rows)
+		if err != nil {
+			return err
+		}
+		committed, err := r.writeBatch(ctx, table, ordinal+1, changes)
+		if err != nil {
+			return err
+		}
+		if committed {
 			ordinal++
-			report.Committed = append(report.Committed, contracts.BatchReceipt{
-				Table: table.Table, Ordinal: ordinal, Rows: n,
-			})
 		}
-		if page.Done {
-			report.Complete = true
-			return report, nil
+		if left.Done {
+			return nil
 		}
-		if len(page.Next) != len(table.PrimaryKey) {
-			return report, contracts.ErrIncomplete
+		if len(left.Next) != len(table.PrimaryKey) || len(right.Next) != len(table.PrimaryKey) {
+			return contracts.ErrIncomplete
 		}
-		after = append([]contracts.Value(nil), page.Next...)
+		for i := range left.Next {
+			if left.Next[i] != right.Next[i] {
+				return contracts.ErrConflict
+			}
+		}
+		after = append([]contracts.Value(nil), left.Next...)
 	}
+}
+
+// writeBatch writes one page in its own transaction. Rows whose planned columns
+// are all NULL have nothing to write, so they are dropped before the transaction
+// starts: such a row issues no statement and is never counted. The receipt is
+// appended only after Commit returned success, which is what makes the report a
+// record of durable work rather than of attempted work.
+func (r *applyRun) writeBatch(ctx context.Context, table contracts.TablePlan, ordinal int64, changes []contracts.RowChange) (bool, error) {
+	pending := make([]contracts.RowChange, 0, len(changes))
+	for _, change := range changes {
+		if assignsNothing(change) {
+			continue
+		}
+		pending = append(pending, change)
+	}
+	if len(pending) == 0 {
+		return false, nil
+	}
+	writer, err := r.writerFor(ctx)
+	if err != nil {
+		return false, err
+	}
+	tx, err := writer.Begin(ctx, table)
+	if err != nil {
+		return false, err
+	}
+	n, err := tx.Update(ctx, pending)
+	if err != nil || n != int64(len(pending)) {
+		_ = rollbackBounded(tx)
+		if err == nil {
+			err = contracts.ErrConflict
+		}
+		return false, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		if errors.Is(err, contracts.ErrCommitUnknown) {
+			// The batch may or may not be durable: claim neither, retry never.
+			r.report.CommitOutcomeUnknown = true
+		} else {
+			_ = rollbackBounded(tx)
+		}
+		return false, err
+	}
+	r.report.Committed = append(r.report.Committed, contracts.BatchReceipt{
+		Table: table.Table, Ordinal: ordinal, Rows: n,
+	})
+	return true, nil
+}
+
+// assignsNothing reports whether every planned column of one change is NULL.
+// Such a row needs no statement: the writer assigns only non-NULL columns, and a
+// NULL original is never filled in.
+func assignsNothing(change contracts.RowChange) bool {
+	for _, value := range change.Expected {
+		if !value.IsNull() {
+			return false
+		}
+	}
+	return true
 }
 
 func rollbackBounded(tx contracts.WriteTx) error {

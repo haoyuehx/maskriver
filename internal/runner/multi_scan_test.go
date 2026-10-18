@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -299,62 +298,10 @@ func TestOpenRejectsDuplicateOrAmbiguousScopes(t *testing.T) {
 	}
 }
 
-// TestMultiScopeApplyIsRefusedWithoutWriter keeps the write boundary of work
-// package B1: preview and validate now cover every planned table (see
-// multi_execute_test.go), but apply still has no multi-scope implementation, so
-// it must refuse with ErrUnsupported before any Writer capability is requested
-// or any file is touched.
-func TestMultiScopeApplyIsRefusedWithoutWriter(t *testing.T) {
-	twoTables := func() config.Runtime {
-		cfg := twoTableFixture(t)
-		cfg.Scopes = []config.Scope{{Table: "people", Column: "email"}, {Table: "contacts", Column: "email"}}
-		return cfg
-	}
-	twoColumns := func() config.Runtime {
-		cfg := scopeFixture(t,
-			`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NULL, backup_email TEXT NULL)`,
-			`INSERT INTO people VALUES (1, 'a@example.invalid', 'b@example.invalid'), (2, 'c@example.invalid', 'd@example.invalid')`,
-		)
-		cfg.Scopes = []config.Scope{{Table: "people", Column: "email"}, {Table: "people", Column: "backup_email"}}
-		return cfg
-	}
-	for _, tt := range []struct {
-		name    string
-		fixture func() config.Runtime
-	}{
-		{"two tables", twoTables},
-		{"two columns", twoColumns},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := tt.fixture
-			engine := scopeEngine(t, cfg())
-			ctx := context.Background()
-			plan, err := engine.Plan(ctx)
-			if err != nil {
-				t.Fatalf("plan: %v", err)
-			}
-			before := acceptanceTreeDigest(t, engine.cfg.Target)
-			spy := &writerSpy{}
-			spyEngine(t, engine, spy)
-
-			if _, err = engine.Preview(ctx, contracts.PreviewRequest{Plan: plan}); errors.Is(err, contracts.ErrUnsupported) {
-				t.Fatalf("preview still refuses a multi-scope plan: %v", err)
-			}
-			if _, err = engine.Apply(ctx, contracts.ApplyRequest{Plan: plan, ExplicitApply: true, BatchSize: 2}); !errors.Is(err, contracts.ErrUnsupported) {
-				t.Fatalf("apply error=%v, want ErrUnsupported", err)
-			}
-			if _, err = engine.Validate(ctx, contracts.ValidateRequest{Plan: plan, Strict: true}); errors.Is(err, contracts.ErrUnsupported) {
-				t.Fatalf("validate still refuses a multi-scope plan: %v", err)
-			}
-			if spy.opens != 0 || spy.begins != 0 || spy.updates != 0 || spy.commits != 0 {
-				t.Fatalf("multi-scope plan touched the writer: %+v", spy)
-			}
-			if after := acceptanceTreeDigest(t, engine.cfg.Target); !reflect.DeepEqual(before, after) {
-				t.Fatal("refused multi-scope plan changed the target fixture tree")
-			}
-		})
-	}
-}
+// TestMultiScopeApplyIsRefusedWithoutWriter was the B1 write boundary. Work
+// package B2b-2 removed that limit: a multi-scope plan is now executed table by
+// table, so the case moved to multi_apply_test.go and asserts real writes
+// instead of a refusal.
 
 func TestPlanIDBindsScopeOrder(t *testing.T) {
 	cfg := twoTableFixture(t)
