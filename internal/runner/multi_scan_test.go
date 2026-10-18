@@ -299,11 +299,12 @@ func TestOpenRejectsDuplicateOrAmbiguousScopes(t *testing.T) {
 	}
 }
 
-// TestMultiScopePlanIsNotExecutableYet keeps work package A from claiming write
-// capability: preview, apply and validate must refuse a plan that needs more
-// than one scope until multi-scope execution exists, and must refuse before any
-// Writer capability is requested.
-func TestMultiScopePlanIsNotExecutableYet(t *testing.T) {
+// TestMultiScopeApplyIsRefusedWithoutWriter keeps the write boundary of work
+// package B1: preview and validate now cover every planned table (see
+// multi_execute_test.go), but apply still has no multi-scope implementation, so
+// it must refuse with ErrUnsupported before any Writer capability is requested
+// or any file is touched.
+func TestMultiScopeApplyIsRefusedWithoutWriter(t *testing.T) {
 	twoTables := func() config.Runtime {
 		cfg := twoTableFixture(t)
 		cfg.Scopes = []config.Scope{{Table: "people", Column: "email"}, {Table: "contacts", Column: "email"}}
@@ -336,14 +337,14 @@ func TestMultiScopePlanIsNotExecutableYet(t *testing.T) {
 			spy := &writerSpy{}
 			spyEngine(t, engine, spy)
 
-			if _, err = engine.Preview(ctx, contracts.PreviewRequest{Plan: plan}); !errors.Is(err, contracts.ErrUnsupported) {
-				t.Fatalf("preview error=%v, want ErrUnsupported", err)
+			if _, err = engine.Preview(ctx, contracts.PreviewRequest{Plan: plan}); errors.Is(err, contracts.ErrUnsupported) {
+				t.Fatalf("preview still refuses a multi-scope plan: %v", err)
 			}
 			if _, err = engine.Apply(ctx, contracts.ApplyRequest{Plan: plan, ExplicitApply: true, BatchSize: 2}); !errors.Is(err, contracts.ErrUnsupported) {
 				t.Fatalf("apply error=%v, want ErrUnsupported", err)
 			}
-			if _, err = engine.Validate(ctx, contracts.ValidateRequest{Plan: plan, Strict: true}); !errors.Is(err, contracts.ErrUnsupported) {
-				t.Fatalf("validate error=%v, want ErrUnsupported", err)
+			if _, err = engine.Validate(ctx, contracts.ValidateRequest{Plan: plan, Strict: true}); errors.Is(err, contracts.ErrUnsupported) {
+				t.Fatalf("validate still refuses a multi-scope plan: %v", err)
 			}
 			if spy.opens != 0 || spy.begins != 0 || spy.updates != 0 || spy.commits != 0 {
 				t.Fatalf("multi-scope plan touched the writer: %+v", spy)
