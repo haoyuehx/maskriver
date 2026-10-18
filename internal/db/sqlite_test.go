@@ -67,7 +67,7 @@ func TestSQLiteReadAdapter(t *testing.T) {
 	if !reflect.DeepEqual(schema.PrimaryKey, []string{"id"}) ||
 		!schema.Coverage.Columns || !schema.Coverage.PrimaryKey ||
 		!schema.Coverage.Indexes || !schema.Coverage.ForeignKeys ||
-		!schema.Coverage.Unique || schema.Coverage.Checks {
+		!schema.Coverage.Unique || !schema.Coverage.Checks {
 		t.Fatal("schema metadata or coverage mismatch")
 	}
 	n, err := r.Count(ctx, table("people"))

@@ -265,9 +265,15 @@ func (a *adapter) sqliteDescribe(ctx context.Context, ref contracts.TableRef) (c
 		out.ForeignKeys = append(out.ForeignKeys, *fk)
 	}
 	out.Coverage.ForeignKeys = true
-	// SQLite does not expose structured CHECK expressions through PRAGMA.
-	// False records that we have not safely parsed all of them.
-	out.Coverage.Checks = false
+	// SQLite has no structured CHECK metadata. Parse the stored DDL with a
+	// conservative scanner; Coverage.Checks stays false whenever the statement
+	// can not be tokenised unambiguously, so strict validation fails closed.
+	checks, checksCoverage, err := a.sqliteChecks(ctx, ref)
+	if err != nil {
+		return contracts.TableSchema{}, err
+	}
+	out.Checks = checks
+	out.Coverage.Checks = checksCoverage
 	return out, nil
 }
 

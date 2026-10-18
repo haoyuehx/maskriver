@@ -224,7 +224,8 @@ func peopleSchema() contracts.TableSchema {
 		// The fixtures model an adapter that reported every constraint class it
 		// can expose, so the coverage gate only trips when a test clears a flag.
 		Coverage: contracts.SchemaCoverage{
-			Columns: true, PrimaryKey: true, Indexes: true, ForeignKeys: true, Unique: true,
+			Columns: true, PrimaryKey: true, Indexes: true, ForeignKeys: true,
+			Unique: true, Checks: true,
 		},
 	}
 }

@@ -217,29 +217,80 @@ func TestValidateUnknownConstraintCoverageCannotPass(t *testing.T) {
 	}
 }
 
-// TestValidateCheckConstraintGapStaysUngated pins the open CHECK decision: the
-// SQLite adapter reports Coverage.Checks=false unconditionally, so CHECK
-// constraints neither gate coverage nor take part in the schema comparison.
-// This test changes only when that org-level decision is settled.
-func TestValidateCheckConstraintGapStaysUngated(t *testing.T) {
-	ref := peopleTable()
-	srcSchema, tgtSchema := peopleSchema(), peopleSchema()
-	srcSchema.Coverage.Checks, tgtSchema.Coverage.Checks = false, false
-	srcSchema.Checks = []string{"id > 0"}
+// TestValidateUnknownCheckCoverageCannotPass covers the fail-closed direction for
+// CHECK constraints: when either side reports Coverage.Checks=false the report
+// must carry Warning/insufficient_evidence and incomplete coverage, never PASS.
+func TestValidateUnknownCheckCoverageCannotPass(t *testing.T) {
+	for _, side := range []string{"source", "target"} {
+		t.Run(side, func(t *testing.T) {
+			ref := peopleTable()
+			srcSchema, tgtSchema := peopleSchema(), peopleSchema()
+			if side == "source" {
+				srcSchema.Coverage.Checks = false
+			} else {
+				tgtSchema.Coverage.Checks = false
+			}
+			srcSchema.Checks = []string{"( id > 0 )"}
 
-	src := []contracts.Row{{"id": mustValue(t, contracts.Int, "1"), "email": textV("synthetic@example.invalid")}}
-	tgt := []contracts.Row{{"id": mustValue(t, contracts.Int, "1"), "email": textV("masked@example.invalid")}}
-	source, target := newFakeReader(), newFakeReader()
-	source.addTable(ref, srcSchema, src)
-	target.addTable(ref, tgtSchema, tgt)
+			src := []contracts.Row{{"id": mustValue(t, contracts.Int, "1"), "email": textV("synthetic@example.invalid")}}
+			tgt := []contracts.Row{{"id": mustValue(t, contracts.Int, "1"), "email": textV("masked@example.invalid")}}
+			source, target := newFakeReader(), newFakeReader()
+			source.addTable(ref, srcSchema, src)
+			target.addTable(ref, tgtSchema, tgt)
 
-	report, err := New().Validate(context.Background(), source, target,
-		contracts.ValidateRequest{Plan: peoplePlan(), RowLimit: 10})
-	if err != nil {
-		t.Fatalf("unexpected validate error: %v", err)
+			report, err := New().Validate(context.Background(), source, target,
+				contracts.ValidateRequest{Plan: peoplePlan(), RowLimit: 10})
+			if err != nil {
+				t.Fatalf("unexpected validate error: %v", err)
+			}
+			if !hasIssue(report, contracts.InsufficientEvidence) || report.Coverage.Complete {
+				t.Fatalf("unknown CHECK coverage must be incomplete: issues=%v coverage=%+v", report.Issues, report.Coverage)
+			}
+			if report.Passed(true) || report.Passed(false) {
+				t.Fatalf("unknown CHECK coverage must not pass: %+v", report)
+			}
+		})
 	}
+}
+
+// TestValidateSQLiteLostCheckConstraintIsNotPass is the regression for the false
+// PASS: the masked target dropped a CHECK the source enforces while the source
+// and target values already differ (so only the structural check can object).
+func TestValidateSQLiteLostCheckConstraintIsNotPass(t *testing.T) {
+	const table = `CREATE TABLE accounts (id INTEGER PRIMARY KEY, email TEXT NOT NULL`
+	guarded := table + `, CHECK (length(email) >= 6 AND email LIKE '%@example.invalid'))`
+	unguarded := table + `)`
+
+	source := openSQLiteFixture(t, guarded, accountsRowsDDL)
+	target := openSQLiteFixture(t, unguarded, maskedRowsDDL)
+
+	srcSchema, err := source.Describe(context.Background(), accountsTable())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !srcSchema.Coverage.Checks || len(srcSchema.Checks) != 1 {
+		t.Fatalf("fixture must expose CHECK coverage: %+v %v", srcSchema.Coverage, srcSchema.Checks)
+	}
+
+	report := validateAccounts(t, source, target)
+	if report.Passed(true) || report.Passed(false) {
+		t.Fatalf("lost CHECK constraint must not pass: issues=%v coverage=%+v", report.Issues, report.Coverage)
+	}
+	if !hasFailIssue(report, contracts.SchemaMismatch) {
+		t.Fatalf("expected Fail/%s, got %v", contracts.SchemaMismatch, report.Issues)
+	}
+}
+
+// TestValidateSQLiteIdenticalCheckConstraintsPass guards against over-rejection.
+func TestValidateSQLiteIdenticalCheckConstraintsPass(t *testing.T) {
+	const ddl = `CREATE TABLE accounts (id INTEGER PRIMARY KEY, email TEXT NOT NULL,
+		CHECK (length(email) >= 6 AND email LIKE '%@example.invalid'))`
+	source := openSQLiteFixture(t, ddl, accountsRowsDDL)
+	target := openSQLiteFixture(t, ddl, maskedRowsDDL)
+
+	report := validateAccounts(t, source, target)
 	if !report.Passed(true) || !report.Coverage.Complete {
-		t.Fatalf("CHECK coverage must stay ungated: issues=%v coverage=%+v", report.Issues, report.Coverage)
+		t.Fatalf("identical CHECK constraints must pass: issues=%v coverage=%+v", report.Issues, report.Coverage)
 	}
 }
 

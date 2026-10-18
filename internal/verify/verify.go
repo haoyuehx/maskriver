@@ -57,15 +57,15 @@ func (*validator) Validate(ctx context.Context, source, target contracts.Reader,
 			complete = false
 			continue
 		}
-		// Coverage.Checks is deliberately not gated: the SQLite adapter cannot
-		// parse CHECK expressions and reports Checks=false unconditionally, so
-		// treating it as a gate would reject every SQLite validation. Checks are
-		// therefore also not compared here; that residual gap is unresolved.
+		// Coverage.Checks is gated: an adapter that cannot expose CHECK
+		// constraints, or whose DDL could not be tokenised unambiguously,
+		// reports false, and validation must not claim PASS on it.
 		if !srcSchema.Coverage.Columns || !dstSchema.Coverage.Columns ||
 			!srcSchema.Coverage.PrimaryKey || !dstSchema.Coverage.PrimaryKey ||
 			!srcSchema.Coverage.Indexes || !dstSchema.Coverage.Indexes ||
 			!srcSchema.Coverage.Unique || !dstSchema.Coverage.Unique ||
-			!srcSchema.Coverage.ForeignKeys || !dstSchema.Coverage.ForeignKeys {
+			!srcSchema.Coverage.ForeignKeys || !dstSchema.Coverage.ForeignKeys ||
+			!srcSchema.Coverage.Checks || !dstSchema.Coverage.Checks {
 			report.Issues = append(report.Issues, issue(contracts.Warning, contracts.InsufficientEvidence, 1))
 			complete = false
 			continue
@@ -213,7 +213,36 @@ func schemasMatch(a, b contracts.TableSchema, plan contracts.TablePlan) bool {
 	}
 	return indexesMatch(a.Indexes, b.Indexes) &&
 		uniqueGroupsMatch(a.Unique, b.Unique) &&
-		foreignKeysMatch(a.ForeignKeys, b.ForeignKeys)
+		foreignKeysMatch(a.ForeignKeys, b.ForeignKeys) &&
+		checksMatch(a.Checks, b.Checks)
+}
+
+// checksMatch compares CHECK expressions as a multiset after collapsing
+// whitespace. Declaration order is not significant.
+func checksMatch(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	counts := make(map[string]int, len(a))
+	for _, expr := range a {
+		key := normalizeCheck(expr)
+		if key == "" {
+			return false
+		}
+		counts[key]++
+	}
+	for _, expr := range b {
+		key := normalizeCheck(expr)
+		if counts[key] == 0 {
+			return false
+		}
+		counts[key]--
+	}
+	return true
+}
+
+func normalizeCheck(expr string) string {
+	return strings.Join(strings.Fields(expr), " ")
 }
 
 // constraintKey encodes ordered string lists unambiguously, so that two
