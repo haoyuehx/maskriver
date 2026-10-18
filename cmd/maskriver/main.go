@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/haoyuehx/maskriver/internal/config"
@@ -52,10 +53,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var source, target, keyFile string
 	var apply, strict bool
 	var strategy, keyID string
+	var scopes scopeFlag
 	flags.StringVar(&source, "source", "", "existing absolute SQLite source-snapshot path")
 	flags.StringVar(&target, "target", "", "existing absolute SQLite target-copy path")
 	flags.StringVar(&cfg.Table, "table", "", "explicit table allowlist (one table)")
 	flags.StringVar(&cfg.Column, "column", "", "explicit sensitive column (one column)")
+	flags.Var(&scopes, "scope", "explicit table.column scope; repeat for several scopes")
 	flags.IntVar(&cfg.MinSamples, "min-samples", 20, "minimum distinct non-NULL evidence")
 	flags.IntVar(&cfg.SampleLimit, "sample-limit", 128, "maximum distinct sampled inputs")
 	flags.Float64Var(&cfg.MinRatio, "min-ratio", 0.9, "required rule hit ratio")
@@ -90,6 +93,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr)
+	}
+	// -scope and -table/-column are two spellings of the same declaration;
+	// mixing them would be ambiguous, so it is refused rather than merged.
+	if len(scopes) > 0 {
+		if cfg.Table != "" || cfg.Column != "" {
+			return usageError(stderr)
+		}
+		cfg.Scopes = scopes
 	}
 	var err error
 	cfg.Source, err = filepath.Abs(source)
@@ -185,6 +196,34 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// scopeFlag collects repeated -scope table.column values in declaration order.
+// Declared order is preserved because it is the deterministic plan order.
+type scopeFlag []config.Scope
+
+// errScopeFormat carries no user input: the flag package embeds Set errors into
+// its own discarded output, and the CLI prints one sanitized message instead.
+var errScopeFormat = errors.New("scope must be table.column")
+
+func (f *scopeFlag) String() string {
+	if f == nil {
+		return ""
+	}
+	parts := make([]string, 0, len(*f))
+	for _, scope := range *f {
+		parts = append(parts, scope.Table+"."+scope.Column)
+	}
+	return strings.Join(parts, ",")
+}
+
+func (f *scopeFlag) Set(raw string) error {
+	table, column, ok := strings.Cut(raw, ".")
+	if !ok || table == "" || column == "" || strings.Contains(column, ".") {
+		return errScopeFormat
+	}
+	*f = append(*f, config.Scope{Table: table, Column: column})
+	return nil
 }
 
 func usage(w io.Writer) {

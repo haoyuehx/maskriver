@@ -11,6 +11,17 @@ import (
 
 const maxPage = 128
 
+// requireSingleScope is the fail-closed capability gate for preview, apply and
+// validate. Multi-table and multi-column execution (work package B) is not
+// implemented yet, so a plan that asks for more must be refused with
+// ErrUnsupported instead of acting on a subset with partial coverage.
+func requireSingleScope(plan contracts.Plan) error {
+	if len(plan.Tables) == 1 && len(plan.Tables[0].Columns) == 1 {
+		return nil
+	}
+	return contracts.ErrUnsupported
+}
+
 // visit walks two matching snapshots by the same stable primary key. The
 // callback never receives a secret through logs or a serialized report.
 func (e *Engine) visit(ctx context.Context, plan contracts.Plan, budget int64, each func(contracts.RowChange) error) (int64, error) {
@@ -127,6 +138,16 @@ func (e *Engine) Preview(ctx context.Context, req contracts.PreviewRequest) (con
 	if ctx == nil {
 		return report, contracts.ErrInvalid
 	}
+	// Multi-table and multi-column execution is not implemented yet, so those
+	// plans must fail closed before any row is read.
+	// Structure is validated before the capability gate so a malformed plan is
+	// reported as invalid rather than unsupported.
+	if err := req.Plan.ValidateShape(); err != nil {
+		return report, err
+	}
+	if err := requireSingleScope(req.Plan); err != nil {
+		return report, err
+	}
 	if err := e.checkPlan(ctx, req.Plan); err != nil {
 		return report, err
 	}
@@ -147,8 +168,17 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 	if ctx == nil {
 		return report, contracts.ErrInvalid
 	}
+	if err := requireSingleScope(req.Plan); err != nil {
+		return report, err
+	}
 	if !req.ExplicitApply || !e.cfg.Approved || req.BatchSize < 1 || req.BatchSize > 1000 {
 		return report, contracts.ErrUnsafe
+	}
+	if err := req.Plan.ValidateShape(); err != nil {
+		return report, err
+	}
+	if err := requireSingleScope(req.Plan); err != nil {
+		return report, err
 	}
 	if err := e.checkPlan(ctx, req.Plan); err != nil {
 		return report, err

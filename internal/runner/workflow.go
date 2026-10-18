@@ -62,84 +62,145 @@ func (e *Engine) Close() error {
 	return b
 }
 
-func (e *Engine) table() contracts.TableRef {
-	return contracts.TableRef{Database: "maskriver", Schema: "main", Table: e.cfg.Table}
+// tableRef names one scoped table in the frozen reference form.
+func tableRef(name string) contracts.TableRef {
+	return contracts.TableRef{Database: "maskriver", Schema: "main", Table: name}
 }
 
-func (e *Engine) lookup(ctx context.Context) (contracts.TableSchema, contracts.Column, error) {
-	table := e.table()
+// evidence accumulates the agreed schema of every scoped table and the sampled
+// detection evidence of every declared scope, all in declared order.
+type evidenceSet struct {
+	// tables holds distinct table names in first-appearance order.
+	tables  []string
+	schemas map[string]contracts.TableSchema
+	scopes  []scopeEvidence
+}
+
+// scopeEvidence is the complete evidence of one declared scope. Scan and Plan
+// both read it, so a report and a plan can never disagree about the evidence.
+type scopeEvidence struct {
+	table    string
+	column   contracts.Column
+	sample   contracts.Sample
+	decision contracts.Decision
+}
+
+// describe requires identical source and target schemas with complete column
+// and primary-key metadata, exactly as the single-scope workflow did.
+func (e *Engine) describe(ctx context.Context, name string) (contracts.TableSchema, error) {
+	table := tableRef(name)
 	src, err := e.source.Describe(ctx, table)
 	if err != nil {
-		return contracts.TableSchema{}, contracts.Column{}, err
+		return contracts.TableSchema{}, err
 	}
 	dst, err := e.target.Describe(ctx, table)
 	if err != nil {
-		return contracts.TableSchema{}, contracts.Column{}, err
+		return contracts.TableSchema{}, err
 	}
 	if !src.Coverage.Columns || !src.Coverage.PrimaryKey || !dst.Coverage.Columns ||
 		!dst.Coverage.PrimaryKey || !reflect.DeepEqual(src, dst) || len(src.PrimaryKey) == 0 {
-		return contracts.TableSchema{}, contracts.Column{}, contracts.ErrIncomplete
+		return contracts.TableSchema{}, contracts.ErrIncomplete
 	}
-	for _, col := range src.Columns {
-		if col.Ref.Column == e.cfg.Column {
-			for _, pk := range src.PrimaryKey {
-				if pk == e.cfg.Column {
-					return contracts.TableSchema{}, contracts.Column{}, contracts.ErrUnsafe
-				}
+	return src, nil
+}
+
+// gather samples and classifies every declared scope in declared order. Any
+// scope that can not produce evidence fails the whole call: neither a scan
+// report nor a plan may silently describe a subset of the declared scopes.
+func (e *Engine) gather(ctx context.Context) (evidenceSet, error) {
+	set := evidenceSet{schemas: make(map[string]contracts.TableSchema)}
+	for _, scope := range e.cfg.ResolvedScopes() {
+		if err := ctx.Err(); err != nil {
+			return evidenceSet{}, err
+		}
+		schema, ok := set.schemas[scope.Table]
+		if !ok {
+			var err error
+			if schema, err = e.describe(ctx, scope.Table); err != nil {
+				return evidenceSet{}, err
 			}
-			return src, col, nil
+			set.schemas[scope.Table] = schema
+			set.tables = append(set.tables, scope.Table)
+		}
+		col, ok := columnByName(schema, scope.Column)
+		if !ok {
+			return evidenceSet{}, contracts.ErrInvalid
+		}
+		for _, key := range schema.PrimaryKey {
+			if key == scope.Column {
+				return evidenceSet{}, contracts.ErrUnsafe
+			}
+		}
+		sample, err := e.source.Sample(ctx, contracts.SampleRequest{
+			Column: col.Ref, Limit: e.cfg.SampleLimit,
+		})
+		if err != nil {
+			return evidenceSet{}, err
+		}
+		decision, err := detect.New().Detect(ctx, contracts.DetectionRequest{
+			Column: col, Sample: sample, MinSamples: e.cfg.MinSamples,
+			MinRatio: e.cfg.MinRatio, DateOrder: "MDY",
+		})
+		if err != nil {
+			return evidenceSet{}, err
+		}
+		set.scopes = append(set.scopes, scopeEvidence{
+			table: scope.Table, column: col, sample: sample, decision: decision,
+		})
+	}
+	if len(set.scopes) == 0 {
+		return evidenceSet{}, contracts.ErrInvalid
+	}
+	return set, nil
+}
+
+func columnByName(schema contracts.TableSchema, name string) (contracts.Column, bool) {
+	for _, candidate := range schema.Columns {
+		if candidate.Ref.Column == name {
+			return candidate, true
 		}
 	}
-	return contracts.TableSchema{}, contracts.Column{}, contracts.ErrInvalid
+	return contracts.Column{}, false
 }
 
 func (e *Engine) Scan(ctx context.Context, req contracts.ScanRequest) (contracts.ScanReport, error) {
 	var report contracts.ScanReport
+	if ctx == nil {
+		return report, contracts.ErrInvalid
+	}
 	if err := ctx.Err(); err != nil {
 		return report, err
 	}
-	col, sample, decision, err := e.sampleColumn(ctx)
+	set, err := e.gather(ctx)
 	if err != nil {
 		return report, err
 	}
-	report.Decisions = []contracts.Decision{decision}
-	report.Coverage = contracts.Coverage{
-		Tables: 1, Columns: 1, Rows: int64(len(sample.Values)),
-		Complete: scanComplete(sample, decision),
+	complete := true
+	var rows int64
+	for _, scope := range set.scopes {
+		report.Decisions = append(report.Decisions, scope.decision)
+		rows += int64(len(scope.sample.Values))
+		if !scanComplete(scope.sample, scope.decision) {
+			complete = false
+		}
+		// One UNKNOWN/NotSensitive scope is one unresolved column, named by its
+		// own reference so callers can locate the refusal without row data.
+		if scope.decision.Sensitivity != contracts.Sensitive {
+			report.Issues = append(report.Issues, contracts.Issue{
+				Status: contracts.Warning, Code: contracts.UnresolvedColumn,
+				Column: scope.column.Ref, Count: 1,
+			})
+		}
 	}
-	if decision.Sensitivity != contracts.Sensitive {
-		report.Issues = append(report.Issues, contracts.Issue{
-			Status: contracts.Warning, Code: contracts.UnresolvedColumn,
-			Column: col.Ref, Count: 1,
-		})
+	// Coverage.Rows follows the existing single-scope meaning: the number of
+	// sampled values examined, summed across scopes. It is not a physical row
+	// count, so it can exceed the table's row total when a table is sampled
+	// once per column.
+	report.Coverage = contracts.Coverage{
+		Tables: int64(len(set.tables)), Columns: int64(len(set.scopes)),
+		Rows: rows, Complete: complete,
 	}
 	return report, nil
-}
-
-// sampleColumn is the single place that samples and classifies the scoped
-// column, so Scan and Plan can never disagree about the evidence.
-func (e *Engine) sampleColumn(ctx context.Context) (contracts.Column, contracts.Sample, contracts.Decision, error) {
-	var sample contracts.Sample
-	var decision contracts.Decision
-	schema, col, err := e.lookup(ctx)
-	if err != nil {
-		return contracts.Column{}, sample, decision, err
-	}
-	_ = schema // coverage was checked by lookup
-	sample, err = e.source.Sample(ctx, contracts.SampleRequest{
-		Column: col.Ref, Limit: e.cfg.SampleLimit,
-	})
-	if err != nil {
-		return contracts.Column{}, sample, decision, err
-	}
-	decision, err = detect.New().Detect(ctx, contracts.DetectionRequest{
-		Column: col, Sample: sample, MinSamples: e.cfg.MinSamples,
-		MinRatio: e.cfg.MinRatio, DateOrder: "MDY",
-	})
-	if err != nil {
-		return contracts.Column{}, sample, decision, err
-	}
-	return col, sample, decision, nil
 }
 
 // scanComplete reports whether the scan produced enough evidence to authorize a
@@ -149,71 +210,121 @@ func scanComplete(sample contracts.Sample, decision contracts.Decision) bool {
 	return !sample.Truncated && decision.Sensitivity == contracts.Sensitive
 }
 
-// Plan builds a deterministic digest from the source snapshot, live schema and
-// explicit scope. The digest is evidence binding, NOT write authorization.
+// Plan builds a deterministic digest from the source snapshot, the live schemas
+// and the declared scope list. The digest is evidence binding, NOT write
+// authorization.
 //
-// Plan always scans, even when cfg.Approved is set: approval is an extra intent
-// signal, never a substitute for detection evidence. A dedicated reviewed-
-// decision store does not exist yet, so an approval cannot be authenticated and
-// must not turn an UNKNOWN or truncated scan into an applicable plan.
+// Plan always scans every scope, even when cfg.Approved is set: approval is an
+// extra intent signal, never a substitute for detection evidence. A dedicated
+// reviewed-decision store does not exist yet, so an approval can not be
+// authenticated and must not turn an UNKNOWN or truncated scan into an
+// applicable plan.
 func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 	var empty contracts.Plan
-	schema, col, err := e.lookup(ctx)
-	if err != nil {
+	if ctx == nil {
+		return empty, contracts.ErrInvalid
+	}
+	if err := ctx.Err(); err != nil {
 		return empty, err
 	}
 	if e.cfg.Strategy.ID == "" || e.cfg.Strategy.Version == "" || e.cfg.KeyID == "" {
 		return empty, contracts.ErrInvalid
 	}
-	if _, err = mask.NewStrategy(e.cfg.Strategy); err != nil {
+	if _, err := mask.NewStrategy(e.cfg.Strategy); err != nil {
 		return empty, err
 	}
-	_, sample, decision, err := e.sampleColumn(ctx)
+	set, err := e.gather(ctx)
 	if err != nil {
 		return empty, err
 	}
-	if sample.Truncated {
+	// Every scope must independently carry complete, Sensitive evidence; one
+	// weak scope refuses the whole plan instead of publishing a partial one.
+	// The refusal category is decided from the whole set, not from whichever
+	// scope happens to come first, so it cannot depend on declaration order:
+	// an evidence gap (truncation) outranks an unresolved verdict.
+	allComplete := true
+	allSensitive := true
+	for _, scope := range set.scopes {
+		if scope.sample.Truncated {
+			allComplete = false
+		}
+		if scope.decision.Sensitivity != contracts.Sensitive {
+			allSensitive = false
+		}
+	}
+	if !allComplete {
 		return empty, contracts.ErrIncomplete
 	}
-	if decision.Sensitivity != contracts.Sensitive {
+	if !allSensitive {
 		return empty, contracts.ErrUnsafe
 	}
 	digest, err := fileDigest(e.cfg.Source)
 	if err != nil {
 		return empty, err
 	}
-	schemaJSON, err := json.Marshal(schema)
+	schemas := make([]contracts.TableSchema, 0, len(set.tables))
+	tablePlans := make([]contracts.TablePlan, 0, len(set.tables))
+	for _, name := range set.tables {
+		schema := set.schemas[name]
+		schemas = append(schemas, schema)
+		tablePlan := contracts.TablePlan{
+			Table: schema.Ref, PrimaryKey: append([]string(nil), schema.PrimaryKey...),
+		}
+		for _, scope := range set.scopes {
+			if scope.table != name {
+				continue
+			}
+			tablePlan.Columns = append(tablePlan.Columns, contracts.ColumnPlan{
+				Column: scope.column.Ref, Type: scope.column.Type, Strategy: e.cfg.Strategy,
+				Scope:                "sqlite/" + name + "/" + scope.column.Ref.Column,
+				NormalizationVersion: "typed-lexical-v1", KeyID: e.cfg.KeyID,
+			})
+		}
+		tablePlans = append(tablePlans, tablePlan)
+	}
+	schemaJSON, err := json.Marshal(schemas)
 	if err != nil {
 		return empty, contracts.ErrInvalid
 	}
 	schemaDigest := hashString(string(schemaJSON))
-	conf := struct{ Table, Column, Strategy, Version, KeyID string }{
-		e.cfg.Table, e.cfg.Column, e.cfg.Strategy.ID,
-		e.cfg.Strategy.Version, e.cfg.KeyID,
+	// The ordered scope list is part of the digest, so the same scopes in a
+	// different order bind a different plan ID. A single scope keeps the
+	// original payload so existing plan IDs stay stable for unchanged configs.
+	type planScope struct{ Table, Column string }
+	ordered := make([]planScope, 0, len(set.scopes))
+	for _, scope := range set.scopes {
+		ordered = append(ordered, planScope{scope.table, scope.column.Ref.Column})
 	}
-	configJSON, err := json.Marshal(conf)
+	var configJSON []byte
+	if len(ordered) == 1 {
+		legacy := struct{ Table, Column, Strategy, Version, KeyID string }{
+			ordered[0].Table, ordered[0].Column, e.cfg.Strategy.ID,
+			e.cfg.Strategy.Version, e.cfg.KeyID,
+		}
+		configJSON, err = json.Marshal(legacy)
+	} else {
+		conf := struct {
+			Scopes         []planScope
+			Strategy       string
+			Version, KeyID string
+		}{
+			ordered, e.cfg.Strategy.ID, e.cfg.Strategy.Version, e.cfg.KeyID,
+		}
+		configJSON, err = json.Marshal(conf)
+	}
 	if err != nil {
 		return empty, contracts.ErrInvalid
 	}
 	configDigest := hashString(string(configJSON))
-	tablePlan := contracts.TablePlan{
-		Table: schema.Ref, PrimaryKey: append([]string(nil), schema.PrimaryKey...),
-		Columns: []contracts.ColumnPlan{{
-			Column: col.Ref, Type: col.Type, Strategy: e.cfg.Strategy,
-			Scope:                "sqlite/" + schema.Ref.Table + "/" + col.Ref.Column,
-			NormalizationVersion: "typed-lexical-v1", KeyID: e.cfg.KeyID,
-		}},
-	}
 	p := contracts.Plan{
 		Revision:         contracts.APIRevision,
 		SourceSnapshotID: digest,
 		TargetID:         hashString(e.cfg.Target),
 		SchemaDigest:     schemaDigest, ConfigDigest: configDigest,
-		// ScanComplete is derived from the scan above; a plan is only
-		// constructed when that evidence was complete and Sensitive. Unresolved
-		// therefore stays empty by construction rather than by assumption.
-		ScanComplete: scanComplete(sample, decision),
-		Tables:       []contracts.TablePlan{tablePlan},
+		// Derived from the gates above, not assumed: reaching this point means
+		// every declared scope was untruncated and Sensitive.
+		ScanComplete: allComplete && allSensitive,
+		Tables:       tablePlans,
 	}
 	p.ID = hashString(p.Revision + p.SourceSnapshotID + p.TargetID +
 		p.SchemaDigest + p.ConfigDigest)
@@ -260,6 +371,9 @@ func (e *Engine) maskColumn(ctx context.Context, original contracts.Value, col c
 }
 
 func (e *Engine) Validate(ctx context.Context, req contracts.ValidateRequest) (contracts.ValidationReport, error) {
+	if err := requireSingleScope(req.Plan); err != nil {
+		return contracts.ValidationReport{}, err
+	}
 	if err := req.Plan.ValidateShape(); err != nil {
 		return contracts.ValidationReport{}, err
 	}
