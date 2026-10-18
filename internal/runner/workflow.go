@@ -98,27 +98,14 @@ func (e *Engine) Scan(ctx context.Context, req contracts.ScanRequest) (contracts
 	if err := ctx.Err(); err != nil {
 		return report, err
 	}
-	schema, col, err := e.lookup(ctx)
-	if err != nil {
-		return report, err
-	}
-	sample, err := e.source.Sample(ctx, contracts.SampleRequest{
-		Column: col.Ref, Limit: e.cfg.SampleLimit,
-	})
-	if err != nil {
-		return report, err
-	}
-	decision, err := detect.New().Detect(ctx, contracts.DetectionRequest{
-		Column: col, Sample: sample, MinSamples: e.cfg.MinSamples,
-		MinRatio: e.cfg.MinRatio, DateOrder: "MDY",
-	})
+	col, sample, decision, err := e.sampleColumn(ctx)
 	if err != nil {
 		return report, err
 	}
 	report.Decisions = []contracts.Decision{decision}
 	report.Coverage = contracts.Coverage{
 		Tables: 1, Columns: 1, Rows: int64(len(sample.Values)),
-		Complete: !sample.Truncated && decision.Sensitivity == contracts.Sensitive,
+		Complete: scanComplete(sample, decision),
 	}
 	if decision.Sensitivity != contracts.Sensitive {
 		report.Issues = append(report.Issues, contracts.Issue{
@@ -126,12 +113,49 @@ func (e *Engine) Scan(ctx context.Context, req contracts.ScanRequest) (contracts
 			Column: col.Ref, Count: 1,
 		})
 	}
-	_ = schema // coverage was checked by lookup
 	return report, nil
+}
+
+// sampleColumn is the single place that samples and classifies the scoped
+// column, so Scan and Plan can never disagree about the evidence.
+func (e *Engine) sampleColumn(ctx context.Context) (contracts.Column, contracts.Sample, contracts.Decision, error) {
+	var sample contracts.Sample
+	var decision contracts.Decision
+	schema, col, err := e.lookup(ctx)
+	if err != nil {
+		return contracts.Column{}, sample, decision, err
+	}
+	_ = schema // coverage was checked by lookup
+	sample, err = e.source.Sample(ctx, contracts.SampleRequest{
+		Column: col.Ref, Limit: e.cfg.SampleLimit,
+	})
+	if err != nil {
+		return contracts.Column{}, sample, decision, err
+	}
+	decision, err = detect.New().Detect(ctx, contracts.DetectionRequest{
+		Column: col, Sample: sample, MinSamples: e.cfg.MinSamples,
+		MinRatio: e.cfg.MinRatio, DateOrder: "MDY",
+	})
+	if err != nil {
+		return contracts.Column{}, sample, decision, err
+	}
+	return col, sample, decision, nil
+}
+
+// scanComplete reports whether the scan produced enough evidence to authorize a
+// plan. Truncated evidence and any non-Sensitive verdict are both incomplete:
+// UNKNOWN is never treated as safe.
+func scanComplete(sample contracts.Sample, decision contracts.Decision) bool {
+	return !sample.Truncated && decision.Sensitivity == contracts.Sensitive
 }
 
 // Plan builds a deterministic digest from the source snapshot, live schema and
 // explicit scope. The digest is evidence binding, NOT write authorization.
+//
+// Plan always scans, even when cfg.Approved is set: approval is an extra intent
+// signal, never a substitute for detection evidence. A dedicated reviewed-
+// decision store does not exist yet, so an approval cannot be authenticated and
+// must not turn an UNKNOWN or truncated scan into an applicable plan.
 func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 	var empty contracts.Plan
 	schema, col, err := e.lookup(ctx)
@@ -144,14 +168,15 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 	if _, err = mask.NewStrategy(e.cfg.Strategy); err != nil {
 		return empty, err
 	}
-	if !e.cfg.Approved {
-		scanned, scanErr := e.Scan(ctx, contracts.ScanRequest{})
-		if scanErr != nil {
-			return empty, scanErr
-		}
-		if !scanned.Coverage.Complete {
-			return empty, contracts.ErrIncomplete
-		}
+	_, sample, decision, err := e.sampleColumn(ctx)
+	if err != nil {
+		return empty, err
+	}
+	if sample.Truncated {
+		return empty, contracts.ErrIncomplete
+	}
+	if decision.Sensitivity != contracts.Sensitive {
+		return empty, contracts.ErrUnsafe
 	}
 	digest, err := fileDigest(e.cfg.Source)
 	if err != nil {
@@ -184,7 +209,11 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 		SourceSnapshotID: digest,
 		TargetID:         hashString(e.cfg.Target),
 		SchemaDigest:     schemaDigest, ConfigDigest: configDigest,
-		ScanComplete: true, Tables: []contracts.TablePlan{tablePlan},
+		// ScanComplete is derived from the scan above; a plan is only
+		// constructed when that evidence was complete and Sensitive. Unresolved
+		// therefore stays empty by construction rather than by assumption.
+		ScanComplete: scanComplete(sample, decision),
+		Tables:       []contracts.TablePlan{tablePlan},
 	}
 	p.ID = hashString(p.Revision + p.SourceSnapshotID + p.TargetID +
 		p.SchemaDigest + p.ConfigDigest)

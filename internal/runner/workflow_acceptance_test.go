@@ -334,24 +334,36 @@ func acceptanceTreeDigest(t *testing.T, databasePath string) map[string][32]byte
 	return result
 }
 
-func TestApplyAllNullTableCompletesWithoutWriteTransaction(t *testing.T) {
+// TestPlanRefusesAllNullColumnWithoutWriteTransaction replaces the previous
+// "all NULL apply completes" case. A column with no distinct non-NULL value
+// yields UNKNOWN evidence, and Plan now refuses it instead of writing nothing
+// under a plan that claims ScanComplete. The no-side-effect assertion is kept.
+func TestPlanRefusesAllNullColumnWithoutWriteTransaction(t *testing.T) {
 	nulls := make([]string, 130)
 	for i := range nulls {
 		nulls[i] = "<NULL>"
 	}
 	e, _ := acceptanceEngine(t, nulls)
+	before := acceptanceTreeDigest(t, e.cfg.Target)
 	plan, err := e.Plan(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, contracts.ErrUnsafe) {
+		t.Fatalf("all-NULL column plan error=%v, want ErrUnsafe", err)
+	}
+	if plan.ID != "" || plan.ScanComplete {
+		t.Fatalf("refused plan must be empty: %+v", plan)
 	}
 	spy := &writerSpy{}
 	spyEngine(t, e, spy)
-	report, err := e.Apply(context.Background(), contracts.ApplyRequest{Plan: plan, ExplicitApply: true, BatchSize: 2})
-	if err != nil || !report.Complete {
-		t.Fatalf("all NULL apply report=%+v error=%v", report, err)
+	// The refusal must survive an explicit apply attempt, not just Plan.
+	if _, applyErr := e.Apply(context.Background(), contracts.ApplyRequest{Plan: plan, ExplicitApply: true, BatchSize: 2}); applyErr == nil {
+		t.Fatal("apply with a refused plan must fail")
 	}
-	if len(report.Committed) != 0 || spy.opens != 0 || spy.begins != 0 || spy.updates != 0 || spy.commits != 0 {
-		t.Fatalf("NULL-only table performed writes: report=%+v spy=%+v", report, spy)
+	if spy.opens != 0 || spy.begins != 0 || spy.updates != 0 || spy.commits != 0 {
+		t.Fatalf("refused plan performed writes: %+v", spy)
+	}
+	after := acceptanceTreeDigest(t, e.cfg.Target)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("refused plan changed the target fixture tree")
 	}
 }
 
