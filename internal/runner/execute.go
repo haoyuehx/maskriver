@@ -487,9 +487,15 @@ func (e *Engine) dryRun(ctx context.Context, plan contracts.Plan) error {
 // shared visit seam before anything is written.
 //
 // The gates run in a fixed order and all of them pass before a Writer is opened:
-// shape, write authorization, the whole-plan static preflight, and a full dry run
-// over every planned table. A plan is therefore never executed on a subset of its
-// tables, and a table this run can not prove writable refuses the whole plan.
+// shape, explicit intent plus the operator's approval declaration, the
+// authenticated review decision for exactly this plan, the whole-plan static
+// preflight, and a full dry run over every planned table. A plan is therefore
+// never executed on a subset of its tables, and a table this run can not prove
+// writable refuses the whole plan.
+//
+// The review decision is an authentication gate, not detection evidence: it can
+// not turn an UNKNOWN scan into an applicable plan, because the plan reaching
+// Apply already carries complete Sensitive evidence or Plan refused to build it.
 //
 // Committed work is never hidden: the receipt of a batch is appended only after
 // its Commit returned success, so a later failure keeps the earlier receipts in
@@ -509,6 +515,12 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 	}
 	if !req.ExplicitApply || !e.cfg.Approved || req.BatchSize < 1 || req.BatchSize > 1000 {
 		return report, contracts.ErrUnsafe
+	}
+	// A signed review decision bound to exactly this plan is required. It is
+	// checked before any database work, so a missing, forged, foreign, expired,
+	// revoked or unreadable decision refuses the run before a Writer exists.
+	if err := e.checkApproval(ctx, req.Plan); err != nil {
+		return report, err
 	}
 	if err := e.preflight(ctx, req.Plan); err != nil {
 		return report, err

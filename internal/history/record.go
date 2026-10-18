@@ -24,6 +24,13 @@ const (
 	// maxIdentityBytes bounds self-declared identity labels so a record cannot
 	// carry an unbounded attacker-chosen payload.
 	maxIdentityBytes = 256
+	// maxFutureIssuedSkew bounds how far in the future an IssuedAt may be before
+	// Lookup refuses the record. A record cannot have been issued after the
+	// moment it is presented, but two hosts' clocks can disagree by a small
+	// amount, so the skew is tolerated instead of compared exactly. It is a fixed
+	// bound, not a caller-supplied window: a record dated weeks ahead must not
+	// become usable by waiting, and must not be accepted at all.
+	maxFutureIssuedSkew = 5 * time.Minute
 )
 
 // Scope is one reviewed (table, column) target. The full table identity is bound
@@ -278,11 +285,17 @@ func (r Record) checkBinding(plan contracts.Plan) error {
 	return nil
 }
 
-// checkActive refuses a revoked or expired record. A record is valid for
-// now < ExpiresAt; expiry is inclusive of the expiry instant.
+// checkActive refuses a revoked, expired or future-issued record. A record is
+// valid for now < ExpiresAt, with expiry inclusive of the expiry instant, and
+// only while IssuedAt is not later than now plus maxFutureIssuedSkew. The
+// future check is what keeps a record the reviewer dated ahead of the current
+// clock from being treated as an approval that already exists.
 func (r Record) checkActive(now time.Time) error {
 	if r.RevokedAt != nil {
 		return unsafeError(errRevoked)
+	}
+	if r.IssuedAt.After(now.Add(maxFutureIssuedSkew)) {
+		return unsafeError(errFutureIssued)
 	}
 	if !now.Before(r.ExpiresAt) {
 		return unsafeError(errExpired)
@@ -363,11 +376,13 @@ func claimedPlanID(raw []byte) (string, bool) {
 var (
 	errCorrupt        = errors.New("history record is not a canonical record")
 	errSignature      = errors.New("history record signature does not verify")
+	errSignerMismatch = errors.New("review signing key does not match the trusted key it names")
 	errUnknownSigner  = errors.New("history record signer is not trusted")
 	errForeignSigner  = errors.New("history record was signed by another key")
 	errNoTrustedKey   = errors.New("no trusted reviewer key configured")
 	errNoSigner       = errors.New("no review signing key configured")
 	errExpired        = errors.New("history record has expired")
+	errFutureIssued   = errors.New("history record was issued in the future")
 	errRevoked        = errors.New("history record is revoked")
 	errAlreadyRevoked = errors.New("history record is already revoked")
 	errBinding        = errors.New("history record does not bind this plan")

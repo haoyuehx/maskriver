@@ -12,8 +12,9 @@ import (
 
 // The scan gate must be independent of approval: `cfg.Approved` is an extra
 // intent signal from the operator, never a substitute for detection evidence.
-// A dedicated reviewed-decision store does not exist yet, so an approval can
-// not authenticate an UNKNOWN or truncated scan into an applicable plan.
+// A stored reviewer decision (work package C2) authenticates a plan that already
+// carries complete Sensitive evidence; it can not turn an UNKNOWN or truncated
+// scan into an applicable plan, because such a scan yields no plan at all.
 
 func TestPlanScansSensitiveColumnEvenWhenApproved(t *testing.T) {
 	e, _ := acceptanceEngine(t, []string{"a@example.invalid", "b@example.invalid"})

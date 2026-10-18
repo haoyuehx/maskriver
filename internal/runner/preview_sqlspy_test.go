@@ -79,6 +79,7 @@ func spyEngineReaders(t *testing.T, cfg config.Runtime, key contracts.Value, spy
 		t.Fatal(err)
 	}
 	engine := &Engine{cfg: cfg, source: source, target: target, key: key}
+	useTestApproval(engine)
 	t.Cleanup(func() { _ = engine.Close() })
 	return engine
 }

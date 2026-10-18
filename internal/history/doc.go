@@ -35,8 +35,9 @@
 // Detectable: any byte changed in a present record (the detached signature and
 // the strict canonical form both break), a record signed by an unknown key or by
 // a key the record does not name, a valid signature over a different plan, an
-// expired record, a revoked record, and an ambiguous store holding two decodable
-// records that claim the same plan.
+// expired record, a revoked record, a record issued later than the tolerated
+// clock skew allows, and an ambiguous store holding two decodable records that
+// claim the same plan.
 //
 // Not detectable: anything an attacker with write control of the store directory
 // does with whole-file operations. This is a local file store, not a
@@ -69,6 +70,16 @@
 // no writer can observe or leave a torn file, and a reader either sees the old
 // record or the new one. Two decodable records claiming the same plan under
 // different names are refused as ambiguous rather than resolved by file order.
+//
+// # Deployment trust
+//
+// The trusted public keys and the reviewer private key are supplied by the
+// caller. LoadTrustFile and LoadSignerKeyFile read them from deployment files so
+// the review CLI can point at a pre-provisioned trust set instead of naming the
+// key it wants to trust. That is a local file boundary, not RBAC: an operator who
+// can write both the trust file and the reviewer key file can approve a plan,
+// and this package does not detect or prevent that. Separating provisioning
+// authority is a deployment responsibility.
 //
 // # Writes are explicit
 //

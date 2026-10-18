@@ -1,5 +1,22 @@
 // Command maskriver runs the bounded, SQLite-only M1 workflow.
 // Inputs must be pre-existing, separate disposable database snapshots.
+//
+// Write authorization is a two-part decision. `mask --apply` states intent, and
+// Apply additionally requires an authenticated reviewer decision bound to exactly
+// the plan. The decision is issued by the separate `approve` command with a
+// reviewer private key and read back with the deployment trust file, so the apply
+// invocation never receives a reviewer private key. `revoke` retires a decision.
+//
+// The recorded ReviewerID is a self-declared label. It is not an authenticated
+// independent reviewer identity: the only authenticated fact is "the holder of
+// the trusted key named by the decision signed this plan".
+//
+// Trust boundary, stated honestly: the trust file is a local deployment file, so
+// an operator who controls both the trust file and the reviewer key file has not
+// been prevented from approving their own plan. This is a local signature
+// boundary, not a non-bypassable RBAC. Provisioning the trust file and the
+// reviewer key under different authorities is a deployment responsibility this
+// tool can not verify.
 package main
 
 import (
@@ -14,6 +31,7 @@ import (
 	"time"
 
 	"github.com/haoyuehx/maskriver/internal/config"
+	"github.com/haoyuehx/maskriver/internal/history"
 	"github.com/haoyuehx/maskriver/internal/runner"
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
@@ -40,17 +58,23 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintln(stdout, "MaskRiver", version)
 		return 0
-	case "scan", "mask", "validate":
+	case "scan", "mask", "validate", "approve", "revoke":
 	default:
 		return usageError(stderr)
 	}
 	command := args[0]
+	// reviewCommand covers the explicit issuance surface. Neither command runs a
+	// write on the database; they only build the plan and persist one decision.
+	reviewCommand := command == "approve" || command == "revoke"
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	// The standard parser includes invalid values and unknown flag names in
 	// its errors. Keep those details away from user-visible output.
 	flags.SetOutput(io.Discard)
 	cfg := config.Runtime{}
 	var source, target, keyFile string
+	var trustFile, historyDir string
+	var reviewerKeyID, reviewerKeyFile, reviewerID string
+	var validFor time.Duration
 	var apply, strict bool
 	var strategy, keyID string
 	var scopes scopeFlag
@@ -67,14 +91,30 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if command != "scan" {
 		flags.StringVar(&strategy, "strategy", "redact", "supported strategy identifier")
 		flags.StringVar(&keyID, "key-id", "", "opaque ID for external Bytes key")
-		flags.StringVar(&keyFile, "key-file", "", "local key bytes file, never echoed")
+		if !reviewCommand {
+			flags.StringVar(&keyFile, "key-file", "", "local key bytes file, never echoed")
+		}
+	}
+	if command == "mask" || command == "validate" {
 		flags.BoolVar(&cfg.Approved, "approved", false, "affirm a separately reviewed column decision")
 	}
 	if command == "mask" {
 		flags.BoolVar(&apply, "apply", false, "explicitly request writes after full preview")
+		flags.StringVar(&trustFile, "trust-file", "", "deployment-provisioned reviewer trust file (required with --apply)")
+		flags.StringVar(&historyDir, "history-dir", "", "review-decision store directory (required with --apply)")
 	}
 	if command == "validate" {
 		flags.BoolVar(&strict, "strict", true, "refuse any incomplete or warning coverage")
+	}
+	if reviewCommand {
+		flags.StringVar(&trustFile, "trust-file", "", "deployment-provisioned reviewer trust file")
+		flags.StringVar(&historyDir, "history-dir", "", "review-decision store directory")
+		flags.StringVar(&reviewerKeyID, "reviewer-key-id", "", "trusted signer key id the reviewer key belongs to")
+		flags.StringVar(&reviewerKeyFile, "reviewer-key-file", "", "local reviewer Ed25519 private key file, never echoed")
+	}
+	if command == "approve" {
+		flags.StringVar(&reviewerID, "reviewer-id", "", "self-declared reviewer label recorded in the decision")
+		flags.DurationVar(&validFor, "valid-for", 24*time.Hour, "decision validity window")
 	}
 	// Usage always follows the FlagSet output stream so that help is printed
 	// exactly once: discarded during Parse, then re-enabled only for -h.
@@ -119,8 +159,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if command == "mask" && apply && !cfg.Approved {
 		return fail(stderr, 2) // rule classification alone never grants writes
 	}
+	// The review commands state every deployment input explicitly. A missing
+	// trust file or reviewer key is a configuration error, not an operation
+	// refusal, so it exits 2 without echoing a path.
+	if reviewCommand {
+		if trustFile == "" || historyDir == "" || reviewerKeyID == "" || reviewerKeyFile == "" || keyID == "" {
+			return fail(stderr, 2)
+		}
+		if command == "approve" && (reviewerID == "" || validFor <= 0) {
+			return fail(stderr, 2)
+		}
+	}
 	var key contracts.Value
-	if command != "scan" {
+	if command == "mask" || command == "validate" {
 		if keyFile == "" || keyID == "" {
 			return fail(stderr, 2)
 		}
@@ -133,6 +184,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return fail(stderr, 2)
 		}
 		key, err = contracts.NewValue(contracts.Bytes, string(content))
+		if err != nil {
+			return fail(stderr, 2)
+		}
+	}
+	if command == "mask" && apply && (trustFile == "" || historyDir == "") {
+		return fail(stderr, 2)
+	}
+	var reviewStore *history.Store
+	if reviewCommand {
+		reviewStore, err = openSigningStore(trustFile, historyDir, reviewerKeyID, reviewerKeyFile)
 		if err != nil {
 			return fail(stderr, 2)
 		}
@@ -160,6 +221,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(stderr, 1)
 	}
+	if reviewCommand {
+		return issueDecision(ctx, command, reviewStore, plan, reviewerID, validFor, stdout, stderr)
+	}
 	if command == "validate" {
 		report, err := engine.Validate(ctx, contracts.ValidateRequest{Plan: plan, Strict: strict})
 		if err != nil {
@@ -182,6 +246,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 			report.RowsRead, report.Coverage.Complete)
 		return 0
 	}
+	// Apply reads the decision through a read-only query. The trust set comes from
+	// the deployment trust file and no reviewer private key exists on this path.
+	trust, err := history.LoadTrustFile(trustFile)
+	if err != nil {
+		return fail(stderr, 2)
+	}
+	approvalStore, err := history.Open(history.Config{Dir: historyDir, Trust: trust})
+	if err != nil {
+		return fail(stderr, 2)
+	}
+	engine.SetApprovalQuery(approvalStore)
 	report, err := engine.Apply(ctx, contracts.ApplyRequest{
 		Plan: plan, ExplicitApply: true, BatchSize: cfg.BatchSize,
 	})
@@ -200,6 +275,47 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if !report.Complete {
 		return 1
 	}
+	return 0
+}
+
+// openSigningStore builds the write-capable review store from deployment files.
+// The trust set and the reviewer key only meet here: the trust entry names the
+// public key, and history.Open refuses a private key that is not that key.
+func openSigningStore(trustFile, historyDir, reviewerKeyID, reviewerKeyFile string) (*history.Store, error) {
+	trust, err := history.LoadTrustFile(trustFile)
+	if err != nil {
+		return nil, err
+	}
+	private, err := history.LoadSignerKeyFile(reviewerKeyFile)
+	if err != nil {
+		return nil, err
+	}
+	return history.Open(history.Config{
+		Dir: historyDir, Trust: trust,
+		Signer: &history.Signer{SignerKeyID: reviewerKeyID, Private: private},
+	})
+}
+
+// issueDecision persists one explicit reviewer decision. The printed summary
+// carries counts and the requested window only: no plan id, path, key or value.
+func issueDecision(ctx context.Context, command string, store *history.Store, plan contracts.Plan,
+	reviewerID string, validFor time.Duration, stdout, stderr io.Writer) int {
+	if command == "revoke" {
+		if _, err := store.Revoke(ctx, history.RevokeRequest{Plan: plan, RevokedAt: time.Now()}); err != nil {
+			return fail(stderr, 1)
+		}
+		fmt.Fprintln(stdout, "revoke: stored=true")
+		return 0
+	}
+	now := time.Now()
+	record, err := store.Approve(ctx, history.ApproveRequest{
+		Plan: plan, ReviewerID: reviewerID,
+		IssuedAt: now, ExpiresAt: now.Add(validFor),
+	})
+	if err != nil {
+		return fail(stderr, 1)
+	}
+	fmt.Fprintf(stdout, "approve: stored=true scopes=%d valid_for=%s\n", len(record.Scopes), validFor)
 	return 0
 }
 
@@ -272,9 +388,12 @@ func (f *scopeFlag) Set(raw string) error {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "MaskRiver — bounded SQLite data masking (M1 in development)")
-	fmt.Fprintln(w, "Usage: maskriver <scan|mask|validate|version> [flags]")
+	fmt.Fprintln(w, "Usage: maskriver <scan|mask|validate|approve|revoke|version> [flags]")
 	fmt.Fprintln(w, "Two independent pre-existing SQLite files are required; mask defaults to dry run.")
-	fmt.Fprintln(w, "Only mask --apply --approved grants write intent. Use authorized synthetic copies.")
+	fmt.Fprintln(w, "mask --apply --approved also requires a stored reviewer decision bound to the plan.")
+	fmt.Fprintln(w, "approve/revoke sign with a reviewer key; apply reads the deployment trust file only.")
+	fmt.Fprintln(w, "A local operator controlling both trust file and reviewer key is not stopped by RBAC.")
+	fmt.Fprintln(w, "Use authorized synthetic copies.")
 }
 
 func usageError(w io.Writer) int {

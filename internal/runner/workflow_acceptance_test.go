@@ -65,6 +65,7 @@ func acceptanceEngine(t *testing.T, rows []string) (*Engine, func()) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	useTestApproval(engine)
 	cleanup := func() { _ = engine.Close() }
 	t.Cleanup(cleanup)
 	return engine, cleanup

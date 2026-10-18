@@ -126,6 +126,7 @@ func TestWALSourceIsRefusedBySnapshotIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	useTestApproval(engine)
 	before := acceptanceTreeDigest(t, cfg.Target)
 	plan, err := engine.Plan(ctx)
 	if !errors.Is(err, contracts.ErrIncomplete) {
