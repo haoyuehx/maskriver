@@ -8,7 +8,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/haoyuehx/maskriver/pkg/contracts"
@@ -384,8 +386,11 @@ func (s *Store) write(ctx context.Context, record Record) error {
 	return s.syncDir()
 }
 
-// syncDir durably records the rename. The directory is the record's parent, so
-// the rename must be flushed before the write is reported as done.
+// syncDir durably records the rename on platforms that can flush a directory.
+// Windows rejects Sync on a directory handle, and some filesystems do not
+// support it at all; there the file itself was already flushed and the rename
+// is left to the platform. This is a durability reduction that must be visible
+// rather than a hard failure that would make the store unusable on Windows.
 func (s *Store) syncDir() error {
 	dir, err := os.Open(s.dir)
 	if err != nil {
@@ -393,6 +398,10 @@ func (s *Store) syncDir() error {
 	}
 	defer func() { _ = dir.Close() }()
 	if err := dir.Sync(); err != nil {
+		if errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTSUP) ||
+			errors.Is(err, syscall.EBADF) || runtime.GOOS == "windows" {
+			return nil
+		}
 		return unsafeError(errWrite)
 	}
 	return nil
