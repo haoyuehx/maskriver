@@ -30,7 +30,7 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 |---|---|---|---|
 | 独立 Go module、可编译 CLI help/version | 无框架依赖，标准库 CLI | 已实现 | M0 |
 | `scan` / `mask` / `validate` CLI | SQLite 单表单列路径已能真实执行 Detect→Preview→授权 Apply→Strict Validate；多表/审查存储/MySQL CLI 尚未实现 | 部分实现（PR #35 有界路径） | #9 |
-| 默认 Dry Run，`--apply` 单一写意图 | PR #35 默认 Preview 不构建 Writer，需 --apply --approved；SQLite 测试证明 target 文件 SHA256 不变与 source 快照不变，SQL Spy 尚未交付 | 部分实现（SQLite 有界路径） | #9/#11 |
+| 默认 Dry Run，`--apply` 单一写意图 | CLI 与 Runner 均要求显式 Apply + Approved；真实 SQLite 的 Preview 文件树 SHA256、Writer 能力 Spy、NULL/故障/提交未知回归见 [2026-10-18 收尾证据](m1-runner-acceptance.md)；SQL Driver Spy 尚未交付 | 部分实现（SQLite 有界路径） | #9/#11 |
 | 配置文件、环境变量展开、参数校验 | 连接/检测/脱敏/验证分段校验 | 计划中 | M1 |
 | 连接生命周期、schema/table/column/type/PK 元数据 | SQLite/MySQL Reader/Writer，元数据与 SchemaCoverage 保守声明；不支持或可能丢精度的映射显式拒绝 | 部分实现（#5 组件） | #5 / PR #21；MySQL 业务待 #10 验证 |
 | distinct 非空抽样、表/列过滤 | typed、非 NULL distinct 有界抽样；按 DataSetID/Schema/TableRef 限定访问范围 | 部分实现（#5 组件） | #5 / PR #21 |
@@ -116,7 +116,7 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 | 确定性：同输入同 scope 同输出 | HMAC 绑定 typed 输入/策略 ID+Version/scope/normalization/keyID；不承诺无碰撞或第三方兼容 | 部分实现（组件） | #7 / PR #24 |
 | 并发安全内存映射 | Lookup 和 atomic GetOrCreate；映射键为加密指纹，测试含并发/取消；不持久化 | 部分实现（内存组件） | #7 / PR #24 |
 | 持久映射：加盐指纹、不存原值、可复用 | 持久加盐指纹映射、加密存储及恢复仍无实现 | 计划中 | 后续 M1/Main |
-| Dry Run 零持久副作用 | PR #35 SQLite 测试有文件 SHA256 前后证明，但 SQL Spy / 审计文件树尚无独立证据 | 部分实现（文件证据） | #9/#11 |
+| Dry Run 零持久副作用 | 真实 SQLite Preview 的完整合成目录文件集合/SHA256 与 Writer 能力 Spy 已测；不等于 SQL Driver Spy 或并发快照保证，见 [收尾证据](m1-runner-acceptance.md) | 部分实现（文件证据） | #9/#11 |
 | 默认隐藏预览值 | 原值显示开关须单独评审，不默认实现 | 计划中 | M1/Main |
 | 审核历史：pending/approved、审核人、过期、审计 | 最小格式优先，CSV 次之 | 计划中 | M1/Main |
 | 历史导入/导出、回写与冲突检测 | 回写须备份与冲突检查 | 未实现 | 后续增量 |

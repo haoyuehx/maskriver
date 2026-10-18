@@ -109,3 +109,15 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 对比正确性与吞吐/延迟/RSS/CPU/分配；检测能力以标注集按规则报告 precision/recall/F1。可视化只使用合成数据与汇总指标。
 
 不设置虚构覆盖率或吞吐成绩。不使用生产数据；临时文件使用 `t.TempDir`，MySQL 使用隔离测试实例。
+
+## #9 Runner 授权与故障回归（2026-10-18）
+
+`internal/runner/workflow_acceptance_test.go` 使用真实 SQLite source/target，包装现有 Writer/WriteTx 接口作实例级能力与事务 Spy：
+
+- 未 Approved、无 ExplicitApply、篡改 Plan、Preview 目标不一致：不打开 Writer。
+- Preview：读取全部计划行，fixture 目录（source/target/key/sentinel）文件集合及 SHA256 不变，Writer/Begin/Update/Commit 为零；这**不是 SQL Driver Spy**。
+- 混合 NULL 跨批次只更新非 NULL，NULL 保持；130 行全 NULL 跨页不打开 Writer。Preview 计读取行，receipt 只计实际更新行。
+- Begin/Update/受影响行数不符/取消：错误返回，SQL 回读无未提交变化，Writer 关闭；Rollback 使用未取消、有 deadline 的独立清理 context。驱动可能不遵守该 deadline，不承诺硬超时。
+- 第二批失败保留首批 receipt，SQL 回读确认已提交前缀；包装 ErrCommitUnknown 可识别，不自动重试或声称回滚。真实 SQLite 提交后模拟确认丢失，证明实际写入与保守报告的区别。
+
+命令：`go test -count=1 -v ./internal/runner`、`go test -count=1 ./...`、`go vet ./...`、`go test -race ./...`。本机 Linux/Go 1.26.3 已执行；MySQL 无隔离 socket 时仍 SKIP，不能以本包替代 MySQL CLI 或完整 #11 验收。完整边界及未解决发现见 [Runner 收尾证据](m1-runner-acceptance.md)。
