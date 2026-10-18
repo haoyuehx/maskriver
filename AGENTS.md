@@ -1,35 +1,41 @@
-# MaskRiver 四人协作与 Agent 契约
+# MaskRiver AI 自主开发与 Agent 契约
 
 ## 项目与工作方式
 
-MaskRiver 是四位成员共同维护的独立 Go 数据脱敏与敏感信息治理项目。共享接口 `pkg/contracts` 的 `APIRevision=m1a-v1` 已冻结，业务组件完成情况以 [Feature Matrix](docs/feature-matrix.md) 为准。
+MaskRiver 是由 AI Agent 自主开发与维护的独立 Go 数据脱敏与敏感信息治理项目。共享接口 `pkg/contracts` 的 `APIRevision=m1a-v1` 已冻结，业务组件完成情况以 [Feature Matrix](docs/feature-matrix.md) 为准。
 
-1. 四位成员各自在 Windows、Linux 或 macOS clone 本仓库，认领 Issue，创建个人功能分支，通过 PR 交付；不要求共享目录或同一台机器。
-2. 每个 PR 尽量只改一个模块；仅模块负责人和经授权的协作者修改对应模块。角色是职责，不是固定 GitHub 账号或必须启动的 Agent。
-3. 共享契约、依赖及跨模块变动先交 Main（集成协调职责，可由团队成员承担）协调。Main 不等于第五名成员。
-4. 各自运行能执行的 Go 测试，记录系统、Go 版本、命令与结果；不支持或未运行的测试明确标为 SKIP/UNVERIFIED。合并前统一 CI 和代码评审必须通过。
-5. Pi Multi-Agent 只是可选工具，不是开发前置条件。Agent 仅在明确授权的范围内工作，不自行启动其他 Agent、安装扩展、提交或推送；人类成员可正常提交、推送功能分支和创建 PR。
+1. 项目不要求真实人员认领 Issue、编写代码或执行常规 Code Review。所有常规开发职责由获授权的 AI Agent 承担，职责划分见下节。
+2. 每个 PR 尽量只改一个模块；Agent 只能写入自己被分配的模块范围。角色是职责边界，不是模型或固定 GitHub 账号。
+3. 共享契约、依赖及跨模块变动先交 Orchestrator 协调并记录授权。Orchestrator 是集成与调度职责，不是额外成员。
+4. Agent 运行能执行的 Go 测试，记录系统、Go 版本、命令与结果；不支持或未运行的测试明确标为 SKIP/UNVERIFIED。合并前统一 CI 与独立 AI 评审必须通过。
+5. 仓库所有者按任务授予 AI 创建分支、提交、推送功能分支、创建 PR 及合并合格 PR 的权限；该授权限于被指派的任务范围，不是长期通用许可。Agent 不得在授权范围外自行启动其他 Agent、安装扩展或改变仓库配置。
 6. Issue 只跟踪产品开发、测试与安全验收，不记录临时模型配额、个人会话或缓存清理任务。旧本机 worktree 由设备持有人处理，关闭 Issue 不授权删除。
 
 ## 工作边界
 
 - 在各自 MaskRiver 克隆或经授权的独立工作树中工作；不修改其他项目或系统状态，不使用 sudo、不修改宿主安全策略或系统服务。
-- 多个 writer 不共用工作目录；Git worktree 和 Native 隔离均为可选方式，不强制路径、操作系统、模型或开发工具。
+- 多个 writer 不共用工作目录；同一模块的依赖任务串行执行，同时运行的写入 Agent 原则上不超过两个，且文件集合必须不重叠。
 - 实现依据：[contracts](docs/contracts.md)、[architecture](docs/architecture.md)、[feature-matrix](docs/feature-matrix.md)、[test-plan](docs/test-plan.md)，不参考其他项目的实现指导编码。
 - 不复制第三方源码、词典、配置、测试数据或密钥；确需复用时先审核版权、许可与来源，更新 [attribution](docs/attribution.md)。
+- 不更改 Git 历史归属，不伪造人类贡献或作者信息；保留 PR 原作者归属，优先使用正常 merge 而非 squash。
 
-## 模块责任
+## Agent 职责与写入边界
 
 | 职责 | 负责范围 | 边界 |
 |---|---|---|
-| Main / 集成协调 | `cmd/maskriver`、`internal/config`、`internal/runner`、`internal/history`、`internal/testenv`、`tools`、`scripts`、`go.mod`/`go.sum`、`docs`、根文件、`.github`、`.pi`、`pkg` | 共享变更先协调 |
+| Orchestrator | 仓库状态分析、任务拆解、依赖排序、Agent 调度、质量门禁、集成与合格 PR 合并 | 不绕过分支保护；不降低验收标准 |
+| Explorer | 只读调查代码、Issue、PR、CI 与文档 | 无写入权限 |
+| Architect | 接口与架构方案、事务一致性、失败恢复、并发与数据安全评估 | 只读；方案交 Coder 实现 |
+| Coder | 最小范围 Go 实现与对应测试 | 仅限分配的文件集合；不改共享契约 |
+| QA | 正例/反例/边界测试设计，独立执行并核对结果 | 不直接相信 Coder 的成功声明 |
+| Security Reviewer | 独立上下文审查 Diff、调用链与证据，输出 P0/P1/P2 | 不审查自己的实现；只读 |
 | go-db | `internal/db` 及其测试 | 不改共享配置和依赖 |
 | go-detect | `internal/detect` 及其测试 | 不改数据库或策略实现 |
 | go-mask | `internal/mask` 及其测试 | 不改数据库或验证实现 |
 | go-verify | `internal/verify`、`tests` | 不改他人源码或测试，提出建议 |
-| reviewer（人类或 AI） | 只读审查、PR 评论 | 修复另交模块负责人 |
+| Main / 集成 | `cmd/maskriver`、`internal/config`、`internal/runner`、`internal/history`、`internal/testenv`、`tools`、`scripts`、`go.mod`/`go.sum`、`docs`、根文件、`.github`、`.pi`、`pkg` | 共享变更先协调 |
 
-四位成员可兼任集成或评审职责，具体认领记录在 Issue/PR。模块 PR 的文档更新由 Main 协调完成或显式授权，不因验收要求默许跨边界修改。
+职责可兼任，但实现者不得作为该实现的独立评审者。模块文档更新由 Main 协调完成或显式授权，不因验收要求默许跨边界修改。
 
 ## 契约与验收
 
@@ -40,8 +46,23 @@ MaskRiver 是四位成员共同维护的独立 Go 数据脱敏与敏感信息治
 - 缺陷修复先有失败回归；仅用合成 fixture，覆盖未写入、无泄露、错误与取消路径。
 - M1-B 真实 SQLite 测试必须通过。MySQL 可以在开发机一次性容器或 CI 中执行；缺环境不阻塞纯内存组件开发，但标记未验证。最终 M1 必须通过真实 MySQL 集成，Mock、编译、fixture smoke 或跳过不能替代业务集成。
 - PR 给出关联 Issue、基线 SHA、修改文件、测试命令/结果、风险及契约建议；Feature Matrix 只根据实际验收更新。
-- reviewer 给出严重度、文件:行号、触发条件、复现与建议。AI Reviewer 遵守具体授权；人类可运行安全的合成测试，不强制某个工具 allowlist。
-- 经统一 CI 和独立评审后，由有合并权限的维护者合并；作者不自行绕过审核。未运行测试或配置就绪不等于执行成功。
+- Reviewer 给出严重度、文件:行号、触发条件、复现与建议。AI Reviewer 使用独立上下文，遵守具体授权，不得复述实现者的结论。
+- 不得通过删除测试、放宽断言、跳过安全检查或无限重跑来让 CI 变绿；连续两次实质性修复失败须输出诊断报告并重新评估方案。
+
+## 自动合并门禁
+
+Orchestrator 可在满足全部条件时直接合并 PR，无需逐次人工批准。合并前必须把结论、被评审的 Head SHA 与证据位置记录在该 PR 中。
+
+1. **必需 CI** 指 GitHub 在该 PR Head SHA 上实际报告的 check run 集合。凡触发了却失败、被跳过或因 workflow 配置无效而未运行（0 job）的，一律不算通过；SKIP 与 UNVERIFIED 不构成通过。被自身 path filter 明确排除、本就不适用于该 diff 的工作流不在此列，但不得因为“没触发”而把应当运行的检查当作通过。
+2. 独立上下文的 QA 已实际执行测试并核对结果，不是复述实现者的声明。
+3. 独立上下文的 Security Review 结论为通过，且**没有未解决的 P0/P1**。P0/P1 的关闭必须由第二个独立上下文复核，Orchestrator 不得自行认定自己实现中发现的问题已解决。
+4. 变更文件未越出该任务授权的范围。
+5. 未变更冻结契约，或已记录明确批准的修订。
+6. 无敏感数据泄露风险。
+7. 无未解决的合并冲突。
+8. GitHub 的分支保护规则允许当前身份合并。
+
+合并前必须在该 PR 中记录：被评审的 Head SHA、本次授权的文件范围、评审者标识与独立上下文、P0/P1 的逐条处置结论，以及证据路径。任一条件不满足即不得合并；被分支保护或权限阻塞时报告，不绕过。实现者不得批准自己的实现，也不得单独关闭自己实现上的 P0/P1。
 
 ## 安全不变量
 
@@ -51,3 +72,5 @@ UNKNOWN 不等于 NOT_SENSITIVE；缺失功能显式失败；只读预览不得�
 脱敏不等于匿名化，确定性不等于无碰撞或关联完整性，不声称解决所有 PK/FK/唯一性问题。
 禁止提交真实个人数据、连接凭证、密钥、种子、映射库、Agent 会话或数据库文件；公开前检查暂存区。
 权限、基础设施或边界冲突时停止受影响操作并报告，不绕过安全策略；其他独立模块可继续。
+
+上述安全不变量不因 AI 自主开发而放宽；任何降低测试、安全或许可要求的改动都必须显式评审并记录理由。
