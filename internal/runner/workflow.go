@@ -20,10 +20,11 @@ import (
 )
 
 type Engine struct {
-	cfg    config.Runtime
-	source contracts.Reader
-	target contracts.Reader
-	key    contracts.Value
+	cfg        config.Runtime
+	source     contracts.Reader
+	target     contracts.Reader
+	key        contracts.Value
+	openWriter func(context.Context, contracts.DatabaseOptions) (contracts.Writer, error)
 }
 
 // Open requires two independent, existing SQLite files and opens only Readers.
@@ -46,7 +47,7 @@ func Open(ctx context.Context, cfg config.Runtime, key contracts.Value) (*Engine
 		_ = source.Close()
 		return nil, err
 	}
-	return &Engine{cfg: cfg, source: source, target: target, key: key}, nil
+	return &Engine{cfg: cfg, source: source, target: target, key: key, openWriter: db.OpenWriter}, nil
 }
 
 func (e *Engine) Close() error {

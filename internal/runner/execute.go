@@ -2,6 +2,8 @@ package runner
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"github.com/haoyuehx/maskriver/internal/db"
 	"github.com/haoyuehx/maskriver/pkg/contracts"
@@ -122,6 +124,9 @@ func (e *Engine) visit(ctx context.Context, plan contracts.Plan, budget int64, e
 
 func (e *Engine) Preview(ctx context.Context, req contracts.PreviewRequest) (contracts.PreviewReport, error) {
 	var report contracts.PreviewReport
+	if ctx == nil {
+		return report, contracts.ErrInvalid
+	}
 	if err := e.checkPlan(ctx, req.Plan); err != nil {
 		return report, err
 	}
@@ -139,7 +144,10 @@ func (e *Engine) Preview(ctx context.Context, req contracts.PreviewRequest) (con
 func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contracts.ApplyReport, error) {
 	var report contracts.ApplyReport
 	report.PlanID = req.Plan.ID
-	if !req.ExplicitApply || req.BatchSize < 1 || req.BatchSize > 1000 {
+	if ctx == nil {
+		return report, contracts.ErrInvalid
+	}
+	if !req.ExplicitApply || !e.cfg.Approved || req.BatchSize < 1 || req.BatchSize > 1000 {
 		return report, contracts.ErrUnsafe
 	}
 	if err := e.checkPlan(ctx, req.Plan); err != nil {
@@ -154,11 +162,11 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 	if err != nil {
 		return report, err
 	}
-	writer, err := db.OpenWriter(ctx, opts)
-	if err != nil {
-		return report, err
+	openWriter := e.openWriter
+	if openWriter == nil {
+		openWriter = db.OpenWriter
 	}
-	defer writer.Close()
+	var writer contracts.Writer
 
 	table := req.Plan.Tables[0]
 	cols := append([]string(nil), table.PrimaryKey...)
@@ -210,30 +218,43 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 				}
 				change.Key = append(change.Key, v)
 			}
-			changes = append(changes, change)
-		}
-		tx, err := writer.Begin(ctx, table)
-		if err != nil {
-			return report, err
-		}
-		n, err := tx.Update(ctx, changes)
-		if err != nil || n != int64(len(changes)) {
-			_ = tx.Rollback(context.Background())
-			if err == nil {
-				err = contracts.ErrConflict
+			if !originals[i].IsNull() {
+				changes = append(changes, change)
 			}
-			return report, err
 		}
-		if err = tx.Commit(ctx); err != nil {
-			if err == contracts.ErrCommitUnknown {
-				report.CommitOutcomeUnknown = true
+		if len(changes) > 0 {
+			if writer == nil {
+				writer, err = openWriter(ctx, opts)
+				if err != nil {
+					return report, err
+				}
+				defer writer.Close()
 			}
-			return report, err
+			tx, err := writer.Begin(ctx, table)
+			if err != nil {
+				return report, err
+			}
+			n, err := tx.Update(ctx, changes)
+			if err != nil || n != int64(len(changes)) {
+				_ = rollbackBounded(tx)
+				if err == nil {
+					err = contracts.ErrConflict
+				}
+				return report, err
+			}
+			if err = tx.Commit(ctx); err != nil {
+				if errors.Is(err, contracts.ErrCommitUnknown) {
+					report.CommitOutcomeUnknown = true
+				} else {
+					_ = rollbackBounded(tx)
+				}
+				return report, err
+			}
+			ordinal++
+			report.Committed = append(report.Committed, contracts.BatchReceipt{
+				Table: table.Table, Ordinal: ordinal, Rows: n,
+			})
 		}
-		ordinal++
-		report.Committed = append(report.Committed, contracts.BatchReceipt{
-			Table: table.Table, Ordinal: ordinal, Rows: n,
-		})
 		if page.Done {
 			report.Complete = true
 			return report, nil
@@ -243,4 +264,10 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 		}
 		after = append([]contracts.Value(nil), page.Next...)
 	}
+}
+
+func rollbackBounded(tx contracts.WriteTx) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return tx.Rollback(ctx)
 }
