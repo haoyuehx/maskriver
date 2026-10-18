@@ -7,6 +7,7 @@ package runner
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"reflect"
 	"testing"
@@ -71,6 +72,44 @@ func TestPreflightRefusesTriggerOnPlannedTable(t *testing.T) {
 	if _, err := engine.Preview(context.Background(), contracts.PreviewRequest{Plan: plan}); !errors.Is(err, contracts.ErrUnsupported) {
 		t.Fatalf("preview error=%v, want ErrUnsupported", err)
 	}
+}
+
+// TestPreflightRefusesTargetOnlyTrigger is the P1 regression from review: the
+// write lands in the target snapshot, so a trigger that exists only there still
+// fires. Checking the source alone reported success while the trigger wrote
+// extra rows.
+func TestPreflightRefusesTargetOnlyTrigger(t *testing.T) {
+	statements := append(append([]string(nil), twoPeopleRows...),
+		`CREATE TABLE audit (id INTEGER PRIMARY KEY, note TEXT NULL)`,
+	)
+	cfg := preflightFixture(t, statements...)
+	// Add the trigger to the target only, after both snapshots were built.
+	targetDB, err := sql.Open("sqlite", "file:"+cfg.Target+"?mode=rwc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = targetDB.Exec(`CREATE TRIGGER people_email_audit AFTER UPDATE OF email ON people
+		BEGIN INSERT INTO audit(note) VALUES ('changed'); END`); err != nil {
+		_ = targetDB.Close()
+		t.Fatal(err)
+	}
+	if err = targetDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	engine := scopeEngine(t, cfg)
+	assertApplyRefused(t, engine, mustPlan(t, engine), contracts.ErrUnsupported)
+}
+
+// TestPreflightRefusesCaseVariantTrigger is the second P1 regression: SQLite
+// stores tbl_name exactly as written in the trigger DDL, so a trigger declared
+// ON PEOPLE for table people was previously missed by an exact-match lookup.
+func TestPreflightRefusesCaseVariantTrigger(t *testing.T) {
+	engine := scopeEngine(t, preflightFixture(t, append(append([]string(nil), twoPeopleRows...),
+		`CREATE TABLE audit (id INTEGER PRIMARY KEY, note TEXT NULL)`,
+		`CREATE TRIGGER people_email_audit AFTER UPDATE OF email ON PEOPLE
+		 BEGIN INSERT INTO audit(note) VALUES ('changed'); END`,
+	)...))
+	assertApplyRefused(t, engine, mustPlan(t, engine), contracts.ErrUnsupported)
 }
 
 // TestPreflightRefusesForeignKeyOnModifiedColumn covers both directions of the

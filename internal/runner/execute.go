@@ -361,16 +361,21 @@ func (e *Engine) checkTableCapabilities(ctx context.Context, table contracts.Tab
 	for _, col := range table.Columns {
 		modified[col.Column.Column] = true
 	}
-	caps, err := sourceCapabilities(e.source)
-	if err != nil {
-		return err
-	}
-	has, err := caps.HasTriggers(ctx, table.Table)
-	if err != nil {
-		return err
-	}
-	if has {
-		return contracts.ErrUnsupported
+	// Triggers must be absent on BOTH snapshots: the write lands in the target,
+	// so a trigger that exists only there still fires silently. Checking the
+	// source alone was a fail-open gap.
+	for _, side := range []contracts.Reader{e.source, e.target} {
+		caps, err := sourceCapabilities(side)
+		if err != nil {
+			return err
+		}
+		has, err := caps.HasTriggers(ctx, table.Table)
+		if err != nil {
+			return err
+		}
+		if has {
+			return contracts.ErrUnsupported
+		}
 	}
 	for _, unique := range schema.Unique {
 		for _, name := range unique {

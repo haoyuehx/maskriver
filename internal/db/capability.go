@@ -68,7 +68,10 @@ func (a *adapter) HasTriggers(ctx context.Context, ref contracts.TableRef) (bool
 	}
 	var count int
 	err := a.db.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM main.sqlite_schema WHERE type='trigger' AND tbl_name=?", ref.Table).Scan(&count)
+		// SQLite stores the table name exactly as written in the trigger DDL, so
+		// a trigger declared ON PEOPLE for table people would otherwise be
+		// missed. Compare case-insensitively.
+		"SELECT COUNT(*) FROM main.sqlite_schema WHERE type='trigger' AND tbl_name=? COLLATE NOCASE", ref.Table).Scan(&count)
 	if err != nil {
 		return false, dbError(err)
 	}
