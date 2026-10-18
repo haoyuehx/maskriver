@@ -31,9 +31,12 @@ dependencies keep their own licences and their verbatim texts are kept under
 | `github.com/remyoudompheng/bigfft` | BSD-3-Clause | `licenses/bigfft-LICENSE` |
 | `golang.org/x/sys` | BSD-3-Clause | `licenses/x-sys-LICENSE` |
 
-Every module in `go.mod` and `go.sum` now has its verbatim licence text under
-`licenses/`. The texts are copied unmodified from the module cache of the pinned
-versions; none was edited or summarised.
+Every module that MaskRiver compiles or links now has its verbatim licence text
+under `licenses/`: the twelve `go.mod` requirements above, direct and indirect.
+The texts are copied unmodified from the module cache of the pinned versions;
+none was edited or summarised. `go.sum` also contains modules that are only
+transitive build metadata and contribute no linked code; they are deliberately
+not reproduced here.
 
 Binary distribution must include the applicable notices and, for MPL-2.0
 covered files, a way to obtain the corresponding source form. See
