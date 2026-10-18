@@ -151,11 +151,11 @@ func (e *Engine) visitTable(ctx context.Context, table contracts.TablePlan, budg
 }
 
 // pageChanges builds one RowChange per matched row of one page. Key holds the
-// primary key values in plan order. Expected and Replacement only ever carry a
-// planned column whose original value is not NULL, so a preview never claims a
-// replacement it did not produce, and a row whose planned columns are all NULL
-// still yields an (empty) RowChange. Every planned column is masked through its
-// own ColumnPlan with the same bounded worker pool.
+// primary key values in plan order. Expected and Replacement carry every
+// planned column, so the writer sees the same column set the plan declares; a
+// NULL original is carried as NULL in both rows, because nothing may replace it
+// and the column is therefore never assigned. Every non-NULL original is masked
+// through its own ColumnPlan with the same bounded worker pool Apply uses.
 func (e *Engine) pageChanges(ctx context.Context, table contracts.TablePlan, left, right []contracts.Row) ([]contracts.RowChange, error) {
 	changes := make([]contracts.RowChange, len(left))
 	for i, row := range left {
@@ -181,7 +181,11 @@ func (e *Engine) pageChanges(ctx context.Context, table contracts.TablePlan, lef
 				return nil, contracts.ErrConflict
 			}
 			if old.IsNull() {
-				continue // NULL keeps no replacement
+				// A NULL original stays NULL: it is carried in both rows so the
+				// column set matches the plan, and it is never masked or assigned.
+				changes[i].Expected[name] = old
+				changes[i].Replacement[name] = old
+				continue
 			}
 			originals = append(originals, old)
 			rows = append(rows, i)
@@ -281,34 +285,40 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 			return report, contracts.ErrUnsupported
 		}
 		col := table.Columns[0]
-		originals := make([]contracts.Value, len(page.Rows))
+		name := col.Column.Column
+		originals := make([]contracts.Value, 0, len(page.Rows))
+		indexes := make([]int, 0, len(page.Rows))
 		for i, row := range page.Rows {
-			v, ok := row[col.Column.Column]
+			v, ok := row[name]
 			if !ok {
 				return report, contracts.ErrIncomplete
 			}
-			originals[i] = v
+			if v.IsNull() {
+				// A NULL original stays NULL, so it is neither masked nor written
+				// and the row is excluded from the batch.
+				continue
+			}
+			originals = append(originals, v)
+			indexes = append(indexes, i)
 		}
 		masked, err := e.maskBatch(ctx, originals, col, e.cfg.Workers)
 		if err != nil {
 			return report, err
 		}
-		changes := make([]contracts.RowChange, 0, len(page.Rows))
-		for i, row := range page.Rows {
+		changes := make([]contracts.RowChange, 0, len(indexes))
+		for j, i := range indexes {
 			change := contracts.RowChange{
-				Expected:    contracts.Row{col.Column.Column: originals[i]},
-				Replacement: contracts.Row{col.Column.Column: masked[i]},
+				Expected:    contracts.Row{name: originals[j]},
+				Replacement: contracts.Row{name: masked[j]},
 			}
 			for _, pk := range table.PrimaryKey {
-				v, ok := row[pk]
+				v, ok := page.Rows[i][pk]
 				if !ok || v.IsNull() {
 					return report, contracts.ErrIncomplete
 				}
 				change.Key = append(change.Key, v)
 			}
-			if !originals[i].IsNull() {
-				changes = append(changes, change)
-			}
+			changes = append(changes, change)
 		}
 		if len(changes) > 0 {
 			if writer == nil {

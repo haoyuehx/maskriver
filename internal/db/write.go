@@ -91,6 +91,12 @@ func (w *writer) Begin(ctx context.Context, plan contracts.TablePlan) (contracts
 	return result, nil
 }
 
+// Update applies one change per row. A change whose planned columns are all
+// NULL assigns nothing (the original stays NULL), so it is skipped without
+// issuing a statement and is not counted; every other change is exactly one
+// parameterised UPDATE inside the caller's transaction. The returned count is
+// the number of rows actually updated, so a caller that wants to compare it
+// with its own list length must exclude the all-NULL rows first.
 func (t *writeTx) Update(ctx context.Context, changes []contracts.RowChange) (int64, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -105,13 +111,24 @@ func (t *writeTx) Update(ctx context.Context, changes []contracts.RowChange) (in
 		t.abortLocked()
 		return 0, err
 	}
+	// Callers must never ask for an empty batch: the frozen Writer contract
+	// requires every item in a batch to affect exactly one row, so an empty
+	// call is a caller bug rather than a successful no-op.
+	if len(changes) == 0 {
+		t.abortLocked()
+		return 0, contracts.ErrInvalid
+	}
 	var total int64
 	for _, change := range changes {
 		if err := t.validateChange(change); err != nil {
 			t.abortLocked()
 			return 0, err
 		}
-		query, args := t.updateSQL(change)
+		assigned := t.assignedColumns(change)
+		if len(assigned) == 0 {
+			continue
+		}
+		query, args := t.updateSQL(change, assigned)
 		result, err := t.tx.ExecContext(ctx, query, args...)
 		if err != nil {
 			t.abortLocked()
@@ -131,6 +148,11 @@ func (t *writeTx) Update(ctx context.Context, changes []contracts.RowChange) (in
 	return total, nil
 }
 
+// validateChange enforces the complete change contract for one row: the key
+// types match, Expected and Replacement carry every planned column of the plan,
+// and the only legal move for a NULL original is to stay NULL. A non-NULL
+// original whose replacement equals it is refused, so no change can claim a
+// write it would not perform.
 func (t *writeTx) validateChange(change contracts.RowChange) error {
 	if len(change.Key) != len(t.keyTypes) ||
 		len(change.Expected) != len(t.changed) ||
@@ -142,7 +164,8 @@ func (t *writeTx) validateChange(change contracts.RowChange) error {
 			return contracts.ErrInvalid
 		}
 	}
-	for name, typ := range t.changed {
+	for _, name := range t.ordered {
+		typ := t.changed[name]
 		expected, ok := change.Expected[name]
 		if !ok {
 			return contracts.ErrInvalid
@@ -157,6 +180,14 @@ func (t *writeTx) validateChange(change contracts.RowChange) error {
 		if err := safeType(replacement, typ); err != nil {
 			return err
 		}
+		if expected.IsNull() {
+			if !replacement.IsNull() {
+				// A NULL original may only stay NULL: filling it in would write a
+				// value this run never read.
+				return contracts.ErrUnsafe
+			}
+			continue
+		}
 		if expected == replacement {
 			return contracts.ErrUnsafe
 		}
@@ -164,12 +195,31 @@ func (t *writeTx) validateChange(change contracts.RowChange) error {
 	return nil
 }
 
-func (t *writeTx) updateSQL(change contracts.RowChange) (string, []any) {
-	a := t.owner.adapter
-	assignments := make([]string, 0, len(t.ordered))
-	predicates := make([]string, 0, len(t.plan.PrimaryKey)+len(t.ordered))
-	args := make([]any, 0, len(t.ordered)*2+len(t.plan.PrimaryKey))
+// assignedColumns reports the planned columns one UPDATE must assign, in plan
+// order. A NULL expected value is never assigned, because the original stays
+// NULL; a non-NULL column is assigned only when its replacement differs from it.
+// An empty result means the row has nothing to write.
+func (t *writeTx) assignedColumns(change contracts.RowChange) []string {
+	names := make([]string, 0, len(t.ordered))
 	for _, name := range t.ordered {
+		if change.Expected[name].IsNull() || change.Expected[name] == change.Replacement[name] {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
+// updateSQL builds the single parameterised UPDATE of one row: the SET clause
+// carries only the assigned columns, and the WHERE clause guards the primary key
+// plus every planned column, whether or not it is assigned, so a concurrent
+// change to any planned column is still a conflict.
+func (t *writeTx) updateSQL(change contracts.RowChange, assigned []string) (string, []any) {
+	a := t.owner.adapter
+	assignments := make([]string, 0, len(assigned))
+	predicates := make([]string, 0, len(t.plan.PrimaryKey)+len(t.ordered))
+	args := make([]any, 0, len(assigned)+len(t.plan.PrimaryKey)+len(t.ordered))
+	for _, name := range assigned {
 		assignments = append(assignments, a.quote(name)+"=?")
 		args = append(args, encode(change.Replacement[name]))
 	}
