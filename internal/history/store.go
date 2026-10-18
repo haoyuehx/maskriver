@@ -1,6 +1,7 @@
 package history
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"errors"
@@ -152,6 +153,13 @@ func Open(cfg Config) (*Store, error) {
 		if _, trusted := cfg.Trust.lookup(cfg.Signer.SignerKeyID); !trusted {
 			return nil, unsafeError(errUnknownSigner)
 		}
+		// A matching signer key ID is a label, not proof: the supplied private
+		// key must actually be the key the trust set registers under that ID.
+		// Without this check the store would open and then persist a record no
+		// verifier can accept, which is a silent, unusable approval.
+		if !signerMatchesTrust(cfg.Signer, cfg.Trust) {
+			return nil, unsafeError(errSignerMismatch)
+		}
 		signer := Signer{
 			SignerKeyID: cfg.Signer.SignerKeyID,
 			Private:     append(ed25519.PrivateKey(nil), cfg.Signer.Private...),
@@ -173,6 +181,11 @@ func (s *Store) Approve(ctx context.Context, req ApproveRequest) (Record, error)
 	}
 	if s.signer == nil {
 		return Record{}, unsafeError(errNoSigner)
+	}
+	// Re-check the same correspondence Open enforced, so no alternative
+	// construction of a Store can sign with a key the trust set does not own.
+	if !signerMatchesTrust(s.signer, s.trust) {
+		return Record{}, unsafeError(errSignerMismatch)
 	}
 	record, err := newRecord(req.Plan, req.ReviewerID, req.IssuedAt, req.ExpiresAt, s.signer.SignerKeyID)
 	if err != nil {
@@ -226,8 +239,29 @@ func (s *Store) Revoke(ctx context.Context, req RevokeRequest) (Record, error) {
 	return record, nil
 }
 
+// signerMatchesTrust reports whether the private key behind a signer derives the
+// public key the trust set registers under the signer's key ID, and whether the
+// key's own public half is that same key. Checking both matters: Ed25519 signs
+// from the seed but embeds the public half, so a key whose halves disagree would
+// open successfully and then produce a signature no verifier accepts.
+func signerMatchesTrust(signer *Signer, trust TrustedKeys) bool {
+	if signer == nil || len(signer.Private) != ed25519.PrivateKeySize {
+		return false
+	}
+	public, trusted := trust.lookup(signer.SignerKeyID)
+	if !trusted {
+		return false
+	}
+	derived, ok := ed25519.NewKeyFromSeed(signer.Private.Seed()).Public().(ed25519.PublicKey)
+	if !ok || len(derived) != len(public) || !bytes.Equal(derived, public) {
+		return false
+	}
+	return bytes.Equal(signer.Private[ed25519.SeedSize:], public)
+}
+
 // Lookup returns the record for this plan only if it is authentic, bound to
-// exactly this plan, unexpired and not revoked. It never writes.
+// exactly this plan, not issued beyond the tolerated clock skew, unexpired and
+// not revoked. It never writes.
 func (s *Store) Lookup(ctx context.Context, plan contracts.Plan) (Record, error) {
 	if ctx == nil {
 		return Record{}, contracts.ErrInvalid

@@ -25,6 +25,9 @@ type Engine struct {
 	target     contracts.Reader
 	key        contracts.Value
 	openWriter func(context.Context, contracts.DatabaseOptions) (contracts.Writer, error)
+	// approvals is the read-only review-decision seam Apply requires. It is nil
+	// unless injected, and a nil seam refuses Apply instead of allowing writes.
+	approvals ApprovalQuery
 }
 
 // Open requires two independent, existing SQLite files and opens only Readers.
@@ -242,10 +245,11 @@ func scanComplete(sample contracts.Sample, decision contracts.Decision) bool {
 // target PATH only and says nothing about the target's contents.
 //
 // Plan always scans every scope, even when cfg.Approved is set: approval is an
-// extra intent signal, never a substitute for detection evidence. A dedicated
-// reviewed-decision store does not exist yet, so an approval can not be
-// authenticated and must not turn an UNKNOWN or truncated scan into an
-// applicable plan.
+// extra intent signal, never a substitute for detection evidence. A stored
+// reviewer decision authenticates a plan that was already built from complete
+// Sensitive evidence; it is not detection evidence, so this package never feeds
+// a decision into detection and an UNKNOWN or truncated scan still yields no
+// plan for any decision to authenticate.
 func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 	var empty contracts.Plan
 	if ctx == nil {

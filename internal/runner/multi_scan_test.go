@@ -53,6 +53,7 @@ func scopeEngine(t *testing.T, cfg config.Runtime) *Engine {
 	if err != nil {
 		t.Fatalf("open engine: %v", err)
 	}
+	useTestApproval(engine)
 	t.Cleanup(func() { _ = engine.Close() })
 	return engine
 }

@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +14,85 @@ import (
 
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
+
+// reviewProvisioning is the deployment shape the review commands need: one
+// synthetic reviewer key file, the trust file naming its public key, and the
+// decision store directory. Everything lives under a test temp dir, and the
+// private key never leaves this struct.
+type reviewProvisioning struct {
+	historyDir, trustFile, reviewerKeyFile string
+	private                                ed25519.PrivateKey
+}
+
+// newReviewProvisioning generates a synthetic reviewer key and trust file.
+func newReviewProvisioning(t *testing.T) reviewProvisioning {
+	t.Helper()
+	return newReviewProvisioningWithSeed(t, 0x0c)
+}
+
+// newReviewProvisioningWithSeed generates a distinct synthetic reviewer so a
+// test can hold an "attacker" key that is not the deployment trust key.
+func newReviewProvisioningWithSeed(t *testing.T, seed byte) reviewProvisioning {
+	t.Helper()
+	dir := t.TempDir()
+	private := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{seed}, ed25519.SeedSize))
+	public, ok := private.Public().(ed25519.PublicKey)
+	if !ok {
+		t.Fatal("ed25519 private key did not expose a public key")
+	}
+	provisioning := reviewProvisioning{
+		historyDir:      filepath.Join(dir, "history"),
+		trustFile:       filepath.Join(dir, "trust.json"),
+		reviewerKeyFile: filepath.Join(dir, "reviewer.key"),
+		private:         private,
+	}
+	if err := os.WriteFile(provisioning.reviewerKeyFile, private, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	trust := fmt.Sprintf(`{"version":"maskriver-trust-v1","keys":[{"signer_key_id":"reviewer-1","public_key_hex":"%s"}]}`,
+		hex.EncodeToString(public))
+	if err := os.WriteFile(provisioning.trustFile, []byte(trust), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return provisioning
+}
+
+// reviewFlags returns the flags the approve and revoke commands need.
+func (p reviewProvisioning) reviewFlags() []string {
+	return []string{
+		"--history-dir", p.historyDir, "--trust-file", p.trustFile,
+		"--reviewer-key-id", "reviewer-1", "--reviewer-key-file", p.reviewerKeyFile,
+	}
+}
+
+// applyFlags returns the flags an authorized apply needs: the read-only store and
+// the deployment trust file, never a reviewer private key.
+func (p reviewProvisioning) applyFlags() []string {
+	return []string{"--history-dir", p.historyDir, "--trust-file", p.trustFile}
+}
+
+// issueApproval runs the approve command for one declared plan. A masking
+// --key-file is dropped on purpose: issuing a decision must not need the masking
+// key, and the approve command takes no such flag.
+func (p reviewProvisioning) issueApproval(t *testing.T, base []string) []string {
+	t.Helper()
+	planFlags := make([]string, 0, len(base))
+	for index := 0; index < len(base); index++ {
+		if base[index] == "--key-file" {
+			index++
+			continue
+		}
+		planFlags = append(planFlags, base[index])
+	}
+	args := append([]string{"approve"}, planFlags...)
+	args = append(args, p.reviewFlags()...)
+	args = append(args, "--reviewer-id", "reviewer@synthetic.example")
+	var out, errOut bytes.Buffer
+	if code := run(args, &out, &errOut); code != 0 {
+		t.Fatalf("approve exit=%d, want 0; output=%q", code, out.String()+errOut.String())
+	}
+	return args
+}
 
 // cliExec runs synthetic DDL/DML against one disposable CLI fixture file.
 func cliExec(t *testing.T, path string, statements ...string) {
@@ -120,9 +201,11 @@ func TestCLIHelpPrintsCompleteStaticFlags(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{"mask long help", []string{"mask", "--help"}, []string{"Usage: maskriver mask [flags]", "-source", "-target", "-scope", "-workers", "-batch-size", "-strategy", "-key-file", "-approved", "-apply"}},
-		{"mask short help", []string{"mask", "-h"}, []string{"Usage: maskriver mask [flags]", "-source", "-target", "-scope", "-workers", "-batch-size", "-key-file", "-approved", "-apply"}},
+		{"mask long help", []string{"mask", "--help"}, []string{"Usage: maskriver mask [flags]", "-source", "-target", "-scope", "-workers", "-batch-size", "-strategy", "-key-file", "-approved", "-apply", "-trust-file", "-history-dir"}},
+		{"mask short help", []string{"mask", "-h"}, []string{"Usage: maskriver mask [flags]", "-source", "-target", "-scope", "-workers", "-batch-size", "-key-file", "-approved", "-apply", "-trust-file", "-history-dir"}},
 		{"validate help", []string{"validate", "--help"}, []string{"Usage: maskriver validate [flags]", "-source", "-target", "-scope", "-strict"}},
+		{"approve help", []string{"approve", "--help"}, []string{"Usage: maskriver approve [flags]", "-scope", "-trust-file", "-history-dir", "-reviewer-key-id", "-reviewer-key-file", "-reviewer-id", "-valid-for"}},
+		{"revoke help", []string{"revoke", "--help"}, []string{"Usage: maskriver revoke [flags]", "-scope", "-trust-file", "-history-dir", "-reviewer-key-file"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -193,6 +276,10 @@ func TestCLIRealSQLiteWorkflow(t *testing.T) {
 	}
 	base := []string{"--source", source, "--target", target,
 		"--table", "people", "--column", "email"}
+	// Work package C2: an explicit apply also needs an authenticated reviewer
+	// decision bound to this plan. The reviewer key and trust file are
+	// synthetic and generated for this test.
+	review := newReviewProvisioning(t)
 	runCmd := func(code int, command string, extras ...string) string {
 		t.Helper()
 		args := append([]string{command}, base...)
@@ -204,7 +291,9 @@ func TestCLIRealSQLiteWorkflow(t *testing.T) {
 		all := out.String() + errOut.String()
 		if strings.Contains(all, "fixture-01@example.invalid") ||
 			strings.Contains(all, strings.Repeat("K", 40)) ||
-			strings.Contains(all, source) || strings.Contains(all, target) {
+			strings.Contains(all, source) || strings.Contains(all, target) ||
+			strings.Contains(all, review.historyDir) || strings.Contains(all, review.trustFile) ||
+			strings.Contains(all, review.reviewerKeyFile) {
 			t.Fatal("CLI leaked secret or path")
 		}
 		return all
@@ -215,6 +304,9 @@ func TestCLIRealSQLiteWorkflow(t *testing.T) {
 	}
 	common := []string{"--strategy", "fake_email", "--key-id", "synthetic-key", "--key-file", keyFile}
 	runCmd(2, "mask", append(append([]string{}, common...), "--apply")...)
+	// The pre-C2 bypass is gone: --approved --apply without a stored decision is
+	// refused, and so is --apply --approved without the trust flags.
+	runCmd(2, "mask", append(append([]string{}, common...), "--apply", "--approved")...)
 	beforeTarget, _ := os.ReadFile(target)
 	if got := runCmd(0, "mask", common...); !strings.Contains(got, "dry-run=true") {
 		t.Fatal("preview was not read-only")
@@ -223,7 +315,10 @@ func TestCLIRealSQLiteWorkflow(t *testing.T) {
 	if sha256.Sum256(beforeTarget) != sha256.Sum256(afterPreview) {
 		t.Fatal("dry run changed target file")
 	}
-	if got := runCmd(0, "mask", append(append([]string{}, common...), "--apply", "--approved")...); !strings.Contains(got, "complete=true") {
+	// Without a decision the authorized-looking invocation is still refused.
+	runCmd(1, "mask", append(append(append([]string{}, common...), review.applyFlags()...), "--apply", "--approved")...)
+	review.issueApproval(t, append(append([]string{}, base...), common...))
+	if got := runCmd(0, "mask", append(append(append([]string{}, common...), review.applyFlags()...), "--apply", "--approved")...); !strings.Contains(got, "complete=true") {
 		t.Fatal("authorized apply incomplete")
 	}
 	afterSource, _ := os.ReadFile(source)
@@ -258,7 +353,7 @@ func TestCLIRealSQLiteWorkflow(t *testing.T) {
 	}
 	parallel := append(append([]string{}, common...), "--workers", "4")
 	runCmd(0, "mask", parallel...)
-	runCmd(0, "mask", append(append([]string{}, parallel...), "--apply", "--approved")...)
+	runCmd(0, "mask", append(append(append([]string{}, parallel...), review.applyFlags()...), "--apply", "--approved")...)
 	runCmd(0, "validate", append(append([]string{}, parallel...), "--approved", "--strict")...)
 	parallelMasked, err := os.ReadFile(target)
 	if err != nil {
@@ -267,8 +362,9 @@ func TestCLIRealSQLiteWorkflow(t *testing.T) {
 	if sha256.Sum256(serialMasked) != sha256.Sum256(parallelMasked) {
 		t.Fatal("serial and parallel mask runs differ on durable SQLite results")
 	}
-	// Re-running Apply would try to mask already-modified data; must refuse.
-	runCmd(1, "mask", append(append([]string{}, common...), "--apply", "--approved")...)
+	// Re-running Apply would try to mask already-modified data; must refuse even
+	// though the decision is still valid.
+	runCmd(1, "mask", append(append(append([]string{}, common...), review.applyFlags()...), "--apply", "--approved")...)
 	// Same inode is never a source + target pair.
 	args := []string{"scan", "--source", source, "--target", source,
 		"--table", "people", "--column", "email"}
@@ -312,7 +408,11 @@ func TestCLIRefusesUniquePlannedColumn(t *testing.T) {
 	}
 	base := []string{"--source", source, "--target", target, "--table", "people", "--column", "email",
 		"--min-samples", "1", "--strategy", "fake_email", "--key-id", "synthetic-key", "--key-file", keyFile}
-	for _, extras := range [][]string{{}, {"--apply", "--approved"}} {
+	review := newReviewProvisioning(t)
+	// The plan itself is buildable, so a decision can be issued; the write gate
+	// that refuses is the UNIQUE preflight, not the approval gate.
+	review.issueApproval(t, base)
+	for _, extras := range [][]string{{}, append(append([]string{}, review.applyFlags()...), "--apply", "--approved")} {
 		args := append(append([]string{"mask"}, base...), extras...)
 		var out, errOut bytes.Buffer
 		if got := run(args, &out, &errOut); got == 0 {
@@ -324,7 +424,8 @@ func TestCLIRefusesUniquePlannedColumn(t *testing.T) {
 		if !strings.Contains(all, "operation refused") && !strings.Contains(all, "apply: complete=false") {
 			t.Fatalf("refusal output=%q, want a sanitized refusal", all)
 		}
-		for _, secret := range []string{"fixture-01@example.invalid", strings.Repeat("K", 40), source, target} {
+		for _, secret := range []string{"fixture-01@example.invalid", strings.Repeat("K", 40), source, target,
+			review.historyDir, review.trustFile, review.reviewerKeyFile} {
 			if strings.Contains(all, secret) {
 				t.Fatalf("CLI leaked %q: %q", secret, all)
 			}
@@ -408,6 +509,10 @@ func TestCLIMultiTableWorkflow(t *testing.T) {
 	}
 	common := []string{"--strategy", "fake_email", "--key-id", "synthetic-key", "--key-file", keyFile}
 	twoScopes := []string{"--scope", "people.email", "--scope", "contacts.email", "--min-samples", "1"}
+	// A two-table plan is approved as a whole; the decision binds both tables in
+	// declared order.
+	review := newReviewProvisioning(t)
+	review.issueApproval(t, append(append([]string{"--source", source, "--target", target}, common...), twoScopes...))
 	previewArgs := append(append([]string{"mask", "--source", source, "--target", target}, common...), twoScopes...)
 	beforeApply, err := os.ReadFile(target)
 	if err != nil {
@@ -426,7 +531,7 @@ func TestCLIMultiTableWorkflow(t *testing.T) {
 	validateArgs := append(append([]string{"validate", "--source", source, "--target", target}, common...), twoScopes...)
 	// Both tables are still unmasked, so strict validation can not pass yet.
 	sanitized(1, validateArgs...)
-	applyArgs := append(append([]string{}, previewArgs...), "--approved", "--apply")
+	applyArgs := append(append(append([]string{}, previewArgs...), review.applyFlags()...), "--approved", "--apply")
 	applied := sanitized(0, applyArgs...)
 	// Default batch size 64 covers each two-row table in one batch, so the
 	// summary must show one committed batch and two rows per table position.
