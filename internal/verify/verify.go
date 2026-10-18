@@ -232,8 +232,6 @@ func constraintKey(lists ...[]string) string {
 	return b.String()
 }
 
-// indexesMatch compares indexes by name in any driver order. A same-name index
-// must keep its ordered column list and its uniqueness flag.
 // indexesMatch compares indexes by name as a multiset. Driver row order is not
 // significant, but a duplicate name is counted on both sides so an asymmetric
 // substitution cannot slip through. A same-name index must keep its ordered
@@ -312,26 +310,23 @@ func sameCounts(a, b map[string]int) bool {
 	return true
 }
 
-// foreignKeysMatch compares foreign keys as a set: declared order is not
-// significant, but column pairing order and referential actions are.
+// foreignKeysMatch compares foreign keys as a multiset: declared order is not
+// significant, but column pairing order and referential actions are, and a
+// repeated descriptor is counted on both sides rather than rejected.
 func foreignKeysMatch(a, b []contracts.ForeignKey) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	collect := func(list []contracts.ForeignKey) (map[string]bool, bool) {
-		out := make(map[string]bool, len(list))
+	collect := func(list []contracts.ForeignKey) (map[string]int, bool) {
+		out := make(map[string]int, len(list))
 		for _, fk := range list {
 			if len(fk.Columns) == 0 || len(fk.Columns) != len(fk.TargetColumns) ||
 				fk.Target.Database == "" || fk.Target.Schema == "" || fk.Target.Table == "" {
 				return nil, false
 			}
-			key := constraintKey(fk.Columns, fk.TargetColumns,
+			out[constraintKey(fk.Columns, fk.TargetColumns,
 				[]string{fk.Target.Database, fk.Target.Schema, fk.Target.Table},
-				[]string{fk.OnUpdate, fk.OnDelete})
-			if out[key] {
-				return nil, false
-			}
-			out[key] = true
+				[]string{fk.OnUpdate, fk.OnDelete})]++
 		}
 		return out, true
 	}
@@ -343,17 +338,7 @@ func foreignKeysMatch(a, b []contracts.ForeignKey) bool {
 	if !ok {
 		return false
 	}
-	for key := range src {
-		if !dst[key] {
-			return false
-		}
-	}
-	for key := range dst {
-		if !src[key] {
-			return false
-		}
-	}
-	return true
+	return sameCounts(src, dst)
 }
 
 func keyCollationsDiffer(a, b contracts.TableSchema, keys []string) bool {
