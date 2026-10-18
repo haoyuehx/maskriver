@@ -282,9 +282,12 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 		}
 		tablePlans = append(tablePlans, tablePlan)
 	}
-	// A single scope keeps the original single-object encoding so plan digests
-	// stay stable across the multi-table change; several scopes bind the ordered
-	// slice instead.
+	// The key is the number of tables, not scopes: one table keeps the original
+	// single-object encoding so existing plan digests stay stable across the
+	// multi-table change, while several tables bind the ordered slice. A second
+	// column on the same table therefore keeps the same schema digest, which is
+	// correct because the digest describes the schema, not the selected columns;
+	// the column selection is bound by ConfigDigest.
 	var schemaJSON []byte
 	if len(schemas) == 1 {
 		schemaJSON, err = json.Marshal(schemas[0])
