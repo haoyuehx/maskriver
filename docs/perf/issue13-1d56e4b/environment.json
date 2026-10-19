@@ -1,0 +1,22 @@
+{
+  "commit": "1d56e4bdb5947edfb1567feca16903c735f349b0",
+  "os": "linux",
+  "arch": "amd64",
+  "cpu": "AMD Ryzen 9 7940H w/ Radeon 780M Graphics",
+  "cores": 16,
+  "mem_total_kb": 15551860,
+  "go": "go version go1.26.3 linux/amd64",
+  "sqlite_driver": "modernc.org/sqlite v1.60.1 (pure Go)",
+  "command": "go test -run '^$' -bench 'BenchmarkWorkflow' -benchmem -benchtime=3x -count=1 ./internal/runner/",
+  "benchtime_iterations": 3,
+  "fixture": {
+    "strategy": "fake_email v1",
+    "column": "people.email",
+    "shape_short": "synthetic-NNNNNNNN@example.invalid",
+    "shape_long": "synthetic-NNNNNNNN-xxxxxxxxxxxxxxxxxxxxxxxx@example.invalid",
+    "uniqueness": "all distinct",
+    "null_ratio": 0.0,
+    "databases": "separate source and target SQLite copies"
+  },
+  "scope": "Runner workflow (not full CLI subprocess E2E)"
+}
