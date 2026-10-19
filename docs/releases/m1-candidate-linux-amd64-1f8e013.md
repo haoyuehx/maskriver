@@ -83,3 +83,20 @@ fixture：`people(id INTEGER PRIMARY KEY, email TEXT NOT NULL, full_name TEXT)`�
 可用范围：合成或经授权的可弃置 SQLite 快照，linux/amd64。
 
 不得宣称：MySQL CLI 端到端 · checkpoint/恢复 · exactly-once · 生产级检测准确率 · macOS/Windows CLI · `--strict` 独立严格语义 · 跨批全局原子性 · 匿名化 · 能抵御审批记录整体回滚或撤销回滚 · 拒绝 WAL 源时零文件变化。
+
+## 6. 最终候选与记录更正（2026-10-19 追加）
+
+经独立差异复核（`docs/reviews/m1-candidate-v-final-delta-review-2026-10-19.md`），最终候选为：
+
+| 工件 | SHA-256 | 状态 |
+|---|---|---|
+| v1 | `e50ec59744547888d6143f71538319020807dddad7431e70727df9d708ef8b6f` | 曾被判 READY；**工件本体已未保留**（构建过程覆盖了本地副本），仅存当时测得的摘要与审查记录，**无法再次复核** |
+| v2 | `662bd601e1eaeb343705810518d883f604bde906ea0986af382fd4ee3a082de0` | **作废**：需手工 `chmod` 才能复现，不符合「从已提交状态重建」 |
+| **最终候选** | **`cf06a7e47cb7b1c558651b36f5c2de958b6c90e76f7906f4d51fce679fecc76c`** | 提交 `f4aeff9`，模式与目标平台均在脚本内固定；**独立复核判定 READY** |
+
+**记录更正（本人失误）**：本文件先前称 v2 为 `662bd601…` 且把 v1 摘要一并列出，但本地 `/tmp/rel/…tar.gz` 在重建 v2 时已被覆盖，故磁盘上那份 `662bd601…` **不是** v1。独立复核据实指出这一记录缺陷；v1 的 READY 结论不再具备可复核性，**不得再引用为当前证据**。
+
+**遗留 P2（不阻断，需后续处理）**：
+- 构建脚本未固定 `MANIFEST`/`SHA256SUMS`/目录模式，`umask 022` 会产生另一个摘要（`10e652d0…`，内容相同）
+- 链接集合管道未加 `pipefail`，属 fail-open 风险
+- NOTICE 中「Further texts shipped inside those modules」标题对 `modernc.org/memory` 的 `LICENSE-GO` 描述过度概括
