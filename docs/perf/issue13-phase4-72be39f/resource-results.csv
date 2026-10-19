@@ -1,0 +1,5 @@
+rows,batch_size,workers,trial,apply_ms,workflow_rows_s,cpu_user_ms,cpu_system_ms,rss_before_kb,rss_after_kb,goroutines_before,goroutines_after,reader_open,writer_open,reader_open_after_close,writer_open_after_close,receipts,rows_committed,complete,validate,source_unchanged
+10000,64,1,1,1445.34,5233.33,1014.59,120.17,18980,24960,4,4,1,1,0,0,157,10000,true,true,true
+10000,64,4,1,1476.74,5110.18,1243.97,181.07,26260,25552,4,4,1,1,0,0,157,10000,true,true,true
+10000,64,1,2,1448.05,5217.45,909.95,234.61,18544,25148,4,4,1,1,0,0,157,10000,true,true,true
+10000,64,4,2,1462.57,5162.15,1258.67,169.11,26492,26084,4,4,1,1,0,0,157,10000,true,true,true

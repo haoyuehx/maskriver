@@ -1,0 +1,2 @@
+status,details
+NO_CANDIDATE_IMPLEMENTED,Prepared statement reuse lacks measured production Prepare cost proof; no production code changed.

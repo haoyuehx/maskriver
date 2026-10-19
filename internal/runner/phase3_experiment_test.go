@@ -261,9 +261,9 @@ func TestPhase3BatchExperiment(t *testing.T) {
 		}
 		repetitions = parsed
 	}
-	order := make([]int, 0, repetitions*3)
+	order := make([]int, 0, repetitions*4)
 	for i := 0; i < repetitions; i++ {
-		order = append(order, 16, 64, 256)
+		order = append(order, 16, 64, 128, 256)
 	}
 	rand.New(rand.NewSource(0x13_2026)).Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
 	root := t.TempDir()
@@ -273,7 +273,7 @@ func TestPhase3BatchExperiment(t *testing.T) {
 		seen[batch]++
 		results = append(results, runPhase3Trial(t, root, i+1, seen[batch], batch, 256, 4))
 	}
-	for _, batch := range []int{16, 64, 256} {
+	for _, batch := range []int{16, 64, 128, 256} {
 		var commits, receipts, rows int64
 		for _, sample := range results {
 			if sample.BatchSize == batch {
@@ -287,7 +287,7 @@ func TestPhase3BatchExperiment(t *testing.T) {
 		}
 	}
 	writePhase3Artifacts(t, outDir, results, repetitions)
-	t.Logf("wrote %d randomized trials across batch 16/64/256 to %s", len(results), outDir)
+	t.Logf("wrote %d randomized trials across batch 16/64/128/256 to %s", len(results), outDir)
 }
 
 func writePhase3Artifacts(t *testing.T, dir string, trials []phase3Trial, repetitions int) {
@@ -341,7 +341,7 @@ func phase3BatchCSV(t *testing.T, trials []phase3Trial) string {
 
 func renderPhase3Stats(samples []phase3Trial) string {
 	stats := map[string]map[string]float64{}
-	for _, b := range []int{16, 64, 256} {
+	for _, b := range []int{16, 64, 128, 256} {
 		var applies, rowsPS, commits, begin, updates, rss, cpu []float64
 		for _, s := range samples {
 			if s.BatchSize == b {
@@ -367,7 +367,7 @@ func renderPhase3Stats(samples []phase3Trial) string {
 func renderPhase3ResultsCSV(samples []phase3Trial) string {
 	var b strings.Builder
 	b.WriteString("batch_size,iterations,commits_per_trial,rows_per_trial,apply_mean_ms,apply_median_ms,apply_min_ms,apply_max_ms,apply_stddev_pct,apply_rows_per_s_mean,apply_us_per_row,driver_commit_mean_ms,driver_update_exec_mean_ms,batch_transaction_window_mean_ms,apply_unassigned_mean_ms\n")
-	for _, size := range []int{16, 64, 256} {
+	for _, size := range []int{16, 64, 128, 256} {
 		var applies, throughput, commits, driverCommit, updates, txWindows, residual []float64
 		for _, s := range samples {
 			if s.BatchSize == size {
@@ -389,7 +389,7 @@ func renderPhase3ResultsCSV(samples []phase3Trial) string {
 func renderPhase3CSVStats(samples []phase3Trial) string {
 	var b strings.Builder
 	b.WriteString("batch_size,metric,count,mean,median,min,max,stddev_pct\n")
-	for _, size := range []int{16, 64, 256} {
+	for _, size := range []int{16, 64, 128, 256} {
 		metrics := map[string][]float64{}
 		for _, s := range samples {
 			if s.BatchSize != size {
@@ -431,7 +431,7 @@ func renderPhase3Summary(samples []phase3Trial, reps int) string {
 	fmt.Fprintf(&b, "# Issue #13 Phase 3 — transaction observation (%d randomized repeats/config)\n\n", reps)
 	b.WriteString("All rows are synthetic `@example.invalid`; each trial uses a fresh source/target and real Ed25519 approval. Fixture build is outside workflow/apply intervals. Apply has a complete receipt and passed independent full Validate on every row. See `samples.json` and `apply-transactions.csv` for every independent trial.\n\n")
 	b.WriteString("| Batch | commits/trial | Apply mean/median (ms) | min–max ms | CV % | Apply rows/s mean | Begin driver (ms) | Commit driver (ms) | UPDATE exec (ms) | Other SQL call (ms) | Transaction windows (ms) | Apply residual (ms) |\n|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
-	for _, size := range []int{16, 64, 256} {
+	for _, size := range []int{16, 64, 128, 256} {
 		var a, r, begin, commit, update, other, transactionWindow, residual []float64
 		commitCount := -1
 		for _, s := range samples {
@@ -529,10 +529,10 @@ func sqliteModes(path string) (string, string) {
 	return journal, strconv.Itoa(syncMode)
 }
 func validatePhase3Trials(samples []phase3Trial, repetitions int) error {
-	if repetitions < 1 || len(samples) != repetitions*3 {
-		return fmt.Errorf("sample count %d does not match three batch sizes × %d repeats", len(samples), repetitions)
+	if repetitions < 1 || len(samples) != repetitions*4 {
+		return fmt.Errorf("sample count %d does not match four batch sizes × %d repeats", len(samples), repetitions)
 	}
-	batchSizes := map[int]bool{16: true, 64: true, 256: true}
+	batchSizes := map[int]bool{16: true, 64: true, 128: true, 256: true}
 	seenOrder, seenTrial := map[int]bool{}, map[string]bool{}
 	counts := map[int]int{}
 	for _, s := range samples {
@@ -614,7 +614,7 @@ func validatePhase3Trials(samples []phase3Trial, repetitions int) error {
 			return fmt.Errorf("trial %d has invalid resource sentinel", s.Order)
 		}
 	}
-	for _, batch := range []int{16, 64, 256} {
+	for _, batch := range []int{16, 64, 128, 256} {
 		if counts[batch] != repetitions {
 			return fmt.Errorf("batch %d has %d trials, want %d", batch, counts[batch], repetitions)
 		}
@@ -634,7 +634,7 @@ func phase3Resources(samples []phase3Trial) string {
 func phase3SVG(samples []phase3Trial) string {
 	var b strings.Builder
 	b.WriteString("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"800\" height=\"300\"><text x=\"20\" y=\"20\">SQLite Apply median (synthetic, ms)</text>")
-	for i, size := range []int{16, 64, 256} {
+	for i, size := range []int{16, 64, 128, 256} {
 		var a []float64
 		for _, s := range samples {
 			if s.BatchSize == size {

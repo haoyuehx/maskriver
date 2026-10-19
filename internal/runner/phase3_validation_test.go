@@ -7,8 +7,8 @@ import (
 )
 
 func validPhase3ValidationSamples() []phase3Trial {
-	samples := make([]phase3Trial, 0, 3)
-	for order, batch := range []int{16, 64, 256} {
+	samples := make([]phase3Trial, 0, 4)
+	for order, batch := range []int{16, 64, 128, 256} {
 		batches := (256 + batch - 1) / batch
 		windows := make([]int64, batches)
 		rowsPerReceipt := make([]int64, batches)

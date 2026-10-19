@@ -1,0 +1,5 @@
+rows,batch_size,workers,repetitions,apply_mean_ms,apply_median_ms,p50_ms,min_ms,max_ms,cv_pct,mean_rows_per_s,successful_commits_per_trial,driver_commit_mean_ms,driver_update_exec_mean_ms,observer_mode
+256,16,4,10,123.683,124.227,124.227,116.260,132.515,3.86,2072.56,16,96.890,3.026,SQLSpy+diagnostic counters
+256,64,4,10,38.348,38.313,38.313,36.165,40.263,3.22,6682.00,4,24.432,1.167,SQLSpy+diagnostic counters
+256,128,4,10,23.941,24.237,24.237,22.336,26.418,5.08,10717.59,2,11.661,0.725,SQLSpy+diagnostic counters
+256,256,4,10,16.895,16.378,16.378,14.192,20.242,9.87,15281.76,1,5.803,0.554,SQLSpy+diagnostic counters
