@@ -22,7 +22,8 @@ func TestPhase3ArtifactConsistency(t *testing.T) {
 	if err := json.Unmarshal(raw, &samples); err != nil {
 		t.Fatal(err)
 	}
-	reps := len(samples) / 4
+	matrixSize := len(phase3BatchSizes(samples))
+	reps := len(samples) / matrixSize
 	if err := validatePhase3Trials(samples, reps); err != nil {
 		t.Fatalf("invalid raw phase-3 samples: %v", err)
 	}

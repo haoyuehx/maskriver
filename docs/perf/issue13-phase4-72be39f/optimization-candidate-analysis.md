@@ -1,32 +1,25 @@
-# Issue #13 Phase 4 — candidate analysis and baseline (base 72be39f)
+# Issue #13 Phase 4 — candidate analysis
 
-## Candidate analysis
+Baseline/report commits: see `environment.json`; measurements were performed from base source `72be39f0ddc7a68b4e37796ecff7bd8086b744bd`. The test-only matrix extension adding 128 is committed separately as `1f71a05aadd46e5467a00a96cbf99dc0eddcce2b`.
 
-`internal/runner/execute.go` runs approval authentication, static preflight, and full read-only dry-run before opening a writer. `applyTable` compares source/target pages, transforms rows, then `writeBatch` opens one `WriteTx` per nonempty page. It appends the receipt only after Commit returns success. Commit errors are classified `ErrCommitUnknown`, set `CommitOutcomeUnknown`, stop execution, and are never replayed; other failure paths attempt bounded rollback. Context is checked before pages and by the DB transaction operations. Earlier committed batches remain receipted if a later batch fails.
+## Apply path and safe optimization boundary
 
-`internal/db/write.go:85-95` `Begin` performs live schema description and plan validation before `database/sql.BeginTx`. In `Update` (`:100-145`), each row is contract-validated, assigned columns are discovered, then `updateSQL` (`:203-240`) allocates assignment/predicate/argument slices and builds parameterized optimistic UPDATE SQL. WHERE contains PK and *all planned columns* with expected-value comparisons (SQLite `IS ?`, MySQL `<=> ?`). Each changed row calls `tx.ExecContext` and checks `RowsAffected()==1`; NULL-only rows issue no UPDATE. Commit/Rollback close transaction state at `:243-286`.
+`internal/runner/execute.go` runs approval authentication, static preflight, and full read-only dry-run before opening a writer. `applyTable` compares source/target pages and `writeBatch` opens one WriteTx per nonempty page. Receipts are appended only after successful Commit. Commit errors become CommitUnknown, stop execution, and are never replayed; other failure paths attempt bounded rollback. Prior confirmed batches remain receipted after a later failure.
 
-The static gate performs schema/plan binding, rejects triggers on both snapshots, modified UNIQUE/CHECK/FK columns, and incoming FK references (`runner/execute.go:220-470`). These checks and approval checks must not be cached or bypassed. Runner dry-run and source/target comparison are also required.
+`internal/db/write.go:85-95` Begin re-describes the live schema/validates plan before `BeginTx`. Update validates each row, discovers assigned columns and builds parameterized optimistic UPDATE (`:100-145,203-240`); the WHERE compares PK and all planned expected values (`IS ?` on SQLite, `<=> ?` on MySQL). It checks exactly one affected row. NULL-only rows issue no UPDATE. Commit/Rollback close transaction state (`:243-286`).
 
-Phase-3 instrumentation on 256 rows observed 256 UPDATE statements at every batch size; successful commits/receipts are 16, 4, and 1 at batch sizes 16, 64, and 256. Begin/commit/UPDATE counts therefore move with batch partitioning, but no repeated Prepare measurement exists in phase 3; SQLSpy uses driver interfaces that force a Prepare fallback to observe statements, so its statement count must not be interpreted as the native production path's Prepare count. Candidate Prepared Statement reuse cannot be justified solely by current evidence and may be unsafe across driver implementations or statement lifetime. The best controlled next step is measurement across explicit batch sizes; do not alter production defaults or transaction boundaries without evidence.
+Runner preflight rejects triggers, modified UNIQUE/CHECK/FK columns and incoming references (`internal/runner/execute.go:220-470`). These gates, approval, dry-run and optimistic source/target comparisons must not be cached or bypassed.
 
-BatchSize affects page allocations, number/duration of transactions, max rows in a rollback/unknown-outcome batch, and cancellation/lock exposure. It does not alter SQL shape per row. Larger pages increase the per-batch failure exposure; there is no global transaction.
+Each transaction page repeats schema validation at Begin; each changed row has one UPDATE statement and parameter list. Phase-3 SQLSpy observation shows 256 UPDATEs at each size and 16/4/2/1 Commit receipts for batch sizes 16/64/128/256. It does not establish native production Prepare counts or preparation time; SQLSpy's wrapper can introduce Prepare fallback. Thus no evidence justifies prepared statement caching/reuse. Larger BatchSize lowers commit count but expands transaction duration and per-batch rollback/unknown-commit/cancellation/lock exposure. No change to production BatchSize/default or boundaries is justified by this descriptive sample.
 
-## Reproduced baseline (no production changes)
+## Evidence status
 
-Date/environment was captured by the test harness; see `environment.json`. This rerun at base SHA 72be39f used the existing opt-in, instrumented 256-row matrix (10 randomized trials each at 16/64/256), real SQLite independent source/target databases, fake_email synthetic values, real Ed25519 approval and independent Validate. Fixture setup is outside Apply timing. It is not a new 16/64/128/256 matrix and does not measure uninstrumented throughput.
+The 40 raw 256-row trials in `samples.json` are 10 independent real-SQLite fixtures per batch 16/64/128/256, workers=4, randomized order, synthetic fake_email, real Ed25519 approval and independent Validate. Fixture timing is outside workflow/Apply timing. Aggregates are reproducible with `TestPhase3ArtifactConsistency` against these samples. `baseline-results.csv` and other aggregates derive from this four-size run. It has a fresh transaction-evidence run, not uninstrumented production throughput; the paired SQLSpy comparison samples are in `observer-paired-samples.csv`.
 
-| Batch | n | Apply median (ms) | mean (ms) | min–max (ms) | CV | mean rows/s | successful commits/trial | driver Commit mean (ms) | UPDATE calls |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-|16|10|125.31|124.92|122.13–128.35|1.70%|2,050|16|97.71|256|
-|64|10|38.54|39.00|38.17–40.73|2.59%|6,569|4|24.72|256|
-|128|SKIP|—|—|—|—|—|—|—|—|
-|256|10|16.35|16.63|14.26–18.38|7.29%|15,472|1|6.03|256|
+10k rows at batch64 was performed as two one-off worker matrices; `10k-workers.json`/`10k-workers.csv` and `10k-workers-repeat.json`/`10k-workers-repeat.csv` retain the distinct runs. All runs had correct row receipts, source unchanged, per-key agreement, independent Validate, and closed connections. Not 10 repetitions per configuration; not statistically conclusive.
 
-Apply and driver timings here include SQLSpy/diagnostic observer work. The separate paired observer run is recorded below; medians show instrumented/plain delta -1.78% (range -6.15..6.67%) for 16, -0.03% (-5.56..0.61%) for 64, and -0.42% (-13.87..28.33%) for 256. This is noisy, not a correction factor.
+Rows=2048, 10k batch128/256, 100k, MySQL/CLI, Windows runtime, peak RSS, cancellation timing by batch, lock duration, WAL/journal growth, and candidate-code A/B are UNVERIFIED/SKIP. No interpolation is used.
 
-10k Batch64 real Runner checks reproduced for workers 1/2/4/8/16; all 157 receipts represented 10k rows, exact rows matched the one-worker output, source was unchanged, independent Validate passed, and connections closed. Apply ranged ~1.445–1.477 s (about 6,770–6,920 Apply rows/s). Also separately repeated workers 1/4. Each cell is one observation; no speedup claim.
+## Decision
 
-## Phase-4 decision
-
-No production optimization is selected or implemented at this point. The measurement supports a batch-count/commit-cost hypothesis, but changing BatchSize would alter transaction and failure scope, and no evidence yet shows that such a change is safe or appropriate as a default. Prepared-statement reuse is unproven. The initial sample suite lacks 128 and uninstrumented 256/2048/10000-row crossed measurements, as well as repeated 10k BatchSize/worker matrices. These are material gaps, so the final optimization verdict cannot be ACCEPT on these data alone. No production transaction behavior has changed.
+No production optimization was selected or implemented. Prepared-statement reuse lacks cost proof; batch-size increases are a transaction safety tradeoff rather than a production optimization automatically licensed by this result. **Verdict: INSUFFICIENT EVIDENCE.** Issue #13 remains OPEN; do not start #14.
