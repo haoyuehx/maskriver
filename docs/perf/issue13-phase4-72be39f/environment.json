@@ -1,6 +1,5 @@
 {
-  "measurement_sha": "72be39f0ddc7a68b4e37796ecff7bd8086b744bd",
-  "production_baseline_sha": "72be39f0ddc7a68b4e37796ecff7bd8086b744bd",
+  "head_sha": "72be39f0ddc7a68b4e37796ecff7bd8086b744bd",
   "goos": "linux",
   "goarch": "amd64",
   "go_version": "go1.26.3",
@@ -10,19 +9,22 @@
   "memory_total_mb": "15187",
   "memory_scope": "host /proc/meminfo MemTotal, not cgroup/container limit",
   "sqlite_driver": "modernc.org/sqlite v1.60.1",
+  "repetitions_per_batch": 10,
+  "sample_count": 40,
+  "order_seed": "0x132026",
   "journal_mode": "delete",
   "synchronous": "2",
-  "batch_experiment": {"rows":256,"workers":4,"batch_sizes":[16,64,128,256],"repetitions_per_batch":10,"randomized":true,"order_seed":"0x132026","instrumented":true,"fixture_timing":"fixture build recorded separately and excluded from workflow/Apply timers"},
-  "measurement_only_harness_delta": "extended the opt-in existing phase3 experiment harness on the baseline branch to add batch size 128; no production source changed",
+  "command": "MASK_RIVER_PHASE3_DIR=<dir> MASK_RIVER_PHASE3_REPS=10 go test -run '^TestPhase3BatchExperiment$' -count=1 -timeout 50m ./internal/runner",
+  "measurement_code_sha": "72be39f0ddc0fb52fb16a0eb796953cec1062c94",
+  "measurement_harness_change": "opt-in diagnostic test matrix included batch 128; production source unchanged",
+  "batch_sizes": [16, 64, 128, 256],
+  "fixture_timing": "Fixture construction measured separately; excluded from workflow and Apply timers. Independent Validate after Apply timer.",
+  "instrumentation": "SQLSpy and diagnostic writer counters enabled for transaction breakdown; Apply timings are instrumented diagnostic timings.",
   "scale_runs": [
-    {"rows":10000,"batch_size":64,"workers":[1,2,4,8,16],"repetitions_per_worker":1,"output":"10k-workers.json"},
-    {"rows":10000,"batch_size":64,"workers":[1,2,4,8,16],"repetitions_per_worker":1,"output":"10k-workers-repeat.json"},
-    {"rows":10000,"batch_size":64,"workers":[1,4],"repetitions_per_worker":1,"output":"10k-workers-repeat.csv"}
+    {"rows":10000,"batch_size":64,"workers":[1,2,4,8,16],"repetitions_per_worker":1,"file":"10k-workers.json"},
+    {"rows":10000,"batch_size":64,"workers":[1,2,4,8,16],"repetitions_per_worker":1,"file":"10k-workers-repeat.json"},
+    {"rows":10000,"batch_size":64,"workers":[1,4],"repetitions_per_worker":1,"file":"10k-workers-repeat.csv"}
   ],
-  "commands": [
-    "MASK_RIVER_PHASE3_DIR=<dir> MASK_RIVER_PHASE3_REPS=10 go test -run '^TestPhase3BatchExperiment$' -count=1 -timeout 50m ./internal/runner",
-    "MASK_RIVER_PHASE3_10K_DIR=<dir> go test -run '^TestPhase3Scale10K$' -count=1 -timeout 20m ./internal/runner",
-    "MASK_RIVER_PHASE3_OVERHEAD_DIR=<dir> go test -run '^TestPhase3ObserverOverhead$' -count=1 -timeout 30m ./internal/runner"
-  ],
-  "unverified": ["rows=2048 crossed batch/workers matrix","10000 batch sizes 128/256 and 10 repeats","100000 rows","peak RSS","WAL/journal size and lock timing","Windows runtime/performance","MySQL/CLI performance"]
+  "observer_pairs": 10,
+  "unverified": ["rows=2048 matrix","10k BatchSize 128/256","10k repeated 10 times/config","100k rows","peak RSS","WAL/journal size and lock timing","cancellation latency by batch","Windows runtime/performance","MySQL/CLI performance"]
 }
