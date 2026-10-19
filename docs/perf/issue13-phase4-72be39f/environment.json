@@ -24,8 +24,8 @@
   "instrumentation": "SQLSpy and diagnostic writer counters enabled for transaction breakdown; Apply timings are instrumented diagnostic timings.",
   "scale_runs": [
     {"rows":10000,"batch_size":64,"workers":[1,2,4,8,16],"repetitions_per_worker":1,"file":"10k-workers.json"},
-    {"rows":10000,"batch_size":64,"workers":[1,2,4,8,16],"repetitions_per_worker":1,"file":"10k-workers-repeat.json"},
-    {"rows":10000,"batch_size":64,"workers":[1,4],"repetitions_per_worker":1,"file":"10k-workers-repeat.csv"}
+    {"rows":10000,"batch_size":64,"workers":[1,2,4,8,16],"repetitions_per_worker":1,"file":"10k-workers-run2.json"},
+    {"rows":10000,"batch_size":64,"workers":[1,2,4,8,16],"repetitions_per_worker":1,"file":"10k-workers-run3.json"}
   ],
   "observer_pairs": 10,
   "unverified": ["rows=2048 matrix","10k BatchSize 128/256","10k repeated 10 times/config","100k rows","peak RSS","WAL/journal size and lock timing","cancellation latency by batch","Windows runtime/performance","MySQL/CLI performance"]

@@ -48,11 +48,7 @@ func TestPhase3ArtifactConsistency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read committed %s: %v", name, err)
 		}
-		regenName := name
-		if name == "diagnostic-summary.md" {
-			regenName = "summary.md"
-		}
-		got, err := os.ReadFile(filepath.Join(regen, regenName))
+		got, err := os.ReadFile(filepath.Join(regen, name))
 		if err != nil {
 			t.Fatalf("read regenerated %s: %v", name, err)
 		}

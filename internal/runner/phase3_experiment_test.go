@@ -318,7 +318,11 @@ func writePhase3Artifacts(t *testing.T, dir string, trials []phase3Trial, repeti
 	writeFile(t, filepath.Join(dir, "results.json"), renderPhase3Stats(trials))
 	writeFile(t, filepath.Join(dir, "stats.csv"), renderPhase3CSVStats(trials))
 	writeFile(t, filepath.Join(dir, "results.csv"), renderPhase3ResultsCSV(trials))
-	writeFile(t, filepath.Join(dir, "summary.md"), renderPhase3Summary(trials, repetitions))
+	summaryName := "summary.md"
+	if len(phase3BatchSizes(trials)) == 4 {
+		summaryName = "diagnostic-summary.md"
+	}
+	writeFile(t, filepath.Join(dir, summaryName), renderPhase3Summary(trials, repetitions))
 	writeFile(t, filepath.Join(dir, "environment.json"), phase3Environment(trials, repetitions))
 	writeFile(t, filepath.Join(dir, "resource-metrics.json"), phase3Resources(trials))
 	writeFile(t, filepath.Join(dir, "throughput.svg"), phase3SVG(trials))
@@ -450,8 +454,12 @@ func renderPhase3Summary(samples []phase3Trial, reps int) string {
 		as := statsOf(a)
 		fmt.Fprintf(&b, "| %d | %d | %.2f / %.2f | %.2f–%.2f | %.1f | %.0f | %.3f | %.3f | %.3f | %.3f | %.2f | %.2f |\n", size, commitCount, as.Mean/1e6, as.Median/1e6, as.Min/1e6, as.Max/1e6, as.StdDevPct, statsOf(r).Mean, statsOf(begin).Mean/1e6, statsOf(commit).Mean/1e6, statsOf(update).Mean/1e6, statsOf(other).Mean/1e6, statsOf(transactionWindow).Mean/1e6, statsOf(residual).Mean/1e6)
 	}
-	b.WriteString("\nApply wall time and rows/s were captured with SQLSpy and diagnostic counters enabled; they include observer overhead and are not production-throughput claims. The paired uninstrumented-vs-instrumented check is recorded in `observer-overhead/observer-summary.md`. Driver event timers cover the underlying driver calls and exclude post-call event recording. The event timers are nested observations, not mutually exclusive components: `writer.Begin` wrapper timing includes schema validation/queries plus driver Begin; `WriteTx.Update` includes row validation and driver UPDATEs; driver SQL timers are measured inside those calls. Do **not** add them. Apply remainder is unassigned and includes observer work as well as page reads, masking, receipt handling, and framework overhead; it must not be attributed solely to production work. This evidence does not claim all Apply time is commit/fsync. `Commit` invocation, driver call elapsed time and successful returned Commit are separately recorded; unknown/error is never called success.\n\n")
-	b.WriteString("Batch order is pseudorandomized with a fixed seed and each trial has a new DB/engine. Ten repeats are descriptive; no significance claim is made. `strace` attribution is in `fsync-evidence.md`.\n")
+	if len(phase3BatchSizes(samples)) == 4 {
+		b.WriteString("\nApply wall time and rows/s were captured with SQLSpy and diagnostic counters enabled; they include observer overhead and are not production-throughput claims. Paired plain/instrumented samples are in `observer-paired-samples.csv`. Driver event timers are nested observations, not mutually exclusive components; do not add them. Apply remainder is unassigned and includes observer work, page reads, masking, receipt handling, and framework overhead. No phase-4 fsync trace was collected; the historical phase-3 trace is not attributed to these runs.\n\n")
+	} else {
+		b.WriteString("\nApply wall time and rows/s were captured with SQLSpy and diagnostic counters enabled; they include observer overhead and are not production-throughput claims. The paired uninstrumented-vs-instrumented check is recorded in `observer-overhead/observer-summary.md`. Driver event timers cover the underlying driver calls and exclude post-call event recording. The event timers are nested observations, not mutually exclusive components: `writer.Begin` wrapper timing includes schema validation/queries plus driver Begin; `WriteTx.Update` includes row validation and driver UPDATEs; driver SQL timers are measured inside those calls. Do **not** add them. Apply remainder is unassigned and includes observer work as well as page reads, masking, receipt handling, and framework overhead; it must not be attributed solely to production work. This evidence does not claim all Apply time is commit/fsync. `Commit` invocation, driver call elapsed time and successful returned Commit are separately recorded; unknown/error is never called success.\n\n")
+		b.WriteString("Batch order is pseudorandomized with a fixed seed and each trial has a new DB/engine. Ten repeats are descriptive; no significance claim is made. `strace` attribution is in `fsync-evidence.md`.\n")
+	}
 	return b.String()
 }
 

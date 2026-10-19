@@ -1,0 +1,6 @@
+workers,fixture_ms,workflow_ms,apply_ms,workflow_rows_per_s,cpu_user_ms,cpu_system_ms,rss_before_kb,rss_after_kb,goroutines_before,goroutines_after,reader_open,writer_open,reader_open_after_close,writer_open_after_close,receipts,rows_committed,complete,validate_passed,source_unchanged,target_rows
+1,55.47,1916.64,1448.05,5217.45,909.95,234.61,18544,25148,4,4,1,1,0,0,157,10000,true,true,true,10000
+2,51.92,1949.99,1471.15,5128.24,1215.52,163.41,26376,26152,4,4,1,1,0,0,157,10000,true,true,true,10000
+4,60.54,1937.18,1462.57,5162.15,1258.67,169.11,26492,26084,4,4,1,1,0,0,157,10000,true,true,true,10000
+8,58.31,1933.99,1462.13,5170.65,1299.76,175.03,26756,26640,4,4,1,1,0,0,157,10000,true,true,true,10000
+16,50.19,1947.91,1470.23,5133.69,1385.19,208.31,27196,26576,4,4,1,1,0,0,157,10000,true,true,true,10000

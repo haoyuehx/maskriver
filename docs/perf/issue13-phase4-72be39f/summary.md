@@ -10,11 +10,11 @@ At baseline source `72be39f0ddc7a68b4e37796ecff7bd8086b744bd`, the randomized 25
 
 Median Apply was 124.23 ms (batch 16), 38.31 ms (64), 24.24 ms (128), and 16.38 ms (256); successful commits were 16, 4, 2, and 1 per trial. There were 256 UPDATE calls in each trial. This demonstrates fewer commits at larger explicit batch sizes, not a candidate production optimization. Apply and component timings include SQLSpy/diagnostic instrumentation. Paired plain-vs-instrumented comparisons were noisy: median deltas -1.78%, -0.03%, -0.42%, with ranges crossing zero for all sizes. See raw pairs in `observer-paired-samples.csv`; they are not a correction factor.
 
-Rows=2048 is **SKIP**. The 10k crossed batch64 × workers1/4 was repeated twice as single observations, not ten repeats; 10k × batch128/256 is **SKIP**. Each observation in the worker matrix is one sample and is not statistical evidence. 100k is **SKIP**. No estimates are extrapolated.
+Rows=2048 is **SKIP**. The 10k batch64 worker matrix was run three times (one observation per worker value per run, not ten repeats); 10k × batch128/256 is **SKIP**. Each observation in the worker matrix is one sample and is not statistical evidence. 100k is **SKIP**. No estimates are extrapolated.
 
 ## 10k results and resources
 
-Real SQLite Runner runs at 10000 rows and batch64, workers1/4, each had 157 receipts, 10000 rows, unchanged source, exact per-key agreement, full Validate, and pools closed to 0/0. Across two runs, Apply ranged 1445–1477 ms (roughly 6.77k–6.92k Apply rows/s); workers1 Apply was 1445–1455 ms and workers4 1463–1476 ms, with no demonstrated improvement. RSS snapshots are process-level and noisy; they do not establish peak memory. Resource details are in `resource-results.csv`.
+Real SQLite Runner runs at 10000 rows and batch64, workers1/4, each had 157 receipts, 10000 rows, unchanged source, exact per-key agreement, full Validate, and pools closed to 0/0. Across three runs, Apply ranged 1445.34–1476.81 ms (roughly 6.77k–6.92k Apply rows/s); workers1 Apply ranged 1445.34–1455.27 ms, workers4 1462.57–1476.74 ms. These single observations per matrix are descriptive only, with no demonstrated speedup. RSS snapshots are process-level and noisy; they do not establish peak memory. Resource details are in `resource-results.csv`.
 
 ## Safety and limitations
 
