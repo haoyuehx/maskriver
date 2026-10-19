@@ -21,9 +21,8 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -69,19 +68,21 @@ func benchEmails(n int, long bool) []string {
 }
 
 // benchWorkflow runs one full workflow and returns per-stage durations. The
-// fixture is built by acceptanceFixture, so fixture cost stays outside the
-// measurement; the caller resets the target between iterations.
+// fixture databases are built per iteration, so fixture cost stays outside the
+// measurement and no state can leak between iterations.
 // benchEnv is one prepared workflow environment: fixture databases, an open
 // engine and a real history store. Building it is fixture cost and must never be
 // inside a timed region.
 type benchEnv struct {
-	engine   *Engine
-	store    *history.Store
-	base     config.Runtime
-	source   string
-	target   string
-	pristine string
+	engine *Engine
+	store  *history.Store
+	base   config.Runtime
 }
+
+// close releases the engine's real reader and writer connections. Every measured
+// iteration gets its own environment, so the target file is never overwritten
+// while a connection still holds it open.
+func (e *benchEnv) close() { _ = e.engine.Close() }
 
 func benchEnvFor(tb testing.TB, cfg benchConfig) *benchEnv {
 	tb.Helper()
@@ -93,42 +94,9 @@ func benchEnvFor(tb testing.TB, cfg benchConfig) *benchEnv {
 	if err != nil {
 		tb.Fatalf("Open: %v", err)
 	}
-	tb.Cleanup(func() { _ = engine.Close() })
 	store, _ := benchStore(tb)
 	engine.SetApprovalQuery(store)
-	// A pristine copy of the source lets each iteration start from the same
-	// state without rebuilding the fixture inside the timed region.
-	pristine := filepath.Join(filepath.Dir(base.Source), "pristine.db")
-	if err := copyFile(base.Source, pristine); err != nil {
-		tb.Fatalf("pristine copy: %v", err)
-	}
-	return &benchEnv{engine: engine, store: store, base: base, source: base.Source, target: base.Target, pristine: pristine}
-}
-
-// reset restores the target so every iteration starts from unmasked data. It is
-// called with the timer stopped.
-func (e *benchEnv) reset(tb testing.TB) {
-	tb.Helper()
-	if err := copyFile(e.pristine, e.target); err != nil {
-		tb.Fatalf("reset target: %v", err)
-	}
-}
-
-func copyFile(from, to string) error {
-	in, err := os.Open(from)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.Create(to)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
-	}
-	return out.Close()
+	return &benchEnv{engine: engine, store: store, base: base}
 }
 
 // run executes one workflow on a prepared environment and returns the stage
@@ -250,26 +218,34 @@ func BenchmarkWorkflow(b *testing.B) {
 		name := fmt.Sprintf("rows=%d/shape=%s/workers=%d", cfg.rows, shapeName(cfg.long), cfg.workers)
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
-			env := benchEnvFor(b, cfg) // fixture cost: outside the timer
-			var lastRows int64
-			var lastStages map[string]time.Duration
+			// Fixture construction, connection teardown and target recreation all
+			// happen with the timer stopped, and every iteration gets a fresh
+			// environment so no state can carry over from the previous iteration.
+			var rowsMasked int64
+			stageSamples := map[string][]float64{}
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				stages, rows := env.run(b)
-				lastRows, lastStages = rows, stages
 				b.StopTimer()
-				env.reset(b)
+				env := benchEnvFor(b, cfg)
 				b.StartTimer()
+				stages, rows := env.run(b)
+				b.StopTimer()
+				env.close()
+				b.StartTimer()
+				rowsMasked = rows
+				for name, d := range stages {
+					stageSamples[name] = append(stageSamples[name], float64(d.Microseconds()))
+				}
 			}
 			b.StopTimer()
-			if lastRows > 0 {
+			if rowsMasked > 0 {
 				// Interval: the timed workflow only, not fixture creation.
-				b.ReportMetric(float64(lastRows)*float64(b.N)/b.Elapsed().Seconds(), "rows/s")
+				b.ReportMetric(float64(rowsMasked)*float64(b.N)/b.Elapsed().Seconds(), "rows/s")
 			}
-			for _, stage := range []string{"scan", "plan", "preview", "approve", "apply"} {
-				if d := lastStages[stage]; d > 0 {
-					b.ReportMetric(float64(d.Microseconds()), "us/"+stage)
-				}
+			// Stage metrics are medians over the same iterations that make up ns/op,
+			// not the last sample, so the numbers are on one footing.
+			for name, samples := range stageSamples {
+				b.ReportMetric(median(samples), "us_"+name+"_median")
 			}
 		})
 	}
@@ -280,4 +256,18 @@ func shapeName(long bool) string {
 		return "long"
 	}
 	return "short"
+}
+
+// median returns the middle value of a small sample set. Reporting stage medians
+// keeps the stage metrics on the same iterations as ns/op.
+func median(samples []float64) float64 {
+	if len(samples) == 0 {
+		return 0
+	}
+	ordered := append([]float64(nil), samples...)
+	sort.Float64s(ordered)
+	if len(ordered)%2 == 1 {
+		return ordered[len(ordered)/2]
+	}
+	return (ordered[len(ordered)/2-1] + ordered[len(ordered)/2]) / 2
 }

@@ -43,6 +43,12 @@ jobs:
         run: |
           set -euo pipefail
           go test -run '^$' -bench '^(BenchmarkMaskBatchWorkers|BenchmarkWorkflow)$' -benchmem -count=3 -benchtime=300ms ./internal/runner | tee bench-out/raw.txt
+      - name: Real SQLite workflow baseline (single iteration, artifacts uploaded)
+        shell: bash
+        run: |
+          set -euo pipefail
+          MASK_RIVER_PERF_DIR=bench-out/perf MASK_RIVER_PERF_ITERS=1 \
+            go test -run 'TestPerfBaseline|TestPerfArtifactsMatchSamples' -count=1 -timeout 40m -v ./internal/runner
       - name: Generate machine-readable metrics and chart
         run: python3 scripts/bench_report.py bench-out/raw.txt bench-out
       - name: Race regression

@@ -5,6 +5,7 @@ package runner
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -63,6 +64,19 @@ func (e *Engine) Close() error {
 		return a
 	}
 	return b
+}
+
+// PoolStats reports the database/sql pool statistics of the connections this
+// engine actually uses. It issues no SQL and creates no second handle, so an
+// observed zero means the real pool is idle rather than that nothing was watched.
+// The boolean is false when either connection cannot report statistics.
+func (e *Engine) PoolStats() (source, target sql.DBStats, ok bool) {
+	if e == nil {
+		return sql.DBStats{}, sql.DBStats{}, false
+	}
+	readerStats, readerOK := db.DBStats(e.source)
+	writerStats, writerOK := db.DBStats(e.target)
+	return readerStats, writerStats, readerOK && writerOK
 }
 
 // tableRef names one scoped table in the frozen reference form.

@@ -1,0 +1,13 @@
+{
+  "goos": "linux",
+  "goarch": "amd64",
+  "go_version": "go1.26.3",
+  "sqlite_driver": "modernc.org/sqlite v1.60.1 (pure Go)",
+  "cpu": "AMD Ryzen 9 7940H w/ Radeon 780M Graphics",
+  "cores": 16,
+  "command": "MASK_RIVER_PERF_DIR=\u003cdir\u003e MASK_RIVER_PERF_ITERS=5 go test -run 'TestPerfBaseline' -timeout 50m ./internal/runner/",
+  "iterations": 5,
+  "sample_count": 60,
+  "timer_scope": "per iteration: Scan, Plan, Preview, Approve, Apply measured individually; fixture construction and connection close happen outside the measured region",
+  "resource_scope": "RSS and CPU are process-wide deltas across one iteration; the reader/writer pool counters are those of the engine's own connections"
+}
