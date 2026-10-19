@@ -78,3 +78,9 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 - **#11 已裁定 ACCEPT WITH RESTRICTIONS**：第三方或团队内非作者审查已完成，P0=0、P1=0。原 P1（第三方许可/署名）由 PR #58 修复，并已由第二个独立上下文复核；合并记录见 PR #58。裁定、六条 P2 与发布范围见 [Issue #11 验收裁定](m1-acceptance-issue11.md)。
 - **六条 P2 仍开放**，均需后续 Issue 关闭，登记表中的编号与内容不改。
 - **M1 未发布**。裁定不等于发布批准：发布门禁（NOTICE/发行包载体、内置第三方许可文本、可宣称与不可宣称范围）仍未完成，见 [测试计划](test-plan.md) 的 UNVERIFIED 清单与已接受 P2 表。
+
+## 2026-10-19 发行增量
+
+M1 限定预览版已作为 **GitHub Pre-release** 发布：tag `v0.1.0-dev` → 提交 `f4aeff9103ad064f57f63846cf47de587bdabeea`，工件 `maskriver-m1-linux-amd64-f4aeff9.tar.gz`，存档 SHA-256 `cf06a7e47cb7b1c558651b36f5c2de958b6c90e76f7906f4d51fce679fecc76c`，已通过上传后重新下载核对。发行证据见 [M1 Limited Preview 发行证据](releases/m1-limited-preview-v0.1.0-dev.md)。
+
+该版本**不是**稳定版或生产就绪版本：MySQL CLI、checkpoint/恢复、exactly-once 与生产级检测准确率仍未验证。M2（#13/#14）保持未启动。
