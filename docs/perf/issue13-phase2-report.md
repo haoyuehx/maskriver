@@ -118,3 +118,9 @@ v1 的 `~78 rows/s` 与「每行 12.7 ms、线性」把 fixture 建库计入了�
 真实 SQLite Runner 对 workers=1/2/4/8/16 各运行一次；所有运行 `Complete`、157 个回执累计 10k 行、独立 Validate、源未变，逐行结果一致；关闭后 reader/writer 连接均为 0/0。Workflow 约 1.92–1.97 秒、Apply 约 1.44–1.49 秒，吞吐约 5.07–5.22k rows/s；workers 增大没有显示一致提速。CPU、RSS、goroutine 抽样及每次结果见 `10k-workers.csv`（本轮 goroutine 观测均为 4→4）；独立 `TestWorkersStopAndDoNotLeak` 同样轮询关闭后回落至基线+2 内。未运行 100k/1M 行或多轮显著性分析。
 
 最终主机证据：Linux `7.0.0-38-generic` x86_64、AMD Ryzen 9 7940H、16 cores、host `/proc/meminfo` MemTotal 15,187 MiB（不代表容器限额）、Go 1.26.3、modernc SQLite 1.60.1。完整 SQLite 样本与报告在 `docs/perf/issue13-phase3-a9b6fb2/`；CLI E2E、MySQL 性能、非 Linux 资源仍是 **UNVERIFIED**。Issue #13 未关闭，也未授权开始 #14。
+
+## 9. 第三阶段独立审查修复与最终更正
+
+保留上述第 8 节作为其生成时的 phase-3 快照，不覆盖其历史记录。独立 Security Review/QA 在 review HEAD `1e5b5b0` 发现环境 SHA 的离线重建不一致、吞吐率缺少物理复核，以及 SQLSpy 批量扫描开销可能随 batch 数增长；QA 确认当时的 artifact consistency gate 失败。后续代码提交 `c747538` 将环境摘要作为测量时 provenance 单独验证、加入吞吐率/负时长校验、SQLSpy O(1) cursor/suffix 观察和 10 组随机配对 observer-overhead 测量；`8ffca9b` 将完整 Validate 放在 strace END marker 之后。修复后的 evidence consistency、观测器配对测试及全套本机测试均通过，准确命令与 SHA 见 `docs/perf/issue13-phase3-c747538/test-results.md`。
+
+**第 8 节中基于 `a9b6fb2` 的表格是较早诊断快照，不是最终值。** 当前最终 Phase 3 结果、观测器误差范围、系统调用证据和 scope 限制以 [`issue13-phase3-report.md`](issue13-phase3-report.md) 与其版本化数据目录 `docs/perf/issue13-phase3-c747538/` 为准。新的独立 QA/Security follow-up、PR 最终 Head CI 和远端验收仍须完成；本地报告不代表自动合并门禁已通过。
