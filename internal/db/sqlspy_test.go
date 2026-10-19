@@ -175,6 +175,19 @@ func TestSQLSpyWriterRecordsWriteStatements(t *testing.T) {
 			t.Fatalf("spy did not classify %s as write intent: %+v", verb, spy.Statements())
 		}
 	}
+	events := spy.Events()
+	timed := map[string]bool{}
+	for _, event := range events {
+		if event.Duration < 0 {
+			t.Fatalf("negative driver timing event: %+v", event)
+		}
+		timed[event.Verb] = true
+	}
+	for _, verb := range []string{"BEGIN", "UPDATE", "COMMIT"} {
+		if !timed[verb] {
+			t.Fatalf("spy did not time real driver %s call: %+v", verb, events)
+		}
+	}
 
 	// The wrapped connection must still forward to the real driver.
 	readback, err := sql.Open("sqlite", "file:"+opts.DSN.Payload()+"?mode=ro")

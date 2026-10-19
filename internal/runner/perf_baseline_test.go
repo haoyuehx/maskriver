@@ -117,6 +117,7 @@ func measureConfig(t *testing.T, cfg perfConfig, iterations int) []perfSample {
 		sample := perfSample{
 			Rows: cfg.rows, Shape: shapeOf(cfg.long), Workers: cfg.workers, Iteration: i + 1,
 			TotalNS: totalNS, RowsDone: rows, FixtureNS: fixtureNS,
+			CPUUserNS: -1, CPUSystemNS: -1,
 			ScanNS:           stages["scan"].Nanoseconds(),
 			PlanNS:           stages["plan"].Nanoseconds(),
 			PreviewNS:        stages["preview"].Nanoseconds(),
@@ -124,7 +125,7 @@ func measureConfig(t *testing.T, cfg perfConfig, iterations int) []perfSample {
 			ApplyNS:          stages["apply"].Nanoseconds(),
 			GoroutinesBefore: goroutinesBefore, GoroutinesAfter: runtime.NumGoroutine(),
 			RSSBeforeKB: rssBefore, RSSAfterKB: rssKB(),
-			ReaderOpen: -1, WriterOpen: -1,
+			ReaderOpen: -1, WriterOpen: -1, ReaderInUse: -1, WriterInUse: -1,
 		}
 		if cpuOK && cpuAfterOK {
 			sample.CPUUserNS = userAfter - userBefore
@@ -136,11 +137,93 @@ func measureConfig(t *testing.T, cfg perfConfig, iterations int) []perfSample {
 			sample.ReaderInUse = reader.InUse
 			sample.WriterInUse = writer.InUse
 		}
-		env.close()
+		if err := env.close(); err != nil {
+			t.Errorf("close measured engine and remove fixture: %v", err)
+		}
 		samples = append(samples, sample)
 	}
 	return samples
 }
+
+// validateSamples checks physical and matrix invariants for both newly measured
+// data and offline artifact verification. The 80-120% stage/total tolerance is
+// intentionally broad: TotalNS wraps env.run while stages use their own clocks;
+// the margin permits timer overhead but rejects fixture contamination and
+// truncated/missing work.
+func validateSamples(samples []perfSample) error {
+	if len(samples) == 0 {
+		return fmt.Errorf("no samples")
+	}
+	configs := make(map[string]perfConfig)
+	for _, cfg := range perfMatrix() {
+		configs[fmt.Sprintf("%d/%s/w%d", cfg.rows, shapeOf(cfg.long), cfg.workers)] = cfg
+	}
+	counts := make(map[string]int)
+	seen := make(map[string]bool)
+	iterations := 0
+	for _, s := range samples {
+		key := fmt.Sprintf("%d/%s/w%d", s.Rows, s.Shape, s.Workers)
+		if _, ok := configs[key]; !ok {
+			return fmt.Errorf("illegal configuration %s", key)
+		}
+		if s.Iteration < 1 {
+			return fmt.Errorf("%s has invalid iteration %d", key, s.Iteration)
+		}
+		id := fmt.Sprintf("%s/iteration=%d", key, s.Iteration)
+		if seen[id] {
+			return fmt.Errorf("duplicate sample %s", id)
+		}
+		seen[id] = true
+		counts[key]++
+		if s.Iteration > iterations {
+			iterations = s.Iteration
+		}
+		if s.RowsDone != int64(s.Rows) {
+			return fmt.Errorf("%s iteration %d rows_masked=%d, want %d", key, s.Iteration, s.RowsDone, s.Rows)
+		}
+		if s.TotalNS <= 0 || s.FixtureNS <= 0 {
+			return fmt.Errorf("%s iteration %d has non-positive total/fixture duration", key, s.Iteration)
+		}
+		stages := []int64{s.ScanNS, s.PlanNS, s.PreviewNS, s.ApproveNS, s.ApplyNS}
+		for i, ns := range stages {
+			if ns <= 0 {
+				return fmt.Errorf("%s iteration %d stage %d has non-positive duration %d", key, s.Iteration, i, ns)
+			}
+		}
+		ratio := 100 * float64(s.stageSumNS()) / float64(s.TotalNS)
+		if ratio < 80 || ratio > 120 {
+			return fmt.Errorf("%s iteration %d stage sum is %.1f%% of total, expected 80-120%%", key, s.Iteration, ratio)
+		}
+		if s.GoroutinesBefore < 0 || s.GoroutinesAfter < 0 || !validMetric(s.RSSBeforeKB) || !validMetric(s.RSSAfterKB) ||
+			!validMetric(s.CPUUserNS) || !validMetric(s.CPUSystemNS) || !validMetric(int64(s.ReaderOpen)) ||
+			!validMetric(int64(s.WriterOpen)) || !validMetric(int64(s.ReaderInUse)) || !validMetric(int64(s.WriterInUse)) {
+			return fmt.Errorf("%s iteration %d has invalid resource metric; use -1 for UNVERIFIED", key, s.Iteration)
+		}
+		if (s.CPUUserNS == -1) != (s.CPUSystemNS == -1) {
+			return fmt.Errorf("%s iteration %d CPU metrics must both be measured or both -1 (UNVERIFIED)", key, s.Iteration)
+		}
+	}
+	if iterations == 0 {
+		return fmt.Errorf("no valid iteration count")
+	}
+	for key := range configs {
+		if counts[key] != iterations {
+			return fmt.Errorf("configuration %s has %d samples; matrix requires %d iterations", key, counts[key], iterations)
+		}
+		for i := 1; i <= iterations; i++ {
+			if !seen[fmt.Sprintf("%s/iteration=%d", key, i)] {
+				return fmt.Errorf("configuration %s missing iteration %d", key, i)
+			}
+		}
+	}
+	if len(samples) != len(configs)*iterations {
+		return fmt.Errorf("sample count %d does not match %d configurations × %d iterations", len(samples), len(configs), iterations)
+	}
+	return nil
+}
+
+// -1 is the explicit UNVERIFIED sentinel; zero is a real value only for counts.
+func validMetric(value int64) bool { return value == -1 || value >= 0 }
 
 // stageSum is the sum of the stages measured inside the same iteration. Comparing
 // it with TotalNS is the pollution check: if fixture work leaked into the measured
@@ -210,6 +293,9 @@ func perConfig(samples []perfSample) map[string][]perfSample {
 // rendered summary, which the consistency test regenerates and compares.
 func writeBaselineArtifacts(t *testing.T, dir string, samples []perfSample) string {
 	t.Helper()
+	if err := validateSamples(samples); err != nil {
+		t.Fatalf("invalid performance samples: %v", err)
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -462,6 +548,9 @@ func TestPerfBaseline(t *testing.T) {
 		if err := json.Unmarshal(raw, &samples); err != nil {
 			t.Fatalf("parse samples: %v", err)
 		}
+		if err := validateSamples(samples); err != nil {
+			t.Fatalf("invalid performance samples: %v", err)
+		}
 		writeBaselineArtifacts(t, dir, samples)
 		return
 	}
@@ -477,19 +566,8 @@ func TestPerfBaseline(t *testing.T) {
 	for _, cfg := range perfMatrix() {
 		samples = append(samples, measureConfig(t, cfg, iterations)...)
 	}
-	// Coherence: stages are measured inside the same iteration as the total, so
-	// their sum must account for most of it. A wide gap means something other than
-	// the workflow is being timed.
-	for _, sample := range samples {
-		ratio := 100 * float64(sample.stageSumNS()) / float64(sample.TotalNS)
-		if ratio < 80 || ratio > 120 {
-			t.Fatalf("%d/%s/w%d iteration %d: stage sum is %.1f%% of total, expected 80-120%%",
-				sample.Rows, sample.Shape, sample.Workers, sample.Iteration, ratio)
-		}
-		if sample.RowsDone != int64(sample.Rows) {
-			t.Fatalf("%d/%s/w%d iteration %d masked %d rows, want %d",
-				sample.Rows, sample.Shape, sample.Workers, sample.Iteration, sample.RowsDone, sample.Rows)
-		}
+	if err := validateSamples(samples); err != nil {
+		t.Fatalf("invalid performance samples: %v", err)
 	}
 	writeBaselineArtifacts(t, dir, samples)
 	t.Logf("wrote %d samples to %s", len(samples), dir)
@@ -512,16 +590,30 @@ func TestPerfArtifactsMatchSamples(t *testing.T) {
 	if err := json.Unmarshal(raw, &samples); err != nil {
 		t.Fatalf("parse samples: %v", err)
 	}
-	if len(samples) == 0 {
-		t.Fatal("samples.json holds no samples")
+	if err := validateSamples(samples); err != nil {
+		t.Fatalf("invalid performance samples: %v", err)
 	}
 	onDisk, err := os.ReadFile(filepath.Join(dir, "summary.md"))
 	if err != nil {
 		t.Fatalf("read summary: %v", err)
 	}
-	rendered := writeBaselineArtifacts(t, t.TempDir(), samples)
+	regenDir := t.TempDir()
+	rendered := writeBaselineArtifacts(t, regenDir, samples)
 	if rendered != string(onDisk) {
 		t.Fatal("summary.md does not match the numbers derivable from samples.json; regenerate it instead of editing it")
+	}
+	for _, name := range []string{"samples.json", "results.csv", "stats.csv", "environment.json"} {
+		want, readErr := os.ReadFile(filepath.Join(dir, name))
+		if readErr != nil {
+			t.Fatalf("read %s: %v", name, readErr)
+		}
+		got, readErr := os.ReadFile(filepath.Join(regenDir, name))
+		if readErr != nil {
+			t.Fatalf("read regenerated %s: %v", name, readErr)
+		}
+		if string(want) != string(got) {
+			t.Fatalf("%s does not match artifacts regenerated from samples.json", name)
+		}
 	}
 
 	// The CSV must agree with the same computation, column by column.

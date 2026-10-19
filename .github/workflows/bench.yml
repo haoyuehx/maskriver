@@ -80,3 +80,41 @@ jobs:
         shell: bash
         run: |
           echo 'Synthetic transform throughput only. Process RSS and CPU include Go test startup, not full database measurements. No linear speedup or privacy certification is claimed.' >> "$GITHUB_STEP_SUMMARY"
+
+  phase3-stress:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Record stress environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-out
+          { date --utc --iso-8601=seconds; go version; go env GOOS GOARCH; uname -a; nproc; git rev-parse HEAD; go list -m modernc.org/sqlite; } | tee phase3-out/ci-environment.txt
+      - name: Randomized 10-repeat transaction comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          MASK_RIVER_PHASE3_DIR=phase3-out MASK_RIVER_PHASE3_REPS=10 go test -run '^TestPhase3BatchExperiment$' -count=1 -timeout 50m -v ./internal/runner
+          MASK_RIVER_PHASE3_DIR=phase3-out go test -run '^TestPhase3ArtifactConsistency$' -count=1 -v ./internal/runner
+      - name: Real SQLite 10k workers 1,2,4,8,16
+        shell: bash
+        run: |
+          set -euo pipefail
+          MASK_RIVER_PHASE3_10K_DIR=phase3-out go test -run '^TestPhase3Scale10K$' -count=1 -timeout 20m -v ./internal/runner
+      - name: Correlate SQLite sync syscalls with Apply window
+        shell: bash
+        run: |
+          set -euo pipefail
+          MASK_RIVER_STRACE_APPLY=1 strace -f -ttt -T -yy -e trace=fsync,fdatasync,write -o phase3-out/fsync-trace.log go test -run '^TestPhase3StraceApply$' -count=1 -v ./internal/runner 2>&1 | tee phase3-out/fsync-test-output.txt
+      - name: Upload phase-3 stress evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue13-phase3-stress
+          path: phase3-out/
