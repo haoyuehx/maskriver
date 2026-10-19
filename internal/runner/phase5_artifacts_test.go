@@ -118,6 +118,9 @@ func TestPhase5ArchivedArtifactConsistency(t *testing.T) {
 	if err := validatePhase5Summary(samples, len(parsedResources), string(summary)); err != nil {
 		t.Fatalf("summary.md disagrees with raw samples: %v", err)
 	}
+	if err := validatePhase5PreflightSummary(dir, string(summary)); err != nil {
+		t.Fatalf("summary preflight values disagree with archived artifacts: %v", err)
+	}
 }
 
 func TestPhase5ArchivedArtifactValidatorsRejectMetricMutation(t *testing.T) {
@@ -176,6 +179,26 @@ func TestPhase5ArchivedArtifactValidatorsRejectMetricMutation(t *testing.T) {
 	}
 	if err := validatePhase5Summary(samples, len(resourceRecords)-1, mutatedReceiptSummary); err == nil {
 		t.Fatal("summary validator accepted a mutated receipt-capacity statement")
+	}
+	for _, mutation := range [][2]string{
+		{"each peaked at one open connection", "each peaked at two open connections"},
+		{"closed with zero open connections", "closed with one open connection"},
+		{"within two of each trial's pre-sampler baseline", "within three of each trial's pre-sampler baseline"},
+	} {
+		mutatedPoolSummary := strings.Replace(string(summary), mutation[0], mutation[1], 1)
+		if mutatedPoolSummary == string(summary) {
+			t.Fatalf("test mutation did not find pool claim %q", mutation[0])
+		}
+		if err := validatePhase5PoolSummary(samples, mutatedPoolSummary); err == nil {
+			t.Fatalf("pool summary validator accepted mutation %q", mutation[0])
+		}
+	}
+	mutatedPreflight := strings.Replace(string(summary), "160,813,273,088", "160,813,273,089", 1)
+	if mutatedPreflight == string(summary) {
+		t.Fatal("test mutation did not find the expected preflight disk value")
+	}
+	if err := validatePhase5PreflightSummary(dir, mutatedPreflight); err == nil {
+		t.Fatal("preflight summary validator accepted a mutated disk value")
 	}
 }
 
@@ -426,6 +449,50 @@ func validatePhase5Summary(samples []phase5Sample, resourceCount int, summary st
 	}
 	if !strings.Contains(summary, receiptStatement) {
 		return errors.New("summary receipt-capacity statement disagrees with archived samples")
+	}
+	if err := validatePhase5PoolSummary(samples, summary); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validatePhase5PoolSummary(samples []phase5Sample, summary string) error {
+	for _, sample := range samples {
+		if sample.ReaderPoolOpenMax != 1 || sample.TargetPoolOpenMax != 1 || sample.WriterPoolOpenMax != 1 {
+			return fmt.Errorf("pool peak claim is false for trial %s", sample.TrialID)
+		}
+		if sample.WriterPoolOpenAfterClose != 0 {
+			return fmt.Errorf("writer pool did not close for trial %s", sample.TrialID)
+		}
+		goroutineDelta := sample.GoroutinesAfterClose - sample.GoroutinesBefore
+		if goroutineDelta < -2 || goroutineDelta > 2 {
+			return fmt.Errorf("post-close goroutine claim is false for trial %s", sample.TrialID)
+		}
+	}
+	statement := "Reader, target and writer pools each peaked at one open connection; the test asserted reader and target pools closed with zero open connections, and recorded writer open count zero after close in every trial. Post-close goroutines returned to within two of each trial's pre-sampler baseline."
+	if !strings.Contains(summary, statement) {
+		return errors.New("summary pool close/goroutine claims disagree with archived samples")
+	}
+	return nil
+}
+
+func validatePhase5PreflightSummary(dir, summary string) error {
+	var preflight phase5Budget
+	if err := readPhase5JSON(filepath.Join(dir, "preflight.json"), &preflight); err != nil {
+		return fmt.Errorf("read preflight data: %w", err)
+	}
+	var environment struct {
+		ResourceBudget phase5Budget `json:"resource_budget"`
+	}
+	if err := readPhase5JSON(filepath.Join(dir, "environment.json"), &environment); err != nil {
+		return fmt.Errorf("read environment data: %w", err)
+	}
+	if !reflect.DeepEqual(preflight, environment.ResourceBudget) {
+		return errors.New("environment resource budget differs from preflight.json")
+	}
+	statement := fmt.Sprintf("Preflight measured %s available disk bytes and %s KiB `MemAvailable`", phase5CommaInt(int64(preflight.AvailableDiskBytes)), phase5CommaInt(preflight.AvailableMemoryKB))
+	if !preflight.Passed || !strings.Contains(summary, statement) {
+		return errors.New("summary preflight values disagree with archived preflight data")
 	}
 	return nil
 }

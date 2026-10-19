@@ -52,7 +52,7 @@ Approximate process CPU during the Scan-through-Validate workflow (the verificat
 | 100k | 8.07 s | 1.87 s | 9.94 s (7.38–11.93) |
 | 1M | 68.43 s | 15.14 s | 83.57 s (70.29–96.84) |
 
-All 42 trials completed, passed Validate and aggregate checks, preserved the source file SHA-256, and had expected receipts/commits. Target NULL and distinct counts matched the source; every high-cardinality row and every non-NULL repeated-field row was changed. Cross-worker target logical digests matched. The sampler recorded 5,999 resource rows. Maximum sampled RSS was 37.3 MiB, sampled heap allocation 5.12 MiB, sampled goroutines 22, and sampled file descriptors 12. Reader, target and writer pools each peaked at one open connection; all reported zero open connections after close, and post-close goroutines returned to within two of the pre-sampler baseline.
+All 42 trials completed, passed Validate and aggregate checks, preserved the source file SHA-256, and had expected receipts/commits. Target NULL and distinct counts matched the source; every high-cardinality row and every non-NULL repeated-field row was changed. Cross-worker target logical digests matched. The sampler recorded 5,999 resource rows. Maximum sampled RSS was 37.3 MiB, sampled heap allocation 5.12 MiB, sampled goroutines 22, and sampled file descriptors 12. Reader, target and writer pools each peaked at one open connection; the test asserted reader and target pools closed with zero open connections, and recorded writer open count zero after close in every trial. Post-close goroutines returned to within two of each trial's pre-sampler baseline.
 
 The receipt slice is retained in `ApplyReport`, and its measured backing capacity increases with the number of batches: 0.019 MiB at 10k, 0.133 MiB at 100k, and 1.102 MiB at 1M. Therefore this evidence **does not establish the strict AC that total memory is bounded only by batch × workers**. RSS samples remained modest in this workload, but are not a proof of that invariant. Addressing accumulated receipts would require explicit shared-contract review; this phase did not alter the frozen contract.
 
@@ -74,7 +74,7 @@ No worker count demonstrated a repeatable gain here. One worker had the lowest m
 
 ## Commands and platform
 
-Measurement host: Linux/amd64, Go 1.26.3, 16 logical CPUs, AMD Ryzen 9 7940H, Linux 7.0.0-38-generic, modernc.org/sqlite v1.60.1. Preflight measured 160,884,408,320 available disk bytes and 9,690,308 KiB `MemAvailable`; no cgroup `memory.max` file was exposed. The reported SQLite default journal mode was DELETE; the test did not change synchronous settings.
+Measurement host: Linux/amd64, Go 1.26.3, 16 logical CPUs, AMD Ryzen 9 7940H, Linux 7.0.0-38-generic, modernc.org/sqlite v1.60.1. Preflight measured 160,813,273,088 available disk bytes and 9,406,084 KiB `MemAvailable`; no cgroup `memory.max` file was exposed. The reported SQLite default journal mode was DELETE; the test did not change synchronous settings.
 
 - Scale matrix: `MASKRIVER_PHASE5_SCALE_OUT="$PWD/docs/perf/issue13-phase5-20261019-final" go test -run '^TestPhase5ScaleMatrix$' -count=1 -timeout 4h ./internal/runner` — PASS, 42 samples, 600.463 s.
 - `go test -count=1 ./...` — PASS.
