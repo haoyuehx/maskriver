@@ -65,6 +65,11 @@ type phase3Trial struct {
 	Synchronous           string  `json:"synchronous"`
 	BatchStatementCounts  []int   `json:"statements_per_batch"`
 	BatchUpdateCounts     []int   `json:"updates_per_batch"`
+	BatchOtherCounts      []int   `json:"other_statements_per_batch"`
+	BatchBeginDriverNS    []int64 `json:"driver_begin_ns_per_batch"`
+	BatchCommitDriverNS   []int64 `json:"driver_commit_ns_per_batch"`
+	BatchUpdateExecNS     []int64 `json:"driver_update_exec_ns_per_batch"`
+	BatchOtherSQLCallNS   []int64 `json:"driver_other_sql_call_ns_per_batch"`
 	Receipts              int     `json:"receipts"`
 	RowsCommitted         int64   `json:"rows_committed"`
 	Complete              bool    `json:"complete"`
@@ -143,6 +148,11 @@ func runPhase3Trial(t *testing.T, root string, order, trial, batch, rows, worker
 	batchWindows := append([]time.Duration(nil), observed.batchWindows...)
 	batchStatementCounts := append([]int(nil), observed.batchStatementCounts...)
 	batchUpdateCounts := append([]int(nil), observed.batchUpdateCounts...)
+	batchOtherCounts := append([]int(nil), observed.batchOtherCounts...)
+	batchBeginDriverNS := append([]int64(nil), observed.batchBeginDriverNS...)
+	batchCommitDriverNS := append([]int64(nil), observed.batchCommitDriverNS...)
+	batchUpdateExecNS := append([]int64(nil), observed.batchUpdateExecNS...)
+	batchOtherSQLCallNS := append([]int64(nil), observed.batchOtherSQLCallNS...)
 	observed.mu.Unlock()
 
 	events := sqlSpy.Events()
@@ -209,7 +219,10 @@ func runPhase3Trial(t *testing.T, root string, order, trial, batch, rows, worker
 		UpdateCallWallNS: uWall.Nanoseconds(), DriverBeginNS: driverBegin, DriverCommitNS: driverCommit,
 		DriverRollbackNS: driverRollback, UpdateExecNS: updateExec, OtherSQLCallNS: otherSQL,
 		Statements: len(statements), UpdateStatements: updates, BatchStatementCounts: batchStatementCounts,
-		BatchUpdateCounts: batchUpdateCounts, BatchTransactionNS: batchWindowNS,
+		BatchUpdateCounts: batchUpdateCounts, BatchOtherCounts: batchOtherCounts,
+		BatchBeginDriverNS: batchBeginDriverNS, BatchCommitDriverNS: batchCommitDriverNS,
+		BatchUpdateExecNS: batchUpdateExecNS, BatchOtherSQLCallNS: batchOtherSQLCallNS,
+		BatchTransactionNS:    batchWindowNS,
 		BatchTransactionSumNS: batchWindowSum, ApplyUnassignedNS: applyNS - batchWindowSum,
 		Receipts: len(env.lastApply.Committed), RowsCommitted: committed,
 		Complete: env.lastApply.Complete, ValidatePassed: validatePassed,
@@ -314,13 +327,13 @@ func writePhase3Artifacts(t *testing.T, dir string, trials []phase3Trial, repeti
 func phase3BatchCSV(t *testing.T, trials []phase3Trial) string {
 	t.Helper()
 	var b strings.Builder
-	b.WriteString("order,trial,batch_size,batch_index,statements,update_statements,transaction_window_ns,receipt_rows,complete\n")
+	b.WriteString("order,trial,batch_size,batch_index,statements,update_statements,other_statements,driver_begin_ns,driver_commit_ns,driver_update_exec_ns,driver_other_sql_call_ns,transaction_window_ns,receipt_rows,complete\n")
 	for _, sample := range trials {
-		if len(sample.BatchStatementCounts) != sample.Receipts || len(sample.BatchUpdateCounts) != sample.Receipts || len(sample.ReceiptRows) != sample.Receipts {
+		if len(sample.BatchStatementCounts) != sample.Receipts || len(sample.BatchUpdateCounts) != sample.Receipts || len(sample.BatchOtherCounts) != sample.Receipts || len(sample.BatchBeginDriverNS) != sample.Receipts || len(sample.BatchCommitDriverNS) != sample.Receipts || len(sample.BatchUpdateExecNS) != sample.Receipts || len(sample.BatchOtherSQLCallNS) != sample.Receipts || len(sample.ReceiptRows) != sample.Receipts {
 			t.Fatalf("trial %d batch detail mismatch: stmts=%d updates=%d receipts=%d rows=%d", sample.Order, len(sample.BatchStatementCounts), len(sample.BatchUpdateCounts), sample.Receipts, len(sample.ReceiptRows))
 		}
 		for i := range sample.BatchStatementCounts {
-			fmt.Fprintf(&b, "%d,%d,%d,%d,%d,%d,%d,%d,%t\n", sample.Order, sample.Trial, sample.BatchSize, i+1, sample.BatchStatementCounts[i], sample.BatchUpdateCounts[i], sample.BatchTransactionNS[i], sample.ReceiptRows[i], sample.Complete)
+			fmt.Fprintf(&b, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%t\n", sample.Order, sample.Trial, sample.BatchSize, i+1, sample.BatchStatementCounts[i], sample.BatchUpdateCounts[i], sample.BatchOtherCounts[i], sample.BatchBeginDriverNS[i], sample.BatchCommitDriverNS[i], sample.BatchUpdateExecNS[i], sample.BatchOtherSQLCallNS[i], sample.BatchTransactionNS[i], sample.ReceiptRows[i], sample.Complete)
 		}
 	}
 	return b.String()
@@ -519,22 +532,27 @@ func validatePhase3Trials(samples []phase3Trial, repetitions int) error {
 		if s.BeginAttempts != want || s.BeginSucceeded != want || s.BeginFailed != 0 || s.CommitAttempts != want || s.CommitReturnedSuccess != want || s.CommitReturnedError != 0 || s.CommitUnknown != 0 || s.RollbackAttempts != 0 || s.Receipts != want {
 			return fmt.Errorf("trial %d transaction/receipt counts inconsistent with %d batches", s.Order, want)
 		}
-		if s.UpdateStatements != 256 || len(s.BatchStatementCounts) != want || len(s.BatchUpdateCounts) != want || len(s.BatchTransactionNS) != want || len(s.ReceiptRows) != want {
+		if s.UpdateStatements != 256 || len(s.BatchStatementCounts) != want || len(s.BatchUpdateCounts) != want || len(s.BatchOtherCounts) != want || len(s.BatchBeginDriverNS) != want || len(s.BatchCommitDriverNS) != want || len(s.BatchUpdateExecNS) != want || len(s.BatchOtherSQLCallNS) != want || len(s.BatchTransactionNS) != want || len(s.ReceiptRows) != want {
 			return fmt.Errorf("trial %d per-batch measurement count mismatch", s.Order)
 		}
 		var updateCount, receiptRows int64
 		var txWindow int64
 		var statementCount int
+		var beginNS, commitNS, updateNS, otherNS int64
 		for i := 0; i < want; i++ {
 			updateCount += int64(s.BatchUpdateCounts[i])
 			receiptRows += s.ReceiptRows[i]
 			statementCount += s.BatchStatementCounts[i]
+			beginNS += s.BatchBeginDriverNS[i]
+			commitNS += s.BatchCommitDriverNS[i]
+			updateNS += s.BatchUpdateExecNS[i]
+			otherNS += s.BatchOtherSQLCallNS[i]
 			txWindow += s.BatchTransactionNS[i]
-			if s.BatchStatementCounts[i] < s.BatchUpdateCounts[i]+2 || s.BatchTransactionNS[i] <= 0 || s.BatchUpdateCounts[i] <= 0 || s.ReceiptRows[i] != int64(s.BatchUpdateCounts[i]) {
+			if s.BatchStatementCounts[i] != s.BatchUpdateCounts[i]+s.BatchOtherCounts[i]+2 || s.BatchTransactionNS[i] <= 0 || s.BatchUpdateCounts[i] <= 0 || s.ReceiptRows[i] != int64(s.BatchUpdateCounts[i]) {
 				return fmt.Errorf("trial %d batch %d SQL/receipt invariant failed", s.Order, i+1)
 			}
 		}
-		if updateCount != 256 || receiptRows != 256 || statementCount != s.Statements || txWindow != s.BatchTransactionSumNS || s.ApplyNS < txWindow || s.ApplyUnassignedNS != s.ApplyNS-txWindow {
+		if updateCount != 256 || receiptRows != 256 || statementCount != s.Statements || beginNS != s.DriverBeginNS || commitNS != s.DriverCommitNS || updateNS != s.UpdateExecNS || otherNS != s.OtherSQLCallNS || txWindow != s.BatchTransactionSumNS || s.ApplyNS < txWindow || s.ApplyUnassignedNS != s.ApplyNS-txWindow {
 			return fmt.Errorf("trial %d update/receipt/timing totals inconsistent", s.Order)
 		}
 		if s.CPUUserNS < -1 || s.CPUSystemNS < -1 || (s.CPUUserNS == -1) != (s.CPUSystemNS == -1) || s.RSSBeforeKB < -1 || s.RSSAfterKB < -1 || s.ReaderOpen < -1 || s.WriterOpen < -1 || s.ReaderOpenAfterClose != 0 || s.WriterOpenAfterClose != 0 {

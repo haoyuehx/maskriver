@@ -65,14 +65,20 @@ type spyBatchWriter struct {
 	batchWindows         []time.Duration
 	batchStatementCounts []int
 	batchUpdateCounts    []int
+	batchOtherCounts     []int
+	batchBeginDriverNS   []int64
+	batchCommitDriverNS  []int64
+	batchUpdateExecNS    []int64
+	batchOtherSQLCallNS  []int64
 	sqlSpy               *db.SQLSpy
 }
 
 func (s *spyBatchWriter) Begin(ctx context.Context, plan contracts.TablePlan) (contracts.WriteTx, error) {
 	started := time.Now()
-	statementStart := 0
+	statementStart, eventStart := 0, 0
 	if s.sqlSpy != nil {
 		statementStart = len(s.sqlSpy.Statements())
+		eventStart = len(s.sqlSpy.Events())
 	}
 	tx, err := s.Writer.Begin(ctx, plan)
 	s.mu.Lock()
@@ -87,7 +93,7 @@ func (s *spyBatchWriter) Begin(ctx context.Context, plan contracts.TablePlan) (c
 	if err != nil {
 		return nil, err
 	}
-	return &spyTx{WriteTx: tx, parent: s, unknownAfterCommit: s.unknownAfterCommit, failUpdateErr: s.failUpdateErr, batchStart: started, statementStart: statementStart}, nil
+	return &spyTx{WriteTx: tx, parent: s, unknownAfterCommit: s.unknownAfterCommit, failUpdateErr: s.failUpdateErr, batchStart: started, statementStart: statementStart, eventStart: eventStart}, nil
 }
 
 type spyTx struct {
@@ -97,6 +103,7 @@ type spyTx struct {
 	failUpdateErr      error
 	batchStart         time.Time
 	statementStart     int
+	eventStart         int
 }
 
 func (t *spyTx) Update(ctx context.Context, changes []contracts.RowChange) (int64, error) {
@@ -121,7 +128,8 @@ func (t *spyTx) Commit(ctx context.Context) error {
 		err = contracts.ErrCommitUnknown
 	}
 	batchElapsed := time.Since(t.batchStart)
-	var batchStatements, batchUpdates int
+	var batchStatements, batchUpdates, batchOther int
+	var batchBeginNS, batchCommitNS, batchUpdateNS, batchOtherNS int64
 	if t.parent.sqlSpy != nil {
 		all := t.parent.sqlSpy.Statements()
 		if t.statementStart <= len(all) {
@@ -130,6 +138,24 @@ func (t *spyTx) Commit(ctx context.Context) error {
 			for _, statement := range batch {
 				if statement.Verb == "UPDATE" {
 					batchUpdates++
+				}
+			}
+			batchOther = batchStatements - batchUpdates - 2
+		}
+		events := t.parent.sqlSpy.Events()
+		if t.eventStart <= len(events) {
+			for _, event := range events[t.eventStart:] {
+				ns := event.Duration.Nanoseconds()
+				switch event.Verb {
+				case "BEGIN":
+					batchBeginNS += ns
+				case "COMMIT":
+					batchCommitNS += ns
+				case "UPDATE":
+					batchUpdateNS += ns
+				case "ROLLBACK":
+				default:
+					batchOtherNS += ns
 				}
 			}
 		}
@@ -148,6 +174,11 @@ func (t *spyTx) Commit(ctx context.Context) error {
 	t.parent.batchWindows = append(t.parent.batchWindows, batchElapsed)
 	t.parent.batchStatementCounts = append(t.parent.batchStatementCounts, batchStatements)
 	t.parent.batchUpdateCounts = append(t.parent.batchUpdateCounts, batchUpdates)
+	t.parent.batchOtherCounts = append(t.parent.batchOtherCounts, batchOther)
+	t.parent.batchBeginDriverNS = append(t.parent.batchBeginDriverNS, batchBeginNS)
+	t.parent.batchCommitDriverNS = append(t.parent.batchCommitDriverNS, batchCommitNS)
+	t.parent.batchUpdateExecNS = append(t.parent.batchUpdateExecNS, batchUpdateNS)
+	t.parent.batchOtherSQLCallNS = append(t.parent.batchOtherSQLCallNS, batchOtherNS)
 	t.parent.mu.Unlock()
 	return err
 }
