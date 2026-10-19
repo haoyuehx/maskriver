@@ -1,0 +1,18 @@
+goos: linux
+goarch: amd64
+pkg: github.com/haoyuehx/maskriver/internal/runner
+cpu: AMD Ryzen 9 7940H w/ Radeon 780M Graphics     
+BenchmarkWorkflow/rows=128/shape=short/workers=1-16         	       5	  45104410 ns/op	      2838 rows/s	     22255 us/apply	      4387 us/approve	      4842 us/plan	      5035 us/preview	      3287 us/scan	 6353254 B/op	  139627 allocs/op
+BenchmarkWorkflow/rows=128/shape=short/workers=4-16         	       5	  46385490 ns/op	      2759 rows/s	     26374 us/apply	      5555 us/approve	      4001 us/plan	      5738 us/preview	      4071 us/scan	 6363880 B/op	  139709 allocs/op
+BenchmarkWorkflow/rows=128/shape=long/workers=1-16          	       5	  46266277 ns/op	      2767 rows/s	     24499 us/apply	      5148 us/approve	      4227 us/plan	      6535 us/preview	      3597 us/scan	 6557139 B/op	  139630 allocs/op
+BenchmarkWorkflow/rows=128/shape=long/workers=4-16          	       5	  48819429 ns/op	      2622 rows/s	     26880 us/apply	      5366 us/approve	      6943 us/plan	      6380 us/preview	      4477 us/scan	 6567004 B/op	  139717 allocs/op
+BenchmarkWorkflow/rows=512/shape=short/workers=1-16         	       5	 146755168 ns/op	      3489 rows/s	     88518 us/apply	      6200 us/approve	     14565 us/plan	     21793 us/preview	     15668 us/scan	21943334 B/op	  551257 allocs/op
+BenchmarkWorkflow/rows=512/shape=short/workers=4-16         	       5	 153067264 ns/op	      3345 rows/s	     97823 us/apply	      4887 us/approve	     13606 us/plan	     18750 us/preview	     14371 us/scan	21970812 B/op	  551518 allocs/op
+BenchmarkWorkflow/rows=512/shape=long/workers=1-16          	       5	 151544929 ns/op	      3379 rows/s	     89930 us/apply	      5321 us/approve	     14741 us/plan	     21937 us/preview	     15479 us/scan	22747830 B/op	  551265 allocs/op
+BenchmarkWorkflow/rows=512/shape=long/workers=4-16          	       5	 152721141 ns/op	      3353 rows/s	     88514 us/apply	      5055 us/approve	     14973 us/plan	     22553 us/preview	     16496 us/scan	22769964 B/op	  551510 allocs/op
+BenchmarkWorkflow/rows=2048/shape=short/workers=1-16        	       5	 566699113 ns/op	      3614 rows/s	    318629 us/apply	     11949 us/approve	     54377 us/plan	     75527 us/preview	     55039 us/scan	84285553 B/op	 2200789 allocs/op
+BenchmarkWorkflow/rows=2048/shape=short/workers=4-16        	       5	 581107766 ns/op	      3524 rows/s	    383318 us/apply	     12127 us/approve	     58152 us/plan	     78805 us/preview	     57856 us/scan	84362460 B/op	 2201645 allocs/op
+BenchmarkWorkflow/rows=2048/shape=long/workers=1-16         	       5	 578251500 ns/op	      3542 rows/s	    346689 us/apply	     12632 us/approve	     60796 us/plan	     75965 us/preview	     61128 us/scan	87469260 B/op	 2200783 allocs/op
+BenchmarkWorkflow/rows=2048/shape=long/workers=4-16         	       5	 596667476 ns/op	      3432 rows/s	    380660 us/apply	     12439 us/approve	     62924 us/plan	     81129 us/preview	     62161 us/scan	87551552 B/op	 2201657 allocs/op
+PASS
+ok  	github.com/haoyuehx/maskriver/internal/runner	287.993s
