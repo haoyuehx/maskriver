@@ -116,7 +116,7 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 | 确定性：同输入同 scope 同输出 | HMAC 绑定 typed 输入/策略 ID+Version/scope/normalization/keyID；不承诺无碰撞或第三方兼容 | 部分实现（组件） | #7 / PR #24 |
 | 并发安全内存映射 | Lookup 和 atomic GetOrCreate；映射键为加密指纹，测试含并发/取消；不持久化 | 部分实现（内存组件） | #7 / PR #24 |
 | 持久映射：加盐指纹、不存原值、可复用 | 持久加盐指纹映射、加密存储及恢复仍无实现 | 计划中 | 后续 M1/Main |
-| Dry Run 零持久副作用 | SQLite Preview 由驱动级 SQL Spy 证明无写/事务语句（`TestPreviewIssuesNoWriteSQLThroughSQLSpy`、`TestSQLSpyReadOnlyOperationsIssueNoWrites`），并以源/目标/历史文件树 SHA256 证明零持久写入；不等于并发快照保证 | 已实现（SQLite 证据） | #9/#11 |
+| Dry Run 零持久副作用 | 拆成三项分别成立的事实，不合并成一句承诺：① 驱动级 SQL Spy 观察到无写/事务语句（`TestPreviewIssuesNoWriteSQLThroughSQLSpy`、`TestSQLSpyReadOnlyOperationsIssueNoWrites`）；② 主数据库文件执行前后字节不变（`source.db`/`target.db` 的 SHA-256 相同）；③ 当次 fixture（rollback-journal）执行前后文件树未新增文件。**F1**：被拒绝的 WAL 源仍可能留下 sidecar——对 `journal_mode=WAL` 的源执行 `mask`，在 Plan 阶段被快照身份闸门拒绝（退出 1）后 `source.db` 未变，但仍新增 `-shm`（32768 字节）与空的 `-wal`（0 字节），目标端同样。因此不对 WAL 源作“零文件变化”的无条件承诺，③ 只对当次实测文件集成立；三项都不等于并发快照保证 | 已实现（SQLite 证据） | #9/#11 |
 | 默认隐藏预览值 | 原值显示开关须单独评审，不默认实现 | 计划中 | M1/Main |
 | 审核历史：签名审批、审核人标签、过期、撤销 | Ed25519 记录绑定 Plan、digest、strategy/key_id 与有序 scope；过期、未来签发、撤销、同 plan 多记录均拒绝（`internal/history/*_test.go`、`TestE2EDecisionBoundFieldChangesRefused`）；`ReviewerID` 是自填标签；无 CSV、导入导出与防回滚 | 部分实现（本地签名存储） | #9/#11 |
 | 历史导入/导出、回写与冲突检测 | 回写须备份与冲突检查 | 未实现 | 后续增量 |

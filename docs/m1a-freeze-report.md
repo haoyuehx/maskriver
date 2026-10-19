@@ -25,7 +25,7 @@
 
 ## 2. 实际命令与结果
 
-环境：Go 1.26.3 linux/amd64，项目 `/home/haoyue/Project/maskriver`。
+环境：Go 1.26.3 linux/amd64，项目 `<repo>`。
 
 | 命令 | 实际结果 |
 |---|---|

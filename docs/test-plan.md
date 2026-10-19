@@ -168,5 +168,5 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 | P2-4 | `main.go` 为测试 seam 引入两个可变包级函数变量 | `TestCLIStrictFlagWiring` 依赖替换 `validationRequest`/`validationPassed`，测试修改全局状态，不能并行 | 生产行为不受影响，只影响测试隔离 | 后续 Issue（编号待登记） |
 | P2-5 | CLI e2e 的 `targetDigest` 忽略 sidecar | 只哈希目标主文件；WAL 目标可能把提交写入 `-wal` 而字节断言不可见 | 当前 fixture 使用 rollback journal；源端 WAL 被拒绝，目标端 journal mode 未校验 | 后续 Issue（编号待登记） |
 | P2-6 | 历史存储不检测整体回滚/撤销回滚 | 能写 store 目录者可恢复旧的有效审批或撤销前文件；过期仍限制窗口 | 本地文件存储不是透明日志；部署需外发记录摘要/过期信息 | 后续 Issue（编号待登记） |
-| P2-8 | Runner 侧审批时间窗口没有时钟偏移容差 | `internal/runner/approval.go` 要求 `IssuedAt <= now`，而 `internal/history/record.go` 允许 5 分钟未来签发容差；若审核方时钟略快，刚签发的记录在 Runner 复核处被拒绝 | fail-closed，不会误授权写入；仅在时钟轻微漂移时降低可用性（需要等待或重签） | 后续 Issue（编号待登记）；届时统一两处容差语义 |
 | P2-7 | typed-nil seam 防护不完整 | runner 的 `ApprovalQuery` 已用 `nilApprovalQuery` 防护；`internal/db` 的注入式连接 seam 只有 `nil` 判断，没有等价的 typed-nil 回归 | 影响限于测试/自定义注入路径；生产使用 `nil` 工厂 | 后续 Issue（编号待登记） |
+| P2-8 | Runner 侧审批时间窗口没有时钟偏移容差 | `internal/runner/approval.go` 要求 `IssuedAt <= now`，而 `internal/history/record.go` 允许 5 分钟未来签发容差；若审核方时钟略快，刚签发的记录在 Runner 复核处被拒绝 | fail-closed，不会误授权写入；仅在时钟轻微漂移时降低可用性（需要等待或重签） | 后续 Issue（编号待登记）；届时统一两处容差语义 |
