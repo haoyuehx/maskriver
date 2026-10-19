@@ -9,8 +9,8 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 | M0 · 项目基座 | 完成 | 独立 Go module、MIT 授权、help/version、跨平台 CI；数据库业务 CLI 仍只会安全拒绝 |
 | M1-A · 共享契约 | 完成 | `pkg/contracts` 冻结 `APIRevision=m1a-v1`、SQLite/MySQL 测试环境及基础类型 |
 | M1-B · 四个核心组件 | 已合并 | #5/#10 数据库、#6 检测、#7/#12 脱敏、#8 验证；有真实 SQLite/MySQL 适配器与 CN 策略 SQL 组件集成、fake Reader 验证器回归。**不等于端到端 CLI** |
-| M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **收尾中：AC 待独立验收签署** | SQLite 多表真实 Scan/Preview/签名审批/新进程 Apply/Validate 已测；`--strict` 独立严格语义、MySQL CLI 与独立 #11 验收仍未完成 |
-| M1-D · 独立安全验收 [#11](https://github.com/haoyuehx/maskriver/issues/11) | **待 #9 完成** | 第三方或团队内非作者审查、失败注入、零持久副作用证据、风险登记和发布门禁 |
+| M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **已关闭（CLOSED）** | SQLite 多表真实 Scan/Preview/签名审批/新进程 Apply/Validate 已测，AC 已由独立上下文签署，证据见 [Issue #9 验收报告](issue9-acceptance-report.md)；`--strict` 独立严格语义与 MySQL CLI 仍未完成 |
+| M1-D · 独立安全验收 [#11](https://github.com/haoyuehx/maskriver/issues/11) | **已裁定 ACCEPT WITH RESTRICTIONS** | 独立非作者审查已完成：P0=0、P1=0（原 P1 为许可/署名，已由 PR #58 修复并经第二独立上下文复核）；六条 P2 仍开放。**M1 未发布**，可宣称与不可宣称的范围须按裁定执行 |
 | M2 · 增强能力 | **部分启动** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 有界 Worker 组件已合并，完整基准与端到端吞吐未验收；[#14](https://github.com/haoyuehx/maskriver/issues/14) checkpoint、幂等恢复与故障注入未启动。不得宣称已具备恢复或高吞吐保证 |
 
 ## 已交付核心能力（M1-B）
@@ -69,3 +69,12 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 ## 2026-10-18 收尾增量
 
 #9 已交付 SQLite 多表 CLI、Ed25519 审批记录（整计划绑定、有效期、撤销）、驱动级 SQL Spy、静态安全门禁与批次故障/提交未知回归，证据见 [测试计划](test-plan.md)；早期单表收尾记录见 [2026-10-18 验收记录](m1-runner-acceptance.md)。`--strict` 仍是 inert 的（verify 忽略 `ValidateRequest.Strict`），MySQL CLI、断点恢复、exactly-once 与 #11 独立验收仍未完成；已接受 P2 见测试计划。#11 保持未验收，#13/#14 的阶段依赖不变。PR #36 的 Worker 组件已经合并，不能按本文件早期的“M2 未启动”重新开发。
+
+> 上段是 2026-10-18 当日结论，作为历史记录保留不改写；其中“#11 保持未验收”已被下节裁定取代。
+
+## 2026-10-19 增量：#9 关闭与 #11 裁定
+
+- **#9 已 CLOSED**：AC 已由独立上下文签署（[Issue #9 验收报告](issue9-acceptance-report.md)，2026-10-18）。该报告的历史结论不改写。
+- **#11 已裁定 ACCEPT WITH RESTRICTIONS**：第三方或团队内非作者审查已完成，P0=0、P1=0。原 P1（第三方许可/署名）由 PR #58 修复，并已由第二个独立上下文复核；合并记录见 PR #58。裁定、六条 P2 与发布范围见 [Issue #11 验收裁定](m1-acceptance-issue11.md)。
+- **六条 P2 仍开放**，均需后续 Issue 关闭，登记表中的编号与内容不改。
+- **M1 未发布**。裁定不等于发布批准：发布门禁（NOTICE/发行包载体、内置第三方许可文本、可宣称与不可宣称范围）仍未完成，见 [测试计划](test-plan.md) 的 UNVERIFIED 清单与已接受 P2 表。

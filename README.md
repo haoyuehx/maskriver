@@ -43,7 +43,8 @@ CI 包括 Ubuntu/Windows 的测试与 vet、Ubuntu race，以及隔离 MySQL 8.0
 ## 产品路线图
 
 - **M1-B 已交付：** 数据库适配器（#5、#10）、检测（#6）、脱敏（#7、#12）和验证器（#8），有真实数据库或有界 fake Reader 测试证据；各组件不等于完整产品。
-- **M1 收尾中：** [#9](https://github.com/haoyuehx/maskriver/issues/9) 的 AC 待独立验收签署。SQLite 多表 CLI、签名审批记录、SQL Spy、静态门禁和批次故障回归已有真实测试；`--strict` 语义、MySQL CLI 与 [#11](https://github.com/haoyuehx/maskriver/issues/11) 独立验收仍未完成。
+- **M1-C 已关闭：** [#9](https://github.com/haoyuehx/maskriver/issues/9) 的 AC 已由独立上下文签署（[验收报告](docs/issue9-acceptance-report.md)）。SQLite 多表 CLI、签名审批记录、SQL Spy、静态门禁和批次故障回归已有真实测试；`--strict` 语义与 MySQL CLI 仍未完成。
+- **M1-D 已裁定 ACCEPT WITH RESTRICTIONS：** [#11](https://github.com/haoyuehx/maskriver/issues/11) 独立安全验收已完成，P0=0、P1=0——原 P1（第三方许可/署名）由 PR #58 修复并经第二独立上下文复核；六条 P2 仍开放，`docs/licenses/` 已有 12 份文本但仍需发布时的 NOTICE/发行包载体与内置文本核查。**M1 尚未发布**，可宣称与不可宣称范围见 [Issue #11 验收裁定](docs/m1-acceptance-issue11.md)。
 - **M2 待启动/部分：** [#13 有界并发/基准](https://github.com/haoyuehx/maskriver/issues/13) 已有有界 Worker 组件，完整基准与端到端吞吐未验收；[#14 幂等恢复](https://github.com/haoyuehx/maskriver/issues/14) 未启动。中文格式约束替换已有有界组件实现，不再列作从零开发。
 - 完整阶段划分见 [Roadmap](docs/roadmap.md)。
 

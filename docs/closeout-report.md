@@ -6,7 +6,7 @@
 
 - 共享接口 `pkg/contracts` APIRevision=m1a-v1 与 docs/contracts.md 对照一致；未更改冻结接口语义，四 Worker 的入口/依赖/独占文件范围仍一致。
 - SQLite modernc.org/sqlite v1.60.1（BSD-3-Clause），MySQL github.com/go-sql-driver/mysql v1.10.1（MPL-2.0），go.mod/go.sum 固定；直接依赖许可保留原文，Go module 校验通过。
-- Native 唯一根 `/home/haoyue/Project/worktrees`，实际项目子目录 maskriver；Main 在已安装 pi-subagents 0.76.1 的用户配置设 provider=native/baseDir。
+- Native 唯一根 `<host>/Project/worktrees`，实际项目子目录 maskriver；Main 在已安装 pi-subagents 0.76.1 的用户配置设 provider=native/baseDir。
 - 实际配置加载/优先级/非法路径拒绝预检通过；这不把旧 Pi 会话视作已热更新，执行模型 smoke 前需 reload/重启。
 - 五个 Agent 被 list 正确发现；models 的项目映射与指定值一致，doctor 显示 async 可用、active runs=0。
 - 单 go-db 冒烟脚本 `.pi/workflows/go-db-smoke.js` 仅准备，静态 validate 返回 ok=true。静态工具提示 dynamic-spawn-count，未来 runtime 必须限制 maxSubagentSpawnsPerRun=1；校验不证明实际模型调用。
@@ -23,7 +23,7 @@ MySQL 阻塞明确发生于新 datadir 的 `mysqld --initialize-insecure`：OS e
 
 已在冻结提交 `816252addf30d818fd50c879c9dfedf7f0e637f7` 的 clean main 上实际运行 `node scripts/check-native-worktree.mjs --allocate`，结果 PASS。
 
-- provider：native；实际路径 `/home/haoyue/Project/worktrees/maskriver/pi-worktree-main-native-probe-1791546842314-0`。
+- provider：native；实际路径 `<host>/Project/worktrees/maskriver/pi-worktree-main-native-probe-1791546842314-0`。
 - 临时 branch：`pi-subagents/main-preflight-main-na-9126-s0-t0`；共同 Git 根确认为 MaskRiver `.git`，baseCommit 等于冻结提交。
 - Main 仅在新工作树生成 `internal/db/native_probe_test.go`，执行 gofmt、go test -count=1 ./...，包含真实 SQLite 合成测试，全部通过；MySQL 仍跳过。
 - Native 捕获并验证一个文件、12 行新增的补丁；SHA-256 `ca4fa3429d0b204a93f1d55a879a23de0cb40432781ebe5a7f0b5d42b6a5bbf6`。
@@ -39,7 +39,7 @@ MySQL 阻塞明确发生于新 datadir 的 `mysqld --initialize-insecure`：OS e
 
 已证实的部分：
 
-- Worktree 分配成功且隔离正确：`/home/haoyue/Project/worktrees/maskriver/pi-worktree-9195e6c5-1516-456d-8b1a-155a3c298729-s0-0`，branch `pi-subagents/go-db-smoke-9195e6c-a37e-s0-t0`，baseCommit 正是冻结提交。
+- Worktree 分配成功且隔离正确：`<host>/Project/worktrees/maskriver/pi-worktree-9195e6c5-1516-456d-8b1a-155a3c298729-s0-0`，branch `pi-subagents/go-db-smoke-9195e6c-a37e-s0-t0`，baseCommit 正是冻结提交。
 - 子会话在正确 cwd 启动，并加载了该 worktree 内的 AGENTS.md 项目上下文，说明隔离与上下文注入生效。
 - 子 Agent 收到正确任务与绑定输出路径。
 

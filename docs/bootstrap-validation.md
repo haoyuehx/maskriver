@@ -4,8 +4,8 @@
 
 ## 环境与仓库
 
-- 初始 cwd：`/home/haoyue/Project`。
-- 新项目：`/home/haoyue/Project/maskriver`，独立 `git init -b main`。
+- 初始 cwd：`<host>/Project`。
+- 新项目：`<repo>`，独立 `git init -b main`。
 - `gh auth status` 成功，`gh api user` 用户为 `haoyuehx`；创建前仓库 API 返回 404，本地目录不存在。
 - Go：`go1.26.3 linux/amd64`；module：`github.com/haoyuehx/maskriver`。
 - 首次提交：`0d01c2f`（CLI/文档骨架）。
