@@ -24,7 +24,7 @@ Workflow and Apply medians are milliseconds; rows/s is the median per-trial work
 | Rows | Workers | Trials | Workflow median (min–max) | Apply median | Workflow rows/s median | Sampled RSS max | Receipt slice capacity max | Successful commits/trial |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 10k | 1 | 5 | 2,121 (2,107–2,134) | 1,474 | 4,716 | 29.8 MiB | 0.019 MiB | 157 |
-| 10k | 2 | 5 | 2,192 (2,182–2,211) | 1,521 | 4,562 | 29.6 MiB | 0.019 MiB | 157 |
+| 10k | 2 | 5 | 2,192 (2,181–2,211) | 1,521 | 4,562 | 29.6 MiB | 0.019 MiB | 157 |
 | 10k | 4 | 5 | 2,170 (2,151–2,179) | 1,514 | 4,608 | 30.0 MiB | 0.019 MiB | 157 |
 | 10k | 8 | 5 | 2,171 (2,159–2,179) | 1,510 | 4,606 | 30.0 MiB | 0.019 MiB | 157 |
 | 10k | 16 | 5 | 2,180 (2,150–2,189) | 1,511 | 4,588 | 30.2 MiB | 0.019 MiB | 157 |
@@ -33,7 +33,7 @@ Workflow and Apply medians are milliseconds; rows/s is the median per-trial work
 | 100k | 4 | 3 | 15,636 (15,576–15,702) | 13,810 | 6,395 | 36.5 MiB | 0.133 MiB | 1,563 |
 | 100k | 8 | 3 | 15,614 (15,601–15,681) | 13,829 | 6,405 | 36.4 MiB | 0.133 MiB | 1,563 |
 | 100k | 16 | 3 | 15,671 (15,645–15,776) | 13,864 | 6,381 | 36.8 MiB | 0.133 MiB | 1,563 |
-| 1M | 1 | 1 | 145,857 (single sample) | 133,691 | 6,856 | 37.3 MiB | 1.102 MiB | 15,625 |
+| 1M | 1 | 1 | 145,856 (single sample) | 133,691 | 6,856 | 37.3 MiB | 1.102 MiB | 15,625 |
 | 1M | 4 | 1 | 150,716 (single sample) | 137,503 | 6,635 | 37.1 MiB | 1.102 MiB | 15,625 |
 
 Per-size median stage times across the worker groups (milliseconds):
