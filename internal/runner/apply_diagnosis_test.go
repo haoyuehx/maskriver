@@ -281,9 +281,23 @@ func TestApplyDiagnosisCountsRollbackOnUpdateFailure(t *testing.T) {
 	beginA, beginS, beginF := observed.beginAttempts, observed.beginSucceeded, observed.beginFailed
 	commitA, commitS, commitF := observed.commitAttempts, observed.commitSucceeded, observed.commitFailed
 	rollbackA, rollbackS, rollbackF := observed.rollbackAttempts, observed.rollbackSucceeded, observed.rollbackFailed
+	rollbackWallNS := observed.rollbackTime.Nanoseconds()
 	observed.mu.Unlock()
 	if beginA != 1 || beginS != 1 || beginF != 0 || commitA != 0 || commitS != 0 || commitF != 0 || rollbackA != 1 || rollbackS != 1 || rollbackF != 0 {
 		t.Fatalf("unexpected begin/commit/rollback counts: begin %d/%d/%d commit %d/%d/%d rollback %d/%d/%d", beginA, beginS, beginF, commitA, commitS, commitF, rollbackA, rollbackS, rollbackF)
+	}
+	events := spy.Events()
+	rollbackEvents := 0
+	for _, event := range events {
+		if event.Verb == "ROLLBACK" {
+			rollbackEvents++
+			if event.Err || event.Duration <= 0 {
+				t.Fatalf("driver Rollback event has err=%v duration=%v", event.Err, event.Duration)
+			}
+		}
+	}
+	if rollbackEvents != 1 || rollbackWallNS <= 0 {
+		t.Fatalf("rollback timing observations: driver events=%d wrapper wall=%d ns, want 1 and >0", rollbackEvents, rollbackWallNS)
 	}
 	rows := targetRows(t, fixture.cfg.Target)
 	if rows[1] != syntheticEmails(1)[0] {
