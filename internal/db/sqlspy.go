@@ -63,6 +63,40 @@ func (s *SQLSpy) Events() []SpyEvent {
 	return append([]SpyEvent(nil), s.events...)
 }
 
+// StatementCount returns a constant-time cursor for the current statement log.
+func (s *SQLSpy) StatementCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.statements)
+}
+
+// StatementsSince returns only statements recorded at or after cursor.
+func (s *SQLSpy) StatementsSince(cursor int) []SpyStatement {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if cursor < 0 || cursor > len(s.statements) {
+		return nil
+	}
+	return append([]SpyStatement(nil), s.statements[cursor:]...)
+}
+
+// EventCount returns a constant-time cursor for the current driver event log.
+func (s *SQLSpy) EventCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.events)
+}
+
+// EventsSince returns only driver events recorded at or after cursor.
+func (s *SQLSpy) EventsSince(cursor int) []SpyEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if cursor < 0 || cursor > len(s.events) {
+		return nil
+	}
+	return append([]SpyEvent(nil), s.events[cursor:]...)
+}
+
 func (s *SQLSpy) recordEvent(verb string, duration time.Duration, err error) {
 	s.mu.Lock()
 	s.events = append(s.events, SpyEvent{Verb: verb, Duration: duration, Err: err != nil})

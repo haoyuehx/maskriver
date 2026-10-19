@@ -450,32 +450,33 @@ func renderPhase3Summary(samples []phase3Trial, reps int) string {
 		as := statsOf(a)
 		fmt.Fprintf(&b, "| %d | %d | %.2f / %.2f | %.2f–%.2f | %.1f | %.0f | %.3f | %.3f | %.3f | %.3f | %.2f | %.2f |\n", size, commitCount, as.Mean/1e6, as.Median/1e6, as.Min/1e6, as.Max/1e6, as.StdDevPct, statsOf(r).Mean, statsOf(begin).Mean/1e6, statsOf(commit).Mean/1e6, statsOf(update).Mean/1e6, statsOf(other).Mean/1e6, statsOf(transactionWindow).Mean/1e6, statsOf(residual).Mean/1e6)
 	}
-	b.WriteString("\nThe event timers are nested observations, not mutually exclusive components: `writer.Begin` wrapper timing includes schema validation/queries plus driver Begin; `WriteTx.Update` includes row validation and driver UPDATEs; driver SQL timers are measured inside those calls. Do **not** add them. Apply remainder is unassigned and may include page reads, masking, receipt handling, and framework overhead. This evidence does not claim all Apply time is commit/fsync. `Commit` invocation, driver call elapsed time and successful returned Commit are separately recorded; unknown/error is never called success.\n\n")
+	b.WriteString("\nApply wall time and rows/s were captured with SQLSpy and diagnostic counters enabled; they include observer overhead and are not production-throughput claims. The paired uninstrumented-vs-instrumented check is recorded in `observer-overhead/observer-summary.md`. Driver event timers cover the underlying driver calls and exclude post-call event recording. The event timers are nested observations, not mutually exclusive components: `writer.Begin` wrapper timing includes schema validation/queries plus driver Begin; `WriteTx.Update` includes row validation and driver UPDATEs; driver SQL timers are measured inside those calls. Do **not** add them. Apply remainder is unassigned and includes observer work as well as page reads, masking, receipt handling, and framework overhead; it must not be attributed solely to production work. This evidence does not claim all Apply time is commit/fsync. `Commit` invocation, driver call elapsed time and successful returned Commit are separately recorded; unknown/error is never called success.\n\n")
 	b.WriteString("Batch order is pseudorandomized with a fixed seed and each trial has a new DB/engine. Ten repeats are descriptive; no significance claim is made. `strace` attribution is in `fsync-evidence.md`.\n")
 	return b.String()
 }
 
+type phase3EnvironmentMetadata struct {
+	GOOS        string `json:"goos"`
+	GOARCH      string `json:"goarch"`
+	Go          string `json:"go_version"`
+	CPU         string `json:"cpu"`
+	Cores       int    `json:"cores"`
+	Kernel      string `json:"kernel"`
+	MemoryTotal string `json:"memory_total_mb"`
+	MemoryScope string `json:"memory_scope"`
+	Driver      string `json:"sqlite_driver"`
+	Repetitions int    `json:"repetitions_per_batch"`
+	Samples     int    `json:"sample_count"`
+	Seed        string `json:"order_seed"`
+	Journal     string `json:"journal_mode"`
+	Synchronous string `json:"synchronous"`
+	Command     string `json:"command"`
+	HeadSHA     string `json:"head_sha"`
+}
+
 func phase3Environment(samples []phase3Trial, reps int) string {
-	type env struct {
-		GOOS        string `json:"goos"`
-		GOARCH      string `json:"goarch"`
-		Go          string `json:"go_version"`
-		CPU         string `json:"cpu"`
-		Cores       int    `json:"cores"`
-		Kernel      string `json:"kernel"`
-		MemoryTotal string `json:"memory_total_mb"`
-		MemoryScope string `json:"memory_scope"`
-		Driver      string `json:"sqlite_driver"`
-		Repetitions int    `json:"repetitions_per_batch"`
-		Samples     int    `json:"sample_count"`
-		Seed        string `json:"order_seed"`
-		Journal     string `json:"journal_mode"`
-		Synchronous string `json:"synchronous"`
-		Command     string `json:"command"`
-		HeadSHA     string `json:"head_sha"`
-	}
 	j, s := samples[0].JournalMode, samples[0].Synchronous
-	b, _ := json.MarshalIndent(env{runtime.GOOS, runtime.GOARCH, runtime.Version(), hostCPU(), runtime.NumCPU(), hostKernel(), hostMemoryTotalMB(), "host /proc/meminfo MemTotal, not cgroup/container limit", "modernc.org/sqlite v1.60.1", reps, len(samples), "0x132026", j, s, "MASK_RIVER_PHASE3_DIR=<dir> MASK_RIVER_PHASE3_REPS=10 go test -run '^TestPhase3BatchExperiment$' -count=1 -timeout 50m ./internal/runner/", currentGitSHA()}, "", "  ")
+	b, _ := json.MarshalIndent(phase3EnvironmentMetadata{runtime.GOOS, runtime.GOARCH, runtime.Version(), hostCPU(), runtime.NumCPU(), hostKernel(), hostMemoryTotalMB(), "host /proc/meminfo MemTotal, not cgroup/container limit", "modernc.org/sqlite v1.60.1", reps, len(samples), "0x132026", j, s, "MASK_RIVER_PHASE3_DIR=<dir> MASK_RIVER_PHASE3_REPS=10 go test -run '^TestPhase3BatchExperiment$' -count=1 -timeout 50m ./internal/runner/", currentGitSHA()}, "", "  ")
 	return string(b) + "\n"
 }
 func hostKernel() string {
@@ -551,11 +552,24 @@ func validatePhase3Trials(samples []phase3Trial, repetitions int) error {
 		}
 		seenTrial[key] = true
 		counts[s.BatchSize]++
-		if s.FixtureNS <= 0 || s.WorkflowNS <= 0 || s.ApplyNS <= 0 || s.RowsCommitted != 256 || !s.Complete || !s.ValidatePassed {
+		if s.FixtureNS <= 0 || s.WorkflowNS < s.ApplyNS || s.ApplyNS <= 0 || s.RowsCommitted != 256 || !s.Complete || !s.ValidatePassed {
 			return fmt.Errorf("trial %d has invalid duration or incomplete/unvalidated apply", s.Order)
 		}
 		if math.IsNaN(s.RowsPerSecond) || math.IsInf(s.RowsPerSecond, 0) || s.RowsPerSecond <= 0 {
 			return fmt.Errorf("trial %d has invalid throughput", s.Order)
+		}
+		wantRowsPerSecond := float64(s.Rows) / (float64(s.ApplyNS) / 1e9)
+		if math.Abs(s.RowsPerSecond-wantRowsPerSecond) > math.Max(1, wantRowsPerSecond)*1e-12 {
+			return fmt.Errorf("trial %d throughput %.12g disagrees with rows/apply %.12g", s.Order, s.RowsPerSecond, wantRowsPerSecond)
+		}
+		for name, ns := range map[string]int64{
+			"Begin wall": s.BeginWallNS, "Commit wall": s.CommitWallNS, "Rollback wall": s.RollbackWallNS,
+			"Update wall": s.UpdateCallWallNS, "driver Begin": s.DriverBeginNS, "driver Commit": s.DriverCommitNS,
+			"driver Rollback": s.DriverRollbackNS, "driver UPDATE": s.UpdateExecNS, "other SQL": s.OtherSQLCallNS,
+		} {
+			if ns < 0 {
+				return fmt.Errorf("trial %d has negative %s duration %d", s.Order, name, ns)
+			}
 		}
 		want := (256 + s.BatchSize - 1) / s.BatchSize
 		if s.BeginAttempts != want || s.BeginSucceeded != want || s.BeginFailed != 0 || s.CommitAttempts != want || s.CommitReturnedSuccess != want || s.CommitReturnedError != 0 || s.CommitUnknown != 0 || s.RollbackAttempts != 0 || s.Receipts != want {
@@ -569,6 +583,18 @@ func validatePhase3Trials(samples []phase3Trial, repetitions int) error {
 		var statementCount int
 		var beginNS, commitNS, updateNS, otherNS int64
 		for i := 0; i < want; i++ {
+			for name, ns := range map[string]int64{
+				"Begin": s.BatchBeginDriverNS[i], "Commit": s.BatchCommitDriverNS[i],
+				"UPDATE": s.BatchUpdateExecNS[i], "other SQL": s.BatchOtherSQLCallNS[i],
+				"transaction window": s.BatchTransactionNS[i],
+			} {
+				if ns < 0 {
+					return fmt.Errorf("trial %d batch %d has negative %s duration %d", s.Order, i+1, name, ns)
+				}
+			}
+			if s.BatchOtherCounts[i] < 0 {
+				return fmt.Errorf("trial %d batch %d has negative other statement count", s.Order, i+1)
+			}
 			updateCount += int64(s.BatchUpdateCounts[i])
 			receiptRows += s.ReceiptRows[i]
 			statementCount += s.BatchStatementCounts[i]

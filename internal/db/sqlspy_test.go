@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/haoyuehx/maskriver/internal/testenv"
 	"github.com/haoyuehx/maskriver/pkg/contracts"
@@ -54,6 +55,28 @@ func spyVerbs(statements []SpyStatement) map[string]int {
 // performs through a spy-backed real SQLite Reader. It asserts at the driver
 // level that no writing or transaction statement reaches the database and that
 // the SQLite file tree is byte identical afterwards.
+func TestSQLSpyLogCursorsReturnOnlySuffix(t *testing.T) {
+	spy := NewSQLSpy()
+	if spy.StatementCount() != 0 || spy.EventCount() != 0 {
+		t.Fatal("new spy is not empty")
+	}
+	spy.record("SELECT 1")
+	spy.recordEvent("SELECT", time.Nanosecond, nil)
+	statementCursor, eventCursor := spy.StatementCount(), spy.EventCount()
+	spy.record("UPDATE people SET email = ?")
+	spy.recordEvent("UPDATE", 2*time.Nanosecond, nil)
+	statements, events := spy.StatementsSince(statementCursor), spy.EventsSince(eventCursor)
+	if len(statements) != 1 || statements[0].Verb != "UPDATE" || len(events) != 1 || events[0].Verb != "UPDATE" {
+		t.Fatalf("suffix mismatch: statements=%+v events=%+v", statements, events)
+	}
+	if got := spy.StatementsSince(statementCursor + 2); len(got) != 0 {
+		t.Fatalf("invalid statement cursor returned %d entries", len(got))
+	}
+	if got := spy.EventsSince(eventCursor + 2); len(got) != 0 {
+		t.Fatalf("invalid event cursor returned %d entries", len(got))
+	}
+}
+
 func TestSQLSpyReadOnlyOperationsIssueNoWrites(t *testing.T) {
 	ctx := context.Background()
 	opts := sqliteOptions(t)

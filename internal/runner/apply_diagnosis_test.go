@@ -77,8 +77,8 @@ func (s *spyBatchWriter) Begin(ctx context.Context, plan contracts.TablePlan) (c
 	started := time.Now()
 	statementStart, eventStart := 0, 0
 	if s.sqlSpy != nil {
-		statementStart = len(s.sqlSpy.Statements())
-		eventStart = len(s.sqlSpy.Events())
+		statementStart = s.sqlSpy.StatementCount()
+		eventStart = s.sqlSpy.EventCount()
 	}
 	tx, err := s.Writer.Begin(ctx, plan)
 	s.mu.Lock()
@@ -131,32 +131,28 @@ func (t *spyTx) Commit(ctx context.Context) error {
 	var batchStatements, batchUpdates, batchOther int
 	var batchBeginNS, batchCommitNS, batchUpdateNS, batchOtherNS int64
 	if t.parent.sqlSpy != nil {
-		all := t.parent.sqlSpy.Statements()
-		if t.statementStart <= len(all) {
-			batch := all[t.statementStart:]
-			batchStatements = len(batch)
-			for _, statement := range batch {
-				if statement.Verb == "UPDATE" {
-					batchUpdates++
-				}
+		batch := t.parent.sqlSpy.StatementsSince(t.statementStart)
+		batchStatements = len(batch)
+		for _, statement := range batch {
+			if statement.Verb == "UPDATE" {
+				batchUpdates++
 			}
+		}
+		if batchStatements >= batchUpdates+2 {
 			batchOther = batchStatements - batchUpdates - 2
 		}
-		events := t.parent.sqlSpy.Events()
-		if t.eventStart <= len(events) {
-			for _, event := range events[t.eventStart:] {
-				ns := event.Duration.Nanoseconds()
-				switch event.Verb {
-				case "BEGIN":
-					batchBeginNS += ns
-				case "COMMIT":
-					batchCommitNS += ns
-				case "UPDATE":
-					batchUpdateNS += ns
-				case "ROLLBACK":
-				default:
-					batchOtherNS += ns
-				}
+		for _, event := range t.parent.sqlSpy.EventsSince(t.eventStart) {
+			ns := event.Duration.Nanoseconds()
+			switch event.Verb {
+			case "BEGIN":
+				batchBeginNS += ns
+			case "COMMIT":
+				batchCommitNS += ns
+			case "UPDATE":
+				batchUpdateNS += ns
+			case "ROLLBACK":
+			default:
+				batchOtherNS += ns
 			}
 		}
 	}
