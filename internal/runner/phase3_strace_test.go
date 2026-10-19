@@ -52,4 +52,11 @@ func TestPhase3StraceApply(t *testing.T) {
 	if !report.Complete || len(report.Committed) != 4 {
 		t.Fatalf("unexpected apply report complete=%t receipts=%d", report.Complete, len(report.Committed))
 	}
+	validation, err := env.engine.Validate(ctx, contracts.ValidateRequest{Plan: plan})
+	if err != nil {
+		t.Fatalf("post-marker Validate: %v", err)
+	}
+	if !validation.Coverage.Complete || !validation.Passed(true) {
+		t.Fatalf("post-marker Validate failed: coverage=%+v issues=%+v", validation.Coverage, validation.Issues)
+	}
 }
