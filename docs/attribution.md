@@ -40,8 +40,9 @@ not reproduced here.
 
 ### Additional texts embedded inside dependencies
 
-Some dependencies ship further third-party material *inside* the module that is
-compiled into the binary. Because `modernc.org/libc` selects its musl-translated
+Some dependencies ship further third-party material *inside* the module. Most of it
+is compiled into the binary; a few entries below are shipped text with no linked
+code, and the table says which is which. Because `modernc.org/libc` selects its musl-translated
 implementation on linux/amd64 without a build tag, this material is linked into a
 default build and is therefore a release condition, not a curiosity:
 
@@ -50,10 +51,10 @@ default build and is therefore a release condition, not a curiosity:
 | `modernc.org/libc` | Go / musl / go-netdb / nixpkgs material | `licenses/modernc-libc-LICENSE-3RD-PARTY` |
 | `modernc.org/sqlite` | bundled third-party notices | `licenses/modernc-sqlite-LICENSE-3RD-PARTY` |
 | `modernc.org/sqlite` | SQLite itself (public domain) | `licenses/modernc-sqlite-LICENSE-SQLITE` |
-| `modernc.org/sqlite` | sqlite-vec | `licenses/modernc-sqlite-LICENSE-SQLITE_VEC` |
+| `modernc.org/sqlite` | sqlite-vec (shipped text; upstream list; not linked into a default build) | `licenses/modernc-sqlite-LICENSE-SQLITE_VEC` |
 | `modernc.org/memory` | Go runtime material | `licenses/modernc-memory-LICENSE-GO` |
-| `modernc.org/memory` | mmmap-go material | `licenses/modernc-memory-LICENSE-MMAP-GO` |
-| `modernc.org/memory` | project logo terms | `licenses/modernc-memory-LICENSE-LOGO` |
+| `modernc.org/memory` | mmap-go material | `licenses/modernc-memory-LICENSE-MMAP-GO` |
+| `modernc.org/memory` | project logo reference (URL) | `licenses/modernc-memory-LICENSE-LOGO` |
 | `golang.org/x/sys` | patent grant | `licenses/x-sys-PATENTS` |
 
 **Repository texts are not a compliant release artifact.** A binary release must
