@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
+	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"modernc.org/sqlite"
 
@@ -24,6 +26,7 @@ import (
 type SQLSpy struct {
 	mu         sync.Mutex
 	statements []SpyStatement
+	events     []SpyEvent
 }
 
 // SpyStatement is one statement observed through a spy-backed connection.
@@ -35,6 +38,13 @@ type SpyStatement struct {
 	Write bool
 }
 
+// SpyEvent records one real driver operation without SQL text or bound values.
+type SpyEvent struct {
+	Verb     string
+	Duration time.Duration
+	Err      bool
+}
+
 // NewSQLSpy returns a spy with an empty statement log.
 func NewSQLSpy() *SQLSpy { return &SQLSpy{} }
 
@@ -44,6 +54,53 @@ func (s *SQLSpy) Statements() []SpyStatement {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]SpyStatement(nil), s.statements...)
+}
+
+// Events returns a copy of timed driver calls without SQL text or bound values.
+func (s *SQLSpy) Events() []SpyEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]SpyEvent(nil), s.events...)
+}
+
+// StatementCount returns a constant-time cursor for the current statement log.
+func (s *SQLSpy) StatementCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.statements)
+}
+
+// StatementsSince returns only statements recorded at or after cursor.
+func (s *SQLSpy) StatementsSince(cursor int) []SpyStatement {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if cursor < 0 || cursor > len(s.statements) {
+		return nil
+	}
+	return append([]SpyStatement(nil), s.statements[cursor:]...)
+}
+
+// EventCount returns a constant-time cursor for the current driver event log.
+func (s *SQLSpy) EventCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.events)
+}
+
+// EventsSince returns only driver events recorded at or after cursor.
+func (s *SQLSpy) EventsSince(cursor int) []SpyEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if cursor < 0 || cursor > len(s.events) {
+		return nil
+	}
+	return append([]SpyEvent(nil), s.events[cursor:]...)
+}
+
+func (s *SQLSpy) recordEvent(verb string, duration time.Duration, err error) {
+	s.mu.Lock()
+	s.events = append(s.events, SpyEvent{Verb: verb, Duration: duration, Err: err != nil})
+	s.mu.Unlock()
 }
 
 // Writes returns a copy of the statements classified as write or transaction
@@ -245,7 +302,8 @@ func (c *spyConn) Prepare(query string) (driver.Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &spyStmt{base: stmt}, nil
+	verb, _ := classifyStatement(query)
+	return &spyStmt{base: stmt, spy: c.spy, verb: verb}, nil
 }
 
 func (c *spyConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
@@ -260,14 +318,17 @@ func (c *spyConn) PrepareContext(ctx context.Context, query string) (driver.Stmt
 	if err != nil {
 		return nil, err
 	}
-	return &spyStmt{base: stmt}, nil
+	verb, _ := classifyStatement(query)
+	return &spyStmt{base: stmt, spy: c.spy, verb: verb}, nil
 }
 
 func (c *spyConn) Close() error { return c.base.Close() }
 
 func (c *spyConn) Begin() (driver.Tx, error) {
 	c.spy.record("BEGIN")
+	started := time.Now()
 	tx, err := c.base.Begin()
+	c.spy.recordEvent("BEGIN", time.Since(started), err)
 	if err != nil {
 		return nil, err
 	}
@@ -276,6 +337,7 @@ func (c *spyConn) Begin() (driver.Tx, error) {
 
 func (c *spyConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
 	c.spy.record("BEGIN")
+	started := time.Now()
 	var tx driver.Tx
 	var err error
 	if beginner, ok := c.base.(driver.ConnBeginTx); ok {
@@ -283,6 +345,7 @@ func (c *spyConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx
 	} else {
 		tx, err = c.base.Begin()
 	}
+	c.spy.recordEvent("BEGIN", time.Since(started), err)
 	if err != nil {
 		return nil, err
 	}
@@ -295,17 +358,47 @@ var _ driver.Stmt = (*spyStmt)(nil)
 // SQL text was already recorded when the statement was prepared.
 type spyStmt struct {
 	base driver.Stmt
+	spy  *SQLSpy
+	verb string
 }
 
 func (s *spyStmt) Close() error  { return s.base.Close() }
 func (s *spyStmt) NumInput() int { return s.base.NumInput() }
 
 func (s *spyStmt) Exec(args []driver.Value) (driver.Result, error) {
-	return s.base.Exec(args)
+	started := time.Now()
+	result, err := s.base.Exec(args)
+	s.spy.recordEvent(s.verb, time.Since(started), err)
+	return result, err
 }
 
 func (s *spyStmt) Query(args []driver.Value) (driver.Rows, error) {
-	return s.base.Query(args)
+	started := time.Now()
+	rows, err := s.base.Query(args)
+	s.spy.recordEvent(s.verb, time.Since(started), err)
+	if err != nil {
+		return nil, err
+	}
+	return &spyRows{base: rows, spy: s.spy, verb: s.verb}, nil
+}
+
+type spyRows struct {
+	base driver.Rows
+	spy  *SQLSpy
+	verb string
+}
+
+func (r *spyRows) Columns() []string { return r.base.Columns() }
+func (r *spyRows) Close() error      { return r.base.Close() }
+func (r *spyRows) Next(dest []driver.Value) error {
+	started := time.Now()
+	err := r.base.Next(dest)
+	recordErr := err
+	if errors.Is(err, io.EOF) {
+		recordErr = nil
+	}
+	r.spy.recordEvent(r.verb+"_ROW_NEXT", time.Since(started), recordErr)
+	return err
 }
 
 var _ driver.Tx = (*spyTx)(nil)
@@ -317,10 +410,16 @@ type spyTx struct {
 
 func (t *spyTx) Commit() error {
 	t.spy.record("COMMIT")
-	return t.base.Commit()
+	started := time.Now()
+	err := t.base.Commit()
+	t.spy.recordEvent("COMMIT", time.Since(started), err)
+	return err
 }
 
 func (t *spyTx) Rollback() error {
 	t.spy.record("ROLLBACK")
-	return t.base.Rollback()
+	started := time.Now()
+	err := t.base.Rollback()
+	t.spy.recordEvent("ROLLBACK", time.Since(started), err)
+	return err
 }

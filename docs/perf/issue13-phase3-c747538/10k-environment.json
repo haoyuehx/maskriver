@@ -1,0 +1,27 @@
+{
+  "apply_scope": "Apply stage duration within workflow",
+  "command": "MASK_RIVER_PHASE3_10K_DIR=\u003cdir\u003e go test -run '^TestPhase3Scale10K$' -count=1 -timeout 20m ./internal/runner/",
+  "cores": 16,
+  "cpu": "AMD Ryzen 9 7940H w/ Radeon 780M Graphics",
+  "fixture_scope": "separate optimized test fixture; one prepared insert transaction per database",
+  "go_version": "go1.26.3",
+  "goarch": "amd64",
+  "goos": "linux",
+  "head_sha": "c747538edcc0fb52fb16a0eb796953cec1062c94",
+  "iterations_per_worker": 1,
+  "journal_mode": "delete",
+  "kernel": "Linux 7.0.0-38-generic",
+  "memory_scope": "host /proc/meminfo MemTotal, not cgroup/container limit",
+  "memory_total_mb": "15187",
+  "rows": 10000,
+  "sqlite_driver": "modernc.org/sqlite v1.60.1",
+  "synchronous": "2",
+  "workers": [
+    1,
+    2,
+    4,
+    8,
+    16
+  ],
+  "workflow_scope": "Scan, Plan, Preview, real Ed25519 Approve, Apply; measured separately from fixture construction"
+}

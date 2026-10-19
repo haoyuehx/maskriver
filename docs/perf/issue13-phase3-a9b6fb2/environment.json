@@ -1,0 +1,18 @@
+{
+  "goos": "linux",
+  "goarch": "amd64",
+  "go_version": "go1.26.3",
+  "cpu": "AMD Ryzen 9 7940H w/ Radeon 780M Graphics",
+  "cores": 16,
+  "kernel": "Linux 7.0.0-38-generic",
+  "memory_total_mb": "15187",
+  "memory_scope": "host /proc/meminfo MemTotal, not cgroup/container limit",
+  "sqlite_driver": "modernc.org/sqlite v1.60.1",
+  "repetitions_per_batch": 10,
+  "sample_count": 30,
+  "order_seed": "0x132026",
+  "journal_mode": "delete",
+  "synchronous": "2",
+  "command": "MASK_RIVER_PHASE3_DIR=\u003cdir\u003e MASK_RIVER_PHASE3_REPS=10 go test -run '^TestPhase3BatchExperiment$' -count=1 -timeout 50m ./internal/runner/",
+  "head_sha": "a9b6fb267a414b83f4fa10a758de504843763bf0"
+}

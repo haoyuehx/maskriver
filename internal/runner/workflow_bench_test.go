@@ -20,7 +20,9 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"database/sql"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -34,9 +36,10 @@ import (
 
 // benchConfig is one row of the benchmark matrix.
 type benchConfig struct {
-	rows    int
-	long    bool
-	workers int
+	rows      int
+	long      bool
+	workers   int
+	batchSize int
 }
 
 // benchMatrix is the phase-1 matrix: three sizes, two value shapes, two worker
@@ -74,29 +77,51 @@ func benchEmails(n int, long bool) []string {
 // engine and a real history store. Building it is fixture cost and must never be
 // inside a timed region.
 type benchEnv struct {
-	engine *Engine
-	store  *history.Store
-	base   config.Runtime
+	engine    *Engine
+	store     *history.Store
+	base      config.Runtime
+	dir       string
+	lastApply contracts.ApplyReport
+	lastPlan  contracts.Plan
 }
 
 // close releases the engine's real reader and writer connections. Every measured
 // iteration gets its own environment, so the target file is never overwritten
 // while a connection still holds it open.
-func (e *benchEnv) close() { _ = e.engine.Close() }
+func (e *benchEnv) close() error {
+	engineErr := e.engine.Close()
+	removeErr := os.RemoveAll(e.dir)
+	return errors.Join(engineErr, removeErr)
+}
 
 func benchEnvFor(tb testing.TB, cfg benchConfig) *benchEnv {
 	tb.Helper()
+	root := tb.TempDir()
+	return benchEnvIn(tb, cfg, root)
+}
+
+func benchEnvIn(tb testing.TB, cfg benchConfig, root string) *benchEnv {
+	tb.Helper()
+	dir, err := os.MkdirTemp(root, "iteration-")
+	if err != nil {
+		tb.Fatalf("create bounded iteration directory: %v", err)
+	}
 	values := benchEmails(cfg.rows, cfg.long)
-	base, key := benchFixture(tb, values)
+	base, key := benchFixtureInDir(tb, values, dir)
+	if cfg.rows > 0 {
+		base.SampleLimit = cfg.rows
+	}
 	base.Workers = cfg.workers
-	base.BatchSize = 64
+	if cfg.batchSize > 0 {
+		base.BatchSize = cfg.batchSize
+	}
 	engine, err := Open(context.Background(), base, key)
 	if err != nil {
 		tb.Fatalf("Open: %v", err)
 	}
-	store, _ := benchStore(tb)
+	store, _ := benchStoreInDir(tb, filepath.Join(dir, "history"))
 	engine.SetApprovalQuery(store)
-	return &benchEnv{engine: engine, store: store, base: base}
+	return &benchEnv{engine: engine, store: store, base: base, dir: dir}
 }
 
 // run executes one workflow on a prepared environment and returns the stage
@@ -129,7 +154,7 @@ func (e *benchEnv) run(tb testing.TB) (stages map[string]time.Duration, rowsMask
 		return err
 	})
 	step("preview", func() error {
-		_, err := engine.Preview(ctx, contracts.PreviewRequest{Plan: plan})
+		_, err := engine.Preview(ctx, contracts.PreviewRequest{Plan: plan, LimitPerTable: 10000})
 		return err
 	})
 	step("approve", func() error {
@@ -142,11 +167,16 @@ func (e *benchEnv) run(tb testing.TB) (stages map[string]time.Duration, rowsMask
 	var applied contracts.ApplyReport
 	step("apply", func() error {
 		rep, err := engine.Apply(ctx, contracts.ApplyRequest{
-			Plan: plan, ExplicitApply: true, BatchSize: 64,
+			Plan: plan, ExplicitApply: true, BatchSize: base.BatchSize,
 		})
 		applied = rep
+		if err == nil && !rep.Complete {
+			return fmt.Errorf("Apply incomplete: %+v", rep.Issues)
+		}
 		return err
 	})
+	e.lastApply = applied
+	e.lastPlan = plan
 	for _, r := range applied.Committed {
 		rowsMasked += r.Rows
 	}
@@ -158,7 +188,11 @@ func (e *benchEnv) run(tb testing.TB) (stages map[string]time.Duration, rowsMask
 // takes testing.TB so benchmarks can use it.
 func benchFixture(tb testing.TB, rows []string) (config.Runtime, contracts.Value) {
 	tb.Helper()
-	dir := tb.TempDir()
+	return benchFixtureInDir(tb, rows, tb.TempDir())
+}
+
+func benchFixtureInDir(tb testing.TB, rows []string, dir string) (config.Runtime, contracts.Value) {
+	tb.Helper()
 	source, target := filepath.Join(dir, "source.db"), filepath.Join(dir, "target.db")
 	for _, path := range []string{source, target} {
 		database, err := sql.Open("sqlite", "file:"+path+"?mode=rwc")
@@ -168,10 +202,28 @@ func benchFixture(tb testing.TB, rows []string) (config.Runtime, contracts.Value
 		if _, err = database.Exec(`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NULL)`); err != nil {
 			tb.Fatal(err)
 		}
+		tx, txErr := database.Begin()
+		if txErr != nil {
+			tb.Fatal(txErr)
+		}
+		stmt, txErr := tx.Prepare(`INSERT INTO people VALUES (?, ?)`)
+		if txErr != nil {
+			_ = tx.Rollback()
+			tb.Fatal(txErr)
+		}
 		for i, email := range rows {
-			if _, err = database.Exec(`INSERT INTO people VALUES (?, ?)`, i+1, email); err != nil {
+			if _, err = stmt.Exec(i+1, email); err != nil {
+				_ = stmt.Close()
+				_ = tx.Rollback()
 				tb.Fatal(err)
 			}
+		}
+		if err = stmt.Close(); err != nil {
+			_ = tx.Rollback()
+			tb.Fatal(err)
+		}
+		if err = tx.Commit(); err != nil {
+			tb.Fatal(err)
 		}
 		if err = database.Close(); err != nil {
 			tb.Fatal(err)
@@ -191,6 +243,11 @@ func benchFixture(tb testing.TB, rows []string) (config.Runtime, contracts.Value
 // the benchmark exercises real signing and verification.
 func benchStore(tb testing.TB) (*history.Store, ed25519.PrivateKey) {
 	tb.Helper()
+	return benchStoreInDir(tb, filepath.Join(tb.TempDir(), "history"))
+}
+
+func benchStoreInDir(tb testing.TB, dir string) (*history.Store, ed25519.PrivateKey) {
+	tb.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		tb.Fatal(err)
@@ -200,7 +257,7 @@ func benchStore(tb testing.TB) (*history.Store, ed25519.PrivateKey) {
 		tb.Fatal(err)
 	}
 	store, err := history.Open(history.Config{
-		Dir:    filepath.Join(tb.TempDir(), "history"),
+		Dir:    dir,
 		Trust:  trust,
 		Signer: &history.Signer{SignerKeyID: testReviewerKeyID, Private: priv},
 	})
@@ -223,19 +280,27 @@ func BenchmarkWorkflow(b *testing.B) {
 			// environment so no state can carry over from the previous iteration.
 			var rowsMasked int64
 			stageSamples := map[string][]float64{}
+			root := b.TempDir()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				b.StopTimer()
-				env := benchEnvFor(b, cfg)
-				b.StartTimer()
-				stages, rows := env.run(b)
-				b.StopTimer()
-				env.close()
-				b.StartTimer()
+				var stages map[string]time.Duration
+				var rows int64
+				func() {
+					env := benchEnvIn(b, cfg, root)
+					defer func() {
+						if err := env.close(); err != nil {
+							b.Errorf("release iteration resources: %v", err)
+						}
+					}() // also runs when env.run calls b.Fatal/Goexit
+					stages, rows = timedBenchWorkflow(b, env)
+				}()
 				rowsMasked = rows
 				for name, d := range stages {
 					stageSamples[name] = append(stageSamples[name], float64(d.Microseconds()))
 				}
+				// The next loop body starts timing only after fixture creation; the
+				// timer stays stopped through all teardown and bookkeeping.
 			}
 			b.StopTimer()
 			if rowsMasked > 0 {
@@ -249,6 +314,15 @@ func BenchmarkWorkflow(b *testing.B) {
 			}
 		})
 	}
+}
+
+// timedBenchWorkflow brackets only env.run and stops the timer during test
+// cleanup/Goexit. Fixture setup happens before this helper; close and caller
+// bookkeeping happen after its deferred StopTimer.
+func timedBenchWorkflow(b *testing.B, env *benchEnv) (map[string]time.Duration, int64) {
+	b.StartTimer()
+	defer b.StopTimer()
+	return env.run(b)
 }
 
 func shapeName(long bool) string {

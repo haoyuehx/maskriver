@@ -1,0 +1,44 @@
+{
+  "16": {
+    "apply_max_ns": 136374307,
+    "apply_mean_ns": 129898694,
+    "apply_median_ns": 130260294,
+    "apply_min_ns": 124067656,
+    "apply_stddev_pct": 3.302211903257652,
+    "begin_driver_mean_ns": 62299.4,
+    "commit_driver_mean_ns": 101732321.9,
+    "cpu_user_ns_median": 48192500,
+    "rows_per_s_mean": 1972.7028965436955,
+    "rows_per_s_median": 1965.2988229398454,
+    "rss_after_kb_median": 21830,
+    "update_exec_mean_ns": 3296149.8
+  },
+  "256": {
+    "apply_max_ns": 18390809,
+    "apply_mean_ns": 16096413.6,
+    "apply_median_ns": 16278053.5,
+    "apply_min_ns": 13561257,
+    "apply_stddev_pct": 9.57678556604312,
+    "begin_driver_mean_ns": 2139.2,
+    "commit_driver_mean_ns": 6166470.7,
+    "cpu_user_ns_median": 30518000,
+    "rows_per_s_mean": 16038.431843736713,
+    "rows_per_s_median": 15726.742712865642,
+    "rss_after_kb_median": 22184,
+    "update_exec_mean_ns": 476963.8
+  },
+  "64": {
+    "apply_max_ns": 41090367,
+    "apply_mean_ns": 38864422.9,
+    "apply_median_ns": 38537929.5,
+    "apply_min_ns": 36306313,
+    "apply_stddev_pct": 3.4712979547534157,
+    "begin_driver_mean_ns": 13843.4,
+    "commit_driver_mean_ns": 23625650.9,
+    "cpu_user_ns_median": 35847500,
+    "rows_per_s_mean": 6594.177896272673,
+    "rows_per_s_median": 6642.806310951846,
+    "rss_after_kb_median": 22248,
+    "update_exec_mean_ns": 1276784.8
+  }
+}

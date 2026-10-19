@@ -1,0 +1,4 @@
+batch_size,iterations,commits_per_trial,rows_per_trial,apply_mean_ms,apply_median_ms,apply_min_ms,apply_max_ms,apply_stddev_pct,apply_rows_per_s_mean,apply_us_per_row,driver_commit_mean_ms,driver_update_exec_mean_ms,batch_transaction_window_mean_ms,apply_unassigned_mean_ms
+16,10,16,256,131.594,131.403,126.569,136.691,2.37,1946.36,514.04,102.231,3.472,113.875,17.718
+64,10,4,256,39.426,39.503,38.231,40.638,2.83,6497.89,154.01,24.744,1.303,29.375,10.051
+256,10,1,256,16.170,16.238,14.219,17.251,4.70,15865.88,63.16,5.885,0.527,7.859,8.311

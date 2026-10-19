@@ -89,3 +89,38 @@ v1 的 `~78 rows/s` 与「每行 12.7 ms、线性」把 fixture 建库计入了�
 - 非 Linux 平台的 RSS/CPU：**UNVERIFIED**。
 - CLI 子进程 E2E 性能：**未测量**（本轮仍是 Runner 级）。
 - MySQL 性能：**未测量**。
+
+## 8. 第三阶段补充：四项 P2 已处理，直接事务成本证据（2026-10-19）
+
+> 本补充不改写以上阶段二的历史记录。代码与原始证据 SHA、环境和逐次数据见 [`issue13-phase3-a9b6fb2/`](issue13-phase3-a9b6fb2/)。该轮仍是测量，不是优化授权；Issue #13 保持 OPEN。
+
+| 遗留 P2 | 第三阶段处理/核验证据 |
+|---|---|
+| Benchmark 定时边界可能把 bookkeeping 算入或 fixture 误算 | `BenchmarkWorkflow` 每轮显式 Start/Stop，仅括住 `Workflow.run`；fixture、engine 生命周期、关闭/清理在计时外。退出路径有 Stop 清理。 |
+| 样本物理约束/完整矩阵只靠单一生成路径 | 新测量和离线重建共用完整 `validateSamples`；`sample-mutation-results.md` 保存 5 种独立负变异（零 masked 行、3% 阶段和、非法 worker、缺样本、重复样本）实际失败码与错误；摘要篡改也由再生一致性测试拒绝。 |
+| 提交数/成本只是间接推断 | 真实 SQLite `Writer` 与 value-free SQL driver spy 直接测 Begin/Commit/Rollback、UPDATE、其他 SQL 调用及每个 batch 的事务窗口/语句数/回执；CommitUnknown 与 Update 失败/成功 Rollback 路径单独验证。Apply 的 Commit driver 调用与 fsync 证据分开记录，未把嵌套计时相加。 |
+| benchmark TempDir 随迭代累积 | 一个 benchmark 根目录下每次只建一个独立迭代目录；Engine 显式关闭后目录删除；资源回归测试验证无遗留，后续迭代可以继续。 |
+
+### 第三阶段发现（256 行、workers=4；BatchSize 16/64/256 各 10 次随机次序）
+
+| Batch | 每轮 Commit 成功数 | Apply 均值（中位数） | driver Commit 时间均值（每轮） | UPDATE driver 时间均值 | 其他 SQL driver 时间均值 | Begin driver 时间均值 | 事务窗口均值 | 未归属 Apply 均值 |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 16 | 16 | 131.59 ms（131.40） | 102.231 ms | 3.472 ms | 1.989 ms | 0.070 ms | 113.88 ms | 17.72 ms |
+| 64 | 4 | 39.43 ms（39.50） | 24.744 ms | 1.303 ms | 0.461 ms | 0.016 ms | 29.37 ms | 10.05 ms |
+| 256 | 1 | 16.17 ms（16.24） | 5.885 ms | 0.527 ms | 0.068 ms | 0.003 ms | 7.86 ms | 8.31 ms |
+
+独立 batch 记录显示每批恰有 `UPDATE × 行数 + 5 条其他 SQL + BEGIN/COMMIT`；每个 batch 都有正确行数的回执。**默认 BatchSize=64 的测量 Apply 中，Commit driver 时间是最大已直接计时项（约 63%）；** 每次 Commit 约 6.2 ms。SQLite `DELETE` journal / `synchronous=2` 下的独立 Apply-only strace 窗口关联到目标 `target.db`/journal/目录的 16 次成功 `fsync`（四组、4 个回执），无 `fdatasync`。同步调用与 Commit 时序一致，但没有逐 Commit 内核标记，故不把所有 fsync 因果独占地归给 Commit。
+
+**不把 Commit 说成全部 Apply 成本。** BatchSize=256 时，driver Commit 约占 Apply 36%，未归属部分约 8.31 ms（约 51%）；未归属包括 page/read、遮盖/校验和框架等，未被单独证明。UPDATE driver 时间仅占小部分；其他 SQL 的逐批数与耗时另列 `apply-batches.csv`。计时嵌套，`driver` 列不可再与事务窗口求和。十次重复仅作描述统计，不声称显著性。未改 BatchSize、SQL、事务、journal/synchronous 或 worker pool。
+
+### 10k 行 Runner 压测（单次/worker）
+
+真实 SQLite Runner 对 workers=1/2/4/8/16 各运行一次；所有运行 `Complete`、157 个回执累计 10k 行、独立 Validate、源未变，逐行结果一致；关闭后 reader/writer 连接均为 0/0。Workflow 约 1.92–1.97 秒、Apply 约 1.44–1.49 秒，吞吐约 5.07–5.22k rows/s；workers 增大没有显示一致提速。CPU、RSS、goroutine 抽样及每次结果见 `10k-workers.csv`（本轮 goroutine 观测均为 4→4）；独立 `TestWorkersStopAndDoNotLeak` 同样轮询关闭后回落至基线+2 内。未运行 100k/1M 行或多轮显著性分析。
+
+最终主机证据：Linux `7.0.0-38-generic` x86_64、AMD Ryzen 9 7940H、16 cores、host `/proc/meminfo` MemTotal 15,187 MiB（不代表容器限额）、Go 1.26.3、modernc SQLite 1.60.1。完整 SQLite 样本与报告在 `docs/perf/issue13-phase3-a9b6fb2/`；CLI E2E、MySQL 性能、非 Linux 资源仍是 **UNVERIFIED**。Issue #13 未关闭，也未授权开始 #14。
+
+## 9. 第三阶段独立审查修复与最终更正
+
+保留上述第 8 节作为其生成时的 phase-3 快照，不覆盖其历史记录。独立 Security Review/QA 在 review HEAD `1e5b5b0` 发现环境 SHA 的离线重建不一致、吞吐率缺少物理复核，以及 SQLSpy 批量扫描开销可能随 batch 数增长；QA 确认当时的 artifact consistency gate 失败。后续代码提交 `c747538` 将环境摘要作为测量时 provenance 单独验证、加入吞吐率/负时长校验、SQLSpy O(1) cursor/suffix 观察和 10 组随机配对 observer-overhead 测量；`8ffca9b` 将完整 Validate 放在 strace END marker 之后。修复后的 evidence consistency、观测器配对测试及全套本机测试均通过，准确命令与 SHA 见 `docs/perf/issue13-phase3-c747538/test-results.md`。
+
+**第 8 节中基于 `a9b6fb2` 的表格是较早诊断快照，不是最终值。** 当前最终 Phase 3 结果、观测器误差范围、系统调用证据和 scope 限制以 [`issue13-phase3-report.md`](issue13-phase3-report.md) 与其版本化数据目录 `docs/perf/issue13-phase3-c747538/` 为准。新的独立 QA/Security follow-up 已在 `c49b9ce` 完成（QA PASS；Security OK with notes，无 P0/P1/P2），报告见 `docs/reviews/`。PR #68 已创建，最终 Head 的必需 CI（Ubuntu、Windows、MySQL、bench）均已通过；合并仍须遵守仓库门禁，本地报告不自行构成合并授权。
