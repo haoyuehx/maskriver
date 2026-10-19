@@ -52,7 +52,8 @@ cp docs/licenses/* "$OUT/licenses/"
 	echo "| Component | Licence | Text in this package |"
 	echo "|---|---|---|"
 	cd "$REPO"
-	go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./cmd/maskriver \
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+		go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./cmd/maskriver \
 		| grep -v '^github.com/haoyuehx/maskriver' | sort >"$OUT/.linked"
 	cd "$OUT"
 	while read -r mod; do
@@ -172,6 +173,11 @@ an operator holding both is not prevented.
 INFO
 
 cd "$OUT"
+# Modes are pinned here so a fresh clone reproduces the same tar bytes with no
+# manual chmod: 0755 for the executable, 0644 for documents and licence texts.
+chmod 0644 LICENSE NOTICE.md MPL-2.0-SOURCE.md BUILD-INFO.md
+chmod 0644 licenses/*
+chmod 0755 maskriver
 find . -type f ! -name MANIFEST ! -name SHA256SUMS | sed 's|^\./||' | LC_ALL=C sort >MANIFEST
 sha256sum $(cat MANIFEST) >SHA256SUMS
 
