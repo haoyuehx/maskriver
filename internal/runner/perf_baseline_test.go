@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -92,14 +91,6 @@ func rssKB() int64 {
 		}
 	}
 	return -1
-}
-
-func cpuNS() (user, system int64, ok bool) {
-	var usage syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &usage); err != nil {
-		return 0, 0, false
-	}
-	return usage.Utime.Nano(), usage.Stime.Nano(), true
 }
 
 // measureConfig runs iterations of one configuration. Each iteration builds a fresh
