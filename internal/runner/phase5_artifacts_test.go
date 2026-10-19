@@ -40,6 +40,9 @@ func TestPhase5ArchivedArtifactConsistency(t *testing.T) {
 		if err := validatePhase5Sample(sample, phase5Case{Rows: sample.Rows, Workers: sample.Workers, Repetition: sample.Repetition}); err != nil {
 			t.Fatalf("archived sample %s invalid: %v", sample.TrialID, err)
 		}
+		if err := validatePhase5ArchivedSampleClaims(sample); err != nil {
+			t.Fatalf("archived sample %s claims invalid: %v", sample.TrialID, err)
+		}
 		var raw phase5Sample
 		if err := readPhase5JSON(filepath.Join(dir, "raw", sample.TrialID, "sample.json"), &raw); err != nil {
 			t.Fatalf("raw sample %s: %v", sample.TrialID, err)
@@ -137,6 +140,11 @@ func TestPhase5ArchivedArtifactValidatorsRejectMetricMutation(t *testing.T) {
 	if phase5SampleEqual(samples[0], badSamples[0]) {
 		t.Fatal("whole-sample comparator accepted a changed Apply duration")
 	}
+	badClaims := samples[0]
+	badClaims.RepeatedFieldNulls++
+	if err := validatePhase5ArchivedSampleClaims(badClaims); err == nil {
+		t.Fatal("archived sample claim validator accepted a mutated NULL count")
+	}
 
 	rollup, err := readPhase5CSVRecords(filepath.Join(dir, "rollup.csv"))
 	if err != nil {
@@ -200,6 +208,23 @@ func TestPhase5ArchivedArtifactValidatorsRejectMetricMutation(t *testing.T) {
 	if err := validatePhase5PreflightSummary(dir, mutatedPreflight); err == nil {
 		t.Fatal("preflight summary validator accepted a mutated disk value")
 	}
+}
+
+func validatePhase5ArchivedSampleClaims(sample phase5Sample) error {
+	expected := phase5DistributionForRows(sample.Rows)
+	if sample.HighCardinalityDistinct != expected.HighCardDistinct || sample.HighCardinalityNulls != expected.HighCardNulls ||
+		sample.RepeatedFieldDistinct != expected.RepeatedDistinct || sample.RepeatedFieldNulls != expected.RepeatedNulls ||
+		math.Abs(sample.RepeatedFieldDuplicateRate-expected.RepeatedDuplicateRate) > 1e-12 ||
+		math.Abs(1-float64(sample.HighCardinalityDistinct)/float64(sample.Rows)-expected.HighCardDuplicateRate) > 1e-12 {
+		return errors.New("recorded source distribution differs from deterministic fixture expectations")
+	}
+	if sample.ChangedNonNullCounts["email_high_cardinality"] != expected.HighCardNonNullRows || sample.ChangedNonNullCounts["email_repeated_null"] != expected.RepeatedNonNullRows {
+		return errors.New("recorded changed-row counts differ from fixture non-NULL row counts")
+	}
+	if sample.ReceiptCapacity < sample.ReceiptCount || sample.ReceiptStructBytes == 0 || uint64(sample.ReceiptCapacity)*uint64(sample.ReceiptStructBytes) != uint64(sample.ReceiptSliceCapacityBytes) {
+		return errors.New("recorded receipt slice capacity bytes are inconsistent")
+	}
+	return nil
 }
 
 func phase5ArtifactDir(t *testing.T) string {
