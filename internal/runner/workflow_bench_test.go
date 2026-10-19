@@ -21,6 +21,8 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -69,28 +71,73 @@ func benchEmails(n int, long bool) []string {
 // benchWorkflow runs one full workflow and returns per-stage durations. The
 // fixture is built by acceptanceFixture, so fixture cost stays outside the
 // measurement; the caller resets the target between iterations.
-func benchWorkflow(tb testing.TB, cfg benchConfig) (total time.Duration, stages map[string]time.Duration, rowsMasked int64) {
+// benchEnv is one prepared workflow environment: fixture databases, an open
+// engine and a real history store. Building it is fixture cost and must never be
+// inside a timed region.
+type benchEnv struct {
+	engine   *Engine
+	store    *history.Store
+	base     config.Runtime
+	source   string
+	target   string
+	pristine string
+}
+
+func benchEnvFor(tb testing.TB, cfg benchConfig) *benchEnv {
 	tb.Helper()
 	values := benchEmails(cfg.rows, cfg.long)
 	base, key := benchFixture(tb, values)
 	base.Workers = cfg.workers
 	base.BatchSize = 64
-
 	engine, err := Open(context.Background(), base, key)
 	if err != nil {
 		tb.Fatalf("Open: %v", err)
 	}
 	tb.Cleanup(func() { _ = engine.Close() })
-
-	// The approval seam is the real store with a real signing key: the decision
-	// must be issued and verified, not stubbed.
 	store, _ := benchStore(tb)
 	engine.SetApprovalQuery(store)
+	// A pristine copy of the source lets each iteration start from the same
+	// state without rebuilding the fixture inside the timed region.
+	pristine := filepath.Join(filepath.Dir(base.Source), "pristine.db")
+	if err := copyFile(base.Source, pristine); err != nil {
+		tb.Fatalf("pristine copy: %v", err)
+	}
+	return &benchEnv{engine: engine, store: store, base: base, source: base.Source, target: base.Target, pristine: pristine}
+}
 
+// reset restores the target so every iteration starts from unmasked data. It is
+// called with the timer stopped.
+func (e *benchEnv) reset(tb testing.TB) {
+	tb.Helper()
+	if err := copyFile(e.pristine, e.target); err != nil {
+		tb.Fatalf("reset target: %v", err)
+	}
+}
+
+func copyFile(from, to string) error {
+	in, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(to)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+// run executes one workflow on a prepared environment and returns the stage
+// durations and the number of masked rows.
+func (e *benchEnv) run(tb testing.TB) (stages map[string]time.Duration, rowsMasked int64) {
+	tb.Helper()
+	base, engine, store := e.base, e.engine, e.store
 	ctx := context.Background()
 	stages = make(map[string]time.Duration, 5)
-	start := time.Now()
-
 	step := func(name string, fn func() error) {
 		at := time.Now()
 		if err := fn(); err != nil {
@@ -132,11 +179,10 @@ func benchWorkflow(tb testing.TB, cfg benchConfig) (total time.Duration, stages 
 		applied = rep
 		return err
 	})
-	total = time.Since(start)
 	for _, r := range applied.Committed {
 		rowsMasked += r.Rows
 	}
-	return total, stages, rowsMasked
+	return stages, rowsMasked
 }
 
 // benchFixture builds two independent synthetic databases holding the same rows
@@ -204,17 +250,20 @@ func BenchmarkWorkflow(b *testing.B) {
 		name := fmt.Sprintf("rows=%d/shape=%s/workers=%d", cfg.rows, shapeName(cfg.long), cfg.workers)
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
+			env := benchEnvFor(b, cfg) // fixture cost: outside the timer
 			var lastRows int64
 			var lastStages map[string]time.Duration
+			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				total, stages, rows := benchWorkflow(b, cfg)
+				stages, rows := env.run(b)
 				lastRows, lastStages = rows, stages
-				if total <= 0 {
-					b.Fatal("non-positive workflow duration")
-				}
+				b.StopTimer()
+				env.reset(b)
+				b.StartTimer()
 			}
+			b.StopTimer()
 			if lastRows > 0 {
-				// Interval: one complete workflow over the whole fixture.
+				// Interval: the timed workflow only, not fixture creation.
 				b.ReportMetric(float64(lastRows)*float64(b.N)/b.Elapsed().Seconds(), "rows/s")
 			}
 			for _, stage := range []string{"scan", "plan", "preview", "approve", "apply"} {
