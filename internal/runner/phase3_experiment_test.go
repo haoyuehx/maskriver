@@ -462,6 +462,9 @@ func phase3Environment(samples []phase3Trial, reps int) string {
 		Go          string `json:"go_version"`
 		CPU         string `json:"cpu"`
 		Cores       int    `json:"cores"`
+		Kernel      string `json:"kernel"`
+		MemoryTotal string `json:"memory_total_mb"`
+		MemoryScope string `json:"memory_scope"`
 		Driver      string `json:"sqlite_driver"`
 		Repetitions int    `json:"repetitions_per_batch"`
 		Samples     int    `json:"sample_count"`
@@ -472,9 +475,35 @@ func phase3Environment(samples []phase3Trial, reps int) string {
 		HeadSHA     string `json:"head_sha"`
 	}
 	j, s := samples[0].JournalMode, samples[0].Synchronous
-	b, _ := json.MarshalIndent(env{runtime.GOOS, runtime.GOARCH, runtime.Version(), hostCPU(), runtime.NumCPU(), "modernc.org/sqlite v1.60.1", reps, len(samples), "0x132026", j, s, "MASK_RIVER_PHASE3_DIR=<dir> MASK_RIVER_PHASE3_REPS=10 go test -run '^TestPhase3BatchExperiment$' -count=1 -timeout 50m ./internal/runner/", currentGitSHA()}, "", "  ")
+	b, _ := json.MarshalIndent(env{runtime.GOOS, runtime.GOARCH, runtime.Version(), hostCPU(), runtime.NumCPU(), hostKernel(), hostMemoryTotalMB(), "host /proc/meminfo MemTotal, not cgroup/container limit", "modernc.org/sqlite v1.60.1", reps, len(samples), "0x132026", j, s, "MASK_RIVER_PHASE3_DIR=<dir> MASK_RIVER_PHASE3_REPS=10 go test -run '^TestPhase3BatchExperiment$' -count=1 -timeout 50m ./internal/runner/", currentGitSHA()}, "", "  ")
 	return string(b) + "\n"
 }
+func hostKernel() string {
+	output, err := exec.Command("uname", "-sr").Output()
+	if err != nil {
+		return "UNVERIFIED"
+	}
+	return strings.TrimSpace(string(output))
+}
+func hostMemoryTotalMB() string {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return "UNVERIFIED"
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "MemTotal:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				value, parseErr := strconv.ParseInt(fields[1], 10, 64)
+				if parseErr == nil {
+					return strconv.FormatInt(value/1024, 10)
+				}
+			}
+		}
+	}
+	return "UNVERIFIED"
+}
+
 func currentGitSHA() string {
 	command := exec.Command("git", "rev-parse", "HEAD")
 	output, err := command.Output()
@@ -721,7 +750,7 @@ func TestPhase3Scale10K(t *testing.T) {
 		fmt.Fprintf(&csvText, "%d,%.2f,%.2f,%.2f,%.2f,%s,%s,%s,%s,%d,%d,%d,%d,%d,%d,%d,%d,%t,%t,%t,%d\n", v.Workers, float64(v.FixtureNS)/1e6, float64(v.WorkflowNS)/1e6, float64(v.ApplyNS)/1e6, v.RowsPerSecond, metricMS(v.CPUUserNS), metricMS(v.CPUSystemNS), metricKB(v.RSSBeforeKB), metricKB(v.RSSAfterKB), v.GoroutinesBefore, v.GoroutinesAfter, v.ReaderOpen, v.WriterOpen, v.ReaderOpenAfterClose, v.WriterOpenAfterClose, v.Receipts, v.RowsCommitted, v.Complete, v.ValidatePassed, v.SourceUnchanged, v.TargetRows)
 	}
 	writeFile(t, filepath.Join(outDir, "10k-workers.csv"), csvText.String())
-	meta := map[string]any{"head_sha": currentGitSHA(), "goos": runtime.GOOS, "goarch": runtime.GOARCH, "go_version": runtime.Version(), "cpu": hostCPU(), "cores": runtime.NumCPU(), "sqlite_driver": "modernc.org/sqlite v1.60.1", "rows": rows, "workers": []int{1, 2, 4, 8, 16}, "iterations_per_worker": 1, "journal_mode": journalMode, "synchronous": syncMode, "fixture_scope": "separate optimized test fixture; one prepared insert transaction per database", "workflow_scope": "Scan, Plan, Preview, real Ed25519 Approve, Apply; measured separately from fixture construction", "apply_scope": "Apply stage duration within workflow", "command": "MASK_RIVER_PHASE3_10K_DIR=<dir> go test -run '^TestPhase3Scale10K$' -count=1 -timeout 20m ./internal/runner/"}
+	meta := map[string]any{"head_sha": currentGitSHA(), "goos": runtime.GOOS, "goarch": runtime.GOARCH, "go_version": runtime.Version(), "cpu": hostCPU(), "cores": runtime.NumCPU(), "kernel": hostKernel(), "memory_total_mb": hostMemoryTotalMB(), "memory_scope": "host /proc/meminfo MemTotal, not cgroup/container limit", "sqlite_driver": "modernc.org/sqlite v1.60.1", "rows": rows, "workers": []int{1, 2, 4, 8, 16}, "iterations_per_worker": 1, "journal_mode": journalMode, "synchronous": syncMode, "fixture_scope": "separate optimized test fixture; one prepared insert transaction per database", "workflow_scope": "Scan, Plan, Preview, real Ed25519 Approve, Apply; measured separately from fixture construction", "apply_scope": "Apply stage duration within workflow", "command": "MASK_RIVER_PHASE3_10K_DIR=<dir> go test -run '^TestPhase3Scale10K$' -count=1 -timeout 20m ./internal/runner/"}
 	metaBytes, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		t.Fatal(err)
