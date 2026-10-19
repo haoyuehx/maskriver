@@ -1,0 +1,33 @@
+{
+  "batch_size": 64,
+  "command": "MASKRIVER_PHASE5_SCALE_OUT=\u003cdir\u003e go test -run '^TestPhase5ScaleMatrix$' -count=1 -timeout 4h ./internal/runner",
+  "cpu_count": 16,
+  "fixture": "source built in one prepared transaction; target copied after close; construction excluded from workflow",
+  "go_version": "go1.26.3",
+  "goarch": "amd64",
+  "goos": "linux",
+  "host_cpu": "AMD Ryzen 9 7940H w/ Radeon 780M Graphics",
+  "host_memory_total_mb": "15187",
+  "journal_mode": "DELETE/default rollback journal",
+  "kernel": "Linux 7.0.0-38-generic",
+  "measurement_code_sha": "050fde78e25edfad38f5bd47119168eaf5eb2ada",
+  "memory_source": "/proc/meminfo host value; container limit checked separately if exposed",
+  "repetitions": {
+    "10000": 5,
+    "100000": 3,
+    "1000000": 1
+  },
+  "resource_budget": {
+    "available_disk_bytes": 160813273088,
+    "available_memory_kb": 9406084,
+    "conservative_estimated_peak_working_set_bytes": 2147483648,
+    "minimum_disk_bytes": 5368709120,
+    "minimum_available_memory_kb": 4194304,
+    "passed": true,
+    "source": "Linux statfs available blocks and /proc/meminfo"
+  },
+  "resource_sample_period_ms": 100,
+  "sqlite_driver": "modernc.org/sqlite v1.60.1",
+  "synchronous": "driver default; not changed by test",
+  "workflow": "Scan, Plan, Preview, Ed25519 Approve, Apply, independent Validate"
+}

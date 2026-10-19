@@ -1,0 +1,15 @@
+{
+  "measurement_base_git_sha": "050fde78e25edfad38f5bd47119168eaf5eb2ada",
+  "branch": "perf/issue13-phase5-scale-platform-final-20261019",
+  "working_tree_was_dirty_for_measurement": true,
+  "measurement_code_sha_in_environment_is_base_head_not_harness_commit": true,
+  "harness_source_sha256": {
+    "internal/runner/phase5_scale_test.go": "4a984a27ee2062c486b44a21a9fc4741f73b1bfa4e5946417daf9e1d821d1bc5",
+    "internal/runner/phase5_disk_linux_test.go": "f98e90d65e160d0d69e2bf9f5f91c18fc08e980ecf9c8f9a36c3cecf826263b2",
+    "internal/runner/phase5_disk_other_test.go": "d56a822cc4e4305c4d04eac3a98ffafaf75511cb12512227023ff0376490d4e5"
+  },
+  "raw_sample_count": 42,
+  "resource_sample_count": 5999,
+  "sample_command": "MASKRIVER_PHASE5_SCALE_OUT=\"$PWD/docs/perf/issue13-phase5-20261019-final\" go test -run ^TestPhase5ScaleMatrix$ -count=1 -timeout 4h ./internal/runner",
+  "measurement_note": "The harness Go files were untracked when measured; their exact SHA-256 digests are recorded above. Environment measurement_code_sha identifies the base commit only. The harness source hashes identify the measurement implementation."
+}

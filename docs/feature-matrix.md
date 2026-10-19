@@ -144,7 +144,7 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 | 中国 PII 检测与格式约束脱敏 | 部分实现（检测 + 有界替换 + SQL 集成测试） | 检测见 #6/PR #20，九种策略见 PR #29，真实 SQLite/MySQL 8.0.46 组件级读/写/回读与只读快照测试见 PR #30；用户 CLI 工作流与独立安全评审仍属 #9/#11 |
 | 有界流式并发、背压、取消 | 部分实现（PR #36） | SQLite：每页有界 1–16 Worker、固定队列、顺序输出、取消与故障注入回归；SQL 读写仍顺序执行；多表 + 多 Worker 的 CLI 证据与 DB 性能评估未交付 |
 | 故障恢复、版本化 checkpoint、幂等重放 | 计划中 | M2；先解决事务提交与映射一致性 |
-| precision/recall 与吞吐/内存基准、可视化 | 部分实现（有实测合成值） | #6 的 74 条检测合成评估；PR #36 的 128 条 HMAC 合成批次 3 次重复基准、Go 版本/CI 环境、ns/op/B/op/allocs/op、CSV/JSON/SVG。1 Worker 最快；数据库端到端吞吐、延迟和持续 RSS/CPU 未验证，详见 [性能证据](performance.md) |
+| precision/recall 与吞吐/内存基准、可视化 | 部分实现（有实测合成值） | #6 的 74 条检测合成评估；PR #36 的 128 条 HMAC 合成批次 3 次重复基准；#13 phase 5 在 Linux 对真实 SQLite Runner 执行 10k/100k/1M 合成矩阵（42 次、BatchSize=64），含分阶段耗时、rows/s、采样 RSS/CPU/连接、收据容量与正确性核验，证据见 [phase-5 报告](perf/issue13-phase5-20261019-final/summary.md)。仅 1M 为单次，矩阵非 CLI、无 MySQL CLI、非未插桩生产吞吐；结果不证明严格的 batch×workers 内存上界，也未支持并行优化或关闭 #13。详见 [性能证据](performance.md) |
 | 数据目录/治理平台导出 | 未实现 | 未纳入当前承诺 |
 
 任何状态升级必须附可复现测试与文档更新。只创建包、类型、配置或让空包通过编译，都不能算业务功能已实现。
