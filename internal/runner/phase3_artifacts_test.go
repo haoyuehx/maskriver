@@ -22,7 +22,8 @@ func TestPhase3ArtifactConsistency(t *testing.T) {
 	if err := json.Unmarshal(raw, &samples); err != nil {
 		t.Fatal(err)
 	}
-	reps := len(samples) / 3
+	matrixSize := len(phase3BatchSizes(samples))
+	reps := len(samples) / matrixSize
 	if err := validatePhase3Trials(samples, reps); err != nil {
 		t.Fatalf("invalid raw phase-3 samples: %v", err)
 	}
@@ -38,7 +39,11 @@ func TestPhase3ArtifactConsistency(t *testing.T) {
 	// Environment is measurement-time provenance, not a derived result. It must
 	// remain intact and valid, but comparing it to the verifier host would make
 	// historical evidence fail whenever HEAD or host metadata changes.
-	for _, name := range []string{"samples.json", "apply-transactions.csv", "apply-batches.csv", "results.csv", "results.json", "stats.csv", "summary.md", "resource-metrics.json", "throughput.svg"} {
+	summaryName := "summary.md"
+	if matrixSize == 4 {
+		summaryName = "diagnostic-summary.md"
+	}
+	for _, name := range []string{"samples.json", "apply-transactions.csv", "apply-batches.csv", "results.csv", "results.json", "stats.csv", summaryName, "resource-metrics.json", "throughput.svg"} {
 		want, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatalf("read committed %s: %v", name, err)
