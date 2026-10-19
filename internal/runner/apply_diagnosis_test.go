@@ -287,13 +287,14 @@ func TestApplyDiagnosisCountsRollbackOnUpdateFailure(t *testing.T) {
 	for _, event := range events {
 		if event.Verb == "ROLLBACK" {
 			rollbackEvents++
-			if event.Err || event.Duration <= 0 {
+			// Windows timer resolution can report a sub-tick rollback as zero.
+			if event.Err || event.Duration < 0 {
 				t.Fatalf("driver Rollback event has err=%v duration=%v", event.Err, event.Duration)
 			}
 		}
 	}
-	if rollbackEvents != 1 || rollbackWallNS <= 0 {
-		t.Fatalf("rollback timing observations: driver events=%d wrapper wall=%d ns, want 1 and >0", rollbackEvents, rollbackWallNS)
+	if rollbackEvents != 1 || rollbackWallNS < 0 {
+		t.Fatalf("rollback timing observations: driver events=%d wrapper wall=%d ns, want 1 and non-negative", rollbackEvents, rollbackWallNS)
 	}
 	rows := targetRows(t, fixture.cfg.Target)
 	if rows[1] != syntheticEmails(1)[0] {
