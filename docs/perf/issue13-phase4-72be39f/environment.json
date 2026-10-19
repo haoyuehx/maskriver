@@ -16,6 +16,8 @@
   "synchronous": "2",
   "command": "MASK_RIVER_PHASE3_DIR=<dir> MASK_RIVER_PHASE3_REPS=10 go test -run '^TestPhase3BatchExperiment$' -count=1 -timeout 50m ./internal/runner",
   "measurement_code_sha": "72be39f0ddc0fb52fb16a0eb796953cec1062c94",
+  "measurement_harness_commit": "1f71a05aadd46e5467a00a96cbf99dc0eddcce2b",
+  "evidence_report_commit": "70e8c5b17703f69bc4b7b9a2e6f513b32a3a87a0",
   "measurement_harness_change": "opt-in diagnostic test matrix included batch 128; production source unchanged",
   "batch_sizes": [16, 64, 128, 256],
   "fixture_timing": "Fixture construction measured separately; excluded from workflow and Apply timers. Independent Validate after Apply timer.",
