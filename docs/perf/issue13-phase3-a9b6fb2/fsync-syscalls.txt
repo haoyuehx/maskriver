@@ -1,0 +1,16 @@
+60068 1792415432.625566 fsync(9</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551/target.db-journal>) = 0 <0.002316>
+60068 1792415432.627991 fsync(10</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551>) = 0 <0.002038>
+60068 1792415432.630175 fsync(9</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551/target.db-journal>) = 0 <0.001770>
+60068 1792415432.632178 fsync(8</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551/target.db>) = 0 <0.001762>
+60071 1792415432.640250 fsync(9</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551/target.db-journal>) = 0 <0.001653>
+60071 1792415432.641979 fsync(10</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551>) = 0 <0.001976>
+60071 1792415432.644071 fsync(9</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551/target.db-journal>) = 0 <0.001835>
+60071 1792415432.646189 fsync(8</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551/target.db>) = 0 <0.001686>
+60072 1792415432.652835 fsync(9</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551/target.db-journal>) = 0 <0.001097>
+60072 1792415432.654024 fsync(10</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551>) = 0 <0.001861>
+60072 1792415432.656040 fsync(9</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551/target.db-journal>) = 0 <0.001783>
+60072 1792415432.657929 fsync(8</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551/target.db>) = 0 <0.001957>
+60066 1792415432.664272 fsync(9</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551/target.db-journal>) = 0 <0.001565>
+60066 1792415432.665922 fsync(10</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551>) = 0 <0.001992>
+60066 1792415432.668068 fsync(9</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551/target.db-journal>) = 0 <0.001786>
+60066 1792415432.670007 fsync(8</tmp/TestPhase3StraceApply3915659459/001/iteration-370520551/target.db>) = 0 <0.001917>
