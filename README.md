@@ -7,7 +7,7 @@ An independently developed Go data masking and sensitive-data governance project
 
 MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具，面向企业开发、测试与数据共享场景：自动发现敏感数据，提供安全、确定性的脱敏策略，数据库适配器支持 SQLite 与 MySQL（当前 CLI 仅 SQLite），并提供数据完整性校验。
 
-> **M1 仍在收尾：#9 的 AC 待独立验收签署，尚未发布。** 当前真实可用范围是合成 SQLite 快照上的多表 CLI（同一表多列由 runner 级用例覆盖）：`scan → preview → approve（独立进程签发）→ 新进程 mask --apply → validate`。Ed25519 审批记录、驱动级 SQL Spy、静态安全门禁和批次故障回归已有真实 SQLite 测试；`--strict` 目前没有独立的严格语义，MySQL CLI、断点恢复/checkpoint、exactly-once、持久映射和生产级检测准确率均未验证。不能据此声称完整产品或生产就绪。
+> **M1 仍在收尾：#9 已关闭（AC1–AC5 全部通过）；#11 已裁定 ACCEPT WITH RESTRICTIONS，尚有限制项待关闭。M1 未发布。** 当前真实可用范围是合成 SQLite 快照上的多表 CLI（同一表多列由 runner 级用例覆盖）：`scan → preview → approve（独立进程签发）→ 新进程 mask --apply → validate`。Ed25519 审批记录、驱动级 SQL Spy、静态安全门禁和批次故障回归已有真实 SQLite 测试；`--strict` 目前没有独立的严格语义，MySQL CLI、断点恢复/checkpoint、exactly-once、持久映射和生产级检测准确率均未验证。不能据此声称完整产品或生产就绪。
 
 ## 快速开始
 

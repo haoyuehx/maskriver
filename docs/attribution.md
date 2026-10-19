@@ -38,6 +38,31 @@ none was edited or summarised. `go.sum` also contains modules that are only
 transitive build metadata and contribute no linked code; they are deliberately
 not reproduced here.
 
+### Additional texts embedded inside dependencies
+
+Some dependencies ship further third-party material *inside* the module that is
+compiled into the binary. Because `modernc.org/libc` selects its musl-translated
+implementation on linux/amd64 without a build tag, this material is linked into a
+default build and is therefore a release condition, not a curiosity:
+
+| Module | Additional text | File |
+|---|---|---|
+| `modernc.org/libc` | Go / musl / go-netdb / nixpkgs material | `licenses/modernc-libc-LICENSE-3RD-PARTY` |
+| `modernc.org/sqlite` | bundled third-party notices | `licenses/modernc-sqlite-LICENSE-3RD-PARTY` |
+| `modernc.org/sqlite` | SQLite itself (public domain) | `licenses/modernc-sqlite-LICENSE-SQLITE` |
+| `modernc.org/sqlite` | sqlite-vec | `licenses/modernc-sqlite-LICENSE-SQLITE_VEC` |
+| `modernc.org/memory` | Go runtime material | `licenses/modernc-memory-LICENSE-GO` |
+| `modernc.org/memory` | mmmap-go material | `licenses/modernc-memory-LICENSE-MMAP-GO` |
+| `modernc.org/memory` | project logo terms | `licenses/modernc-memory-LICENSE-LOGO` |
+| `golang.org/x/sys` | patent grant | `licenses/x-sys-PATENTS` |
+
+**Repository texts are not a compliant release artifact.** A binary release must
+still be checked as its own deliverable: it needs a NOTICE-style collation of
+every applicable text above, the complete licence texts shipped alongside the
+artifact, and — for the MPL-2.0 covered `go-sql-driver/mysql` files — a stated way
+to obtain the corresponding source form. This repository documents the material;
+it does not package it.
+
 Binary distribution must include the applicable notices and, for MPL-2.0
 covered files, a way to obtain the corresponding source form. See
 [database-drivers.md](database-drivers.md) for the per-dependency constraints.
