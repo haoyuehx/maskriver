@@ -46,21 +46,34 @@ cp docs/licenses/* "$OUT/licenses/"
 	echo
 	echo "## Linked into the binary"
 	echo
+	echo "Derived from \`go list -deps\` for the target platform, not from a static list, so"
+	echo "the index can only claim what the build actually links."
+	echo
 	echo "| Component | Licence | Text in this package |"
 	echo "|---|---|---|"
-	printf '%s\n' \
-		'| modernc.org/sqlite | BSD-3-Clause | licenses/modernc-sqlite-LICENSE |' \
-		'| modernc.org/libc | BSD-3-Clause | licenses/modernc-libc-LICENSE |' \
-		'| modernc.org/mathutil | BSD-3-Clause | licenses/modernc-mathutil-LICENSE |' \
-		'| modernc.org/memory | BSD-3-Clause | licenses/modernc-memory-LICENSE |' \
-		'| github.com/go-sql-driver/mysql (MPL-2.0) | MPL-2.0 | licenses/go-sql-driver-mysql-LICENSE |' \
-		'| filippo.io/edwards25519 | BSD-3-Clause | licenses/edwards25519-LICENSE |' \
-		'| github.com/dustin/go-humanize | MIT | licenses/go-humanize-LICENSE |' \
-		'| github.com/google/uuid | BSD-3-Clause | licenses/google-uuid-LICENSE |' \
-		'| github.com/mattn/go-isatty | MIT | licenses/go-isatty-LICENSE |' \
-		'| github.com/ncruces/go-strftime | MIT | licenses/go-strftime-LICENSE |' \
-		'| github.com/remyoudompheng/bigfft | BSD-3-Clause | licenses/bigfft-LICENSE |' \
-		'| golang.org/x/sys | BSD-3-Clause | licenses/x-sys-LICENSE |'
+	cd "$REPO"
+	go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./cmd/maskriver \
+		| grep -v '^github.com/haoyuehx/maskriver' | sort >"$OUT/.linked"
+	cd "$OUT"
+	while read -r mod; do
+		case "$mod" in
+		github.com/haoyuehx/maskriver*) continue ;;
+		modernc.org/sqlite*) echo "| modernc.org/sqlite | BSD-3-Clause | licenses/modernc-sqlite-LICENSE |" ;;
+		modernc.org/libc*) echo "| modernc.org/libc | BSD-3-Clause | licenses/modernc-libc-LICENSE |" ;;
+		modernc.org/mathutil*) echo "| modernc.org/mathutil | BSD-3-Clause | licenses/modernc-mathutil-LICENSE |" ;;
+		modernc.org/memory*) echo "| modernc.org/memory | BSD-3-Clause | licenses/modernc-memory-LICENSE |" ;;
+		github.com/go-sql-driver/mysql/*|github.com/go-sql-driver/mysql) echo "| github.com/go-sql-driver/mysql | MPL-2.0 | licenses/go-sql-driver-mysql-LICENSE |" ;;
+		filippo.io/edwards25519*) echo "| filippo.io/edwards25519 | BSD-3-Clause | licenses/edwards25519-LICENSE |" ;;
+		github.com/dustin/go-humanize/*|github.com/dustin/go-humanize) echo "| github.com/dustin/go-humanize | MIT | licenses/go-humanize-LICENSE |" ;;
+		github.com/google/uuid/*|github.com/google/uuid) echo "| github.com/google/uuid | BSD-3-Clause | licenses/google-uuid-LICENSE |" ;;
+		github.com/mattn/go-isatty/*|github.com/mattn/go-isatty) echo "| github.com/mattn/go-isatty | MIT | licenses/go-isatty-LICENSE |" ;;
+		github.com/ncruces/go-strftime/*|github.com/ncruces/go-strftime) echo "| github.com/ncruces/go-strftime | MIT | licenses/go-strftime-LICENSE |" ;;
+		github.com/remyoudompheng/bigfft/*|github.com/remyoudompheng/bigfft) echo "| github.com/remyoudompheng/bigfft | BSD-3-Clause | licenses/bigfft-LICENSE |" ;;
+		golang.org/x/sys/*|golang.org/x/sys) echo "| golang.org/x/sys | BSD-3-Clause | licenses/x-sys-LICENSE |" ;;
+		*) echo "| UNMAPPED: $mod | — | missing from NOTICE |" ;;
+		esac
+	done <"$OUT/.linked" | awk '!seen[$0]++' 
+	rm -f "$OUT/.linked"
 	echo
 	echo "## Further texts shipped inside those modules"
 	echo
@@ -77,13 +90,15 @@ cp docs/licenses/* "$OUT/licenses/"
 		'| modernc.org/memory | mmap-go material | licenses/modernc-memory-LICENSE-MMAP-GO |' \
 		'| golang.org/x/sys | patent grant | licenses/x-sys-PATENTS |'
 	echo
-	echo "## Shipped upstream but carrying no linked code"
+	echo "## Shipped upstream but not linked by this build"
 	echo
 	echo "| Component | Material | Text in this package |"
 	echo "|---|---|---|"
 	printf '%s\n' \
 		'| modernc.org/sqlite | sqlite-vec | licenses/modernc-sqlite-LICENSE-SQLITE_VEC |' \
-		'| modernc.org/memory | project logo reference (URL) | licenses/modernc-memory-LICENSE-LOGO |'
+		'| modernc.org/memory | project logo reference (URL) | licenses/modernc-memory-LICENSE-LOGO |' \
+		'| github.com/mattn/go-isatty | module requirement, not present in this build'"'"'s link set | licenses/go-isatty-LICENSE |' \
+		'| github.com/ncruces/go-strftime | module requirement, not present in this build'"'"'s link set | licenses/go-strftime-LICENSE |'
 	echo
 	echo "## MPL-2.0"
 	echo
