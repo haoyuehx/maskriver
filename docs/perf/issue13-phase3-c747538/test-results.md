@@ -17,6 +17,6 @@ Host: Linux x86_64, kernel `7.0.0-38-generic`; Go `go1.26.3`; Ryzen 9 7940H (16 
 | `MASK_RIVER_STRACE_APPLY=1` marked test under `strace -f -ttt -T -yy -e trace=fsync,fdatasync,write` | PASS; full independent Validate after END marker |
 | `git diff --check` | PASS |
 
-Opt-in measurements passed: 30 randomized BatchSize trials (10 each); 10k rows × workers 1/2/4/8/16; 30 randomized paired observer comparisons (10 each plain/instrumented per BatchSize, 60 independent observations total); all artifact consistency checks passed. The high-load tests are manual-only; the existing PR benchmark job remains active on pull requests. No GitHub Actions checks ran because the branch could not be pushed.
+Opt-in measurements passed: 30 randomized BatchSize trials (10 each); 10k rows × workers 1/2/4/8/16; 30 randomized paired observer comparisons (10 each plain/instrumented per BatchSize, 60 independent observations total); all artifact consistency checks passed. The high-load tests are manual-only; the existing PR benchmark job remains active on pull requests. For PR #68 at code head `e7088ae`, required GitHub checks passed on Ubuntu, Windows, isolated MySQL, and bench; the manual phase3-stress job was skipped by its `workflow_dispatch` guard.
 
 Windows runtime, non-Linux resources, MySQL performance, CLI E2E performance, 100k/1M rows, and statistical significance remain UNVERIFIED/not measured.

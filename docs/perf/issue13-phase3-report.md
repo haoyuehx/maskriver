@@ -24,7 +24,7 @@ The initial independent review/QA at `1e5b5b0` found three additional P2s and th
 2. The phase-3 validator now recomputes rows/s from row count and Apply duration and rejects negative durations/components. Mutation tests cover both.
 3. SQLSpy now uses constant-time log cursors and suffix-only copies, avoiding repeated copies of the growing entire statement/event log. A paired plain-vs-instrumented Apply experiment quantifies observer perturbation; Apply/throughput is explicitly labeled diagnostic and not production throughput.
 
-The strace test now performs independent full Validate after the END marker, keeping validation outside the syscall window. Initial BLOCK review reports were preserved unchanged in `docs/reviews/`. Final independent QA at `c49b9ce` passed locally; the independent Security follow-up was OK with notes and found no P0/P1/P2. Reports: `docs/reviews/issue13-phase3-qa-followup-2026-10-19.md` and `docs/reviews/issue13-phase3-security-followup-2026-10-19.md`. Remote final-head CI and PR merge gates remain outstanding.
+The strace test now performs independent full Validate after the END marker, keeping validation outside the syscall window. Initial BLOCK review reports were preserved unchanged in `docs/reviews/`. Final independent QA at `c49b9ce` passed locally; the independent Security follow-up was OK with notes and found no P0/P1/P2. Reports: `docs/reviews/issue13-phase3-qa-followup-2026-10-19.md` and `docs/reviews/issue13-phase3-security-followup-2026-10-19.md`. PR #68 records the final CI evidence; merge remains subject to the repository gate.
 
 ## Repeated transaction experiment
 
@@ -54,4 +54,4 @@ Apply-only marker window, BatchSize=64 and four receipts, `strace -f -ttt -T -yy
 
 At source SHA `8ffca9b` and independent QA HEAD `c49b9ce`: `go test -count=1 ./...`, `go test -race -count=1 ./...`, `go vet ./...`, 10-second `FuzzMaskBatchDeterminism`, Windows runner test cross-compilation, benchmark smoke, `git diff --check`, phase-2 sample validation, phase-3 artifact regeneration, and observer artifact regeneration all passed locally. The high-load measurements and their validators are listed in `test-results.md` and the environment JSON.
 
-A push attempt to `origin` failed with `gnutls_handshake() failed: The TLS connection was non-properly terminated`. No alternative transport/retry was used. Therefore no PR, final-head GitHub CI, or merge exists; the merge gate is **not satisfied**. Issue #13 was not changed by this local work and must remain OPEN.
+The first HTTPS push failed with a TLS handshake error. A subsequent push over HTTP/1.1 succeeded and PR #68 was created. Required GitHub checks at final code head `e7088ae37047d4504b1d738c629a941767353695` passed: Ubuntu, Windows, isolated MySQL, and bench. The intentionally manual phase3-stress job was skipped by its `workflow_dispatch` guard. Issue #13 must remain OPEN; this PR does not complete all Issue #13 acceptance criteria.
