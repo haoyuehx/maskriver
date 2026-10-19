@@ -39,12 +39,20 @@ func TestPhase3ArtifactConsistency(t *testing.T) {
 	// Environment is measurement-time provenance, not a derived result. It must
 	// remain intact and valid, but comparing it to the verifier host would make
 	// historical evidence fail whenever HEAD or host metadata changes.
-	for _, name := range []string{"samples.json", "apply-transactions.csv", "apply-batches.csv", "results.csv", "results.json", "stats.csv", "summary.md", "resource-metrics.json", "throughput.svg"} {
+	summaryName := "summary.md"
+	if matrixSize == 4 {
+		summaryName = "diagnostic-summary.md"
+	}
+	for _, name := range []string{"samples.json", "apply-transactions.csv", "apply-batches.csv", "results.csv", "results.json", "stats.csv", summaryName, "resource-metrics.json", "throughput.svg"} {
 		want, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatalf("read committed %s: %v", name, err)
 		}
-		got, err := os.ReadFile(filepath.Join(regen, name))
+		regenName := name
+		if name == "diagnostic-summary.md" {
+			regenName = "summary.md"
+		}
+		got, err := os.ReadFile(filepath.Join(regen, regenName))
 		if err != nil {
 			t.Fatalf("read regenerated %s: %v", name, err)
 		}
