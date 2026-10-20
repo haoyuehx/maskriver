@@ -1,6 +1,6 @@
 # Issue #13：严格内存上界与批次回执架构评审
 
-**状态：DESIGN READY — PENDING OWNER APPROVAL。独立Architecture与Security在`45f754d`均未发现P0/P1；Owner决策仍未完成，生产实现未授权。严格全局内存AC仍未满足或证明通过。**
+**状态：`DECIDED — DESIGN DIRECTION RECORDED`（2026-10-20）。** 方向见 [`issue13-owner-direction-2026-10-20.md`](issue13-owner-direction-2026-10-20.md)：新流式路径承担严格内存上界（S2），旧 `m1a-v1` API 保留并标注 O(K)，新路径采用同库同事务 A3，独立 Anchor/Seal 延期且不属于 #13 必需。**仅 WP1（新增版本化契约类型与测试）获有限授权；WP2/WP2b/WP3/WP4 未授权。** A3、SQLite/MySQL durability、平台路径安全均未实现/未验证；严格全局内存 AC 未满足，Issue #13 保持 OPEN。
 
 本文件 §5–§15 的早期候选方案曾讨论提交后外部Sink；该模型现由 `docs/design/issue13-architecture-decision-record.md` 中 A3（目标数据库同事务 outbox）替代为推荐候选。ADR是当前方案来源；本文件中与A3冲突的旧 sink 时序/测试表应视为历史分析，不是待实现设计。
 
@@ -226,7 +226,7 @@ sequenceDiagram
 
 ## 15. 最终架构裁决
 
-**本次ADR是候选设计，不是Owner批准或实现证明。** `45f754d`独立Architecture与Security均P0=0/P1=0/P2=1；Architecture建议`DESIGN READY — PENDING OWNER APPROVAL`，其P2为过期的review-pending文字，本次移除；Security P2将durability/目标路径支持保留为实现门禁。Owner须决定AC范围与审计保证；全部ADR行仍待决。Legacy API仍Θ(K)。新streaming receipts只有在历史目录/metadata/row payload有硬界且Owner接受AC范围后才可能与K无关。A3及SQLite/MySQL durability尚未实现/验证；外部anchor不与DB事务原子。本文件不授权生产实现，也不声称Issue #13 AC通过。
+**本文件描述设计与实现门禁，不是实现证明。** 2026-10-20 的 [Owner 方向记录](issue13-owner-direction-2026-10-20.md) 已决定 AC 范围（S2）、审计基线（A3）、Anchor 延期与平台范围；ADR-08 数值仍需测量批准。Legacy API 仍 Θ(K)。新 streaming receipts 只有在历史目录/metadata/row payload 有硬界时才可能与 K 无关。A3 及 SQLite/MySQL durability 尚未实现/验证；外部 anchor 不与 DB 事务原子。WP1 仅获准新增契约类型与测试；WP2/WP3/WP4 未授权。本文件不声称 Issue #13 AC 通过。
 
 最终问题答复：
 1. 当前 Apply 内存复杂度：`O(K + B·C·L + T + C·(sampleLimit+1) + D + H + filenameBytes + runtime/cache)`；K在稠密可写数据时Θ(N/B)，另有审批目录O(H)扫描等规模项。
@@ -244,4 +244,4 @@ sequenceDiagram
 
 历史与当前审查的实际SHA、严重度、限制、四项Security P1逐条处置及原始证据关系保存在 [`docs/reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md`](../reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md)。`45f754d47e753ef4798050feb6a961b90bfa4687`的独立Architecture与Security Review均P0=0/P1=0/P2=1；前者指出过期的review-pending文字，后者将durability/path存储支持保留为实现门禁。精确报告及限制位于`docs/reviews/`；未执行测试或证明实现。本次更新移除review-pending文字，不改变Owner待批准状态。
 
-`DESIGN READY — PENDING OWNER APPROVAL`仅表示设计可交Owner裁决，不代表Owner批准、生产授权或Issue #13 AC完成。All Owner decisions remain pending; durability/path capabilities remain unverified and Issue #13 remains OPEN.
+`DECIDED — DESIGN DIRECTION RECORDED` 表示方向已记录，不代表生产授权、实现验证或 Issue #13 AC 完成。ADR-08 数值仍待测量批准；durability/path capabilities 仍未验证；Issue #13 保持 OPEN。

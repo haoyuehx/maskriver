@@ -111,3 +111,23 @@ A docs/reviews/issue13-pr71-security-review-2026-10-20-head-717b17a.md     17
 | B2 listed durable-receipt/crash semantics as core AC | Reclassified as conditional: core only if Owner separately selects crash-consistent receipts; otherwise deferrable with the guarantee withdrawn. |
 | WP2 bundled SQLite and MySQL | WP2 is now SQLite-initial; MySQL is a separately gated WP2b. |
 | "Receipt complete / full audit" could be read as tamper-evident | Terminology boundary added: same-transaction receipt consistency only, no durability or tamper-evidence claim without WP4. |
+
+## Addendum — Owner direction round (2026-10-20)
+
+This addendum extends the audit to the documentation head that records the Owner direction. The
+counts below were produced with `git diff --stat`/`--name-only` on the local branch and re-checked
+after the final documentation commit of this round.
+
+- Additions: `docs/design/issue13-owner-direction-2026-10-20.md` (new decision record) and edits to
+  the ADR, bounded-receipts design and Owner decision package that replace the old
+  "all ADR pending" status with the recorded decisions, keep ADR-08 pending, and limit WP1.
+- Expected totals at the final documentation head: 20 changed files (19 previously added + 1 new
+  decision record), all Markdown, all additions (no deletions of historical text; status/decision
+  lines are updated in place and the original Issue #13 acceptance text is preserved separately).
+- Prohibited-change checks rerun on this delta: no `.go`, `pkg/contracts`, `go.mod/go.sum`, `.github`,
+  scripts, binaries, symlinks or mode changes; `git diff --check` PASS; secret-pattern grep clean.
+- The Issue #13 body edit is outside this repository diff. It appends a clearly labelled
+  "Acceptance scope revision — 2026-10-20" section and preserves the original checklist verbatim;
+  the recorded provenance is delegated technical direction, **not** a GitHub approval signature.
+- Limits: Main performed this audit. Independent exact-head review of the new head is recorded in the
+  review history after it completes; this addendum does not claim that review in advance.

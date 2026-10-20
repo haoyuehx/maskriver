@@ -1,6 +1,10 @@
 # Issue #13 Architecture Decision Record — bounded Apply receipts and audit consistency
 
-**Status:** DESIGN READY — PENDING OWNER APPROVAL. All owner decisions below remain `PENDING OWNER DECISION`. This is readiness for Owner decision only, not authorization to change production behavior or frozen contracts.
+**Status:** `DECIDED — DESIGN DIRECTION RECORDED; IMPLEMENTATION GATES UNCHANGED` (2026-10-20).
+ADR-01..ADR-07, ADR-09, ADR-10 and ADR-11 record the repository owner's delegated direction in
+[`issue13-owner-direction-2026-10-20.md`](issue13-owner-direction-2026-10-20.md). ADR-08 stays
+`PENDING MEASUREMENT AND OWNER APPROVAL`. No decision below authorizes production behaviour,
+implements outbox/anchor/durability, or closes Issue #13; WP2/WP2b/WP3/WP4 remain NOT AUTHORIZED.
 
 **Owner entry point:** [`issue13-owner-decision-package.md`](issue13-owner-decision-package.md) condenses ADR-01..ADR-11 into priority groups, S1/S2/S3 and A1/A2/A3 comparisons, the minimum safe implementation paths, implementation gates and proposed work packages. It records no approval.
 
@@ -22,7 +26,7 @@ Decide what evidence would be needed to satisfy Issue #13's original memory AC w
 
 The live Issue also asks for a synthetic real-SQLite Scan→Preview→independent Approve→Apply→Validate workflow, 128/512/2048 CI and progressively larger 10k/100k/1M local scale where resources permit, honest metrics/environment, and states MySQL adapter evidence is not MySQL CLI E2E. This citation is the live Issue source; independent reviewers could not fetch GitHub themselves.
 
-Original AC wording remains authoritative. This ADR does **not** reinterpret it to mean “only the new API” or “only Go heap” without an explicit Issue Owner decision. No design decision here changes `m1a-v1`, Apply transaction policy, CLI authorization, BatchSize defaults, release, or #14 scope.
+The original AC wording is preserved verbatim in Issue #13. On 2026-10-20 the repository owner recorded an explicit acceptance-scope revision: the strict bound applies to the new M2 Streaming Apply path (ADR-01/S2), while the legacy `m1a-v1` path keeps full O(K) receipts and is documented as such. That revision is a recorded decision, not a silent reinterpretation, and it does not by itself complete any AC. No decision here changes `m1a-v1`, Apply transaction policy, CLI authorization, BatchSize defaults, release, or #14 scope.
 
 ## Current memory and receipt facts
 
@@ -36,17 +40,17 @@ Original AC wording remains authoritative. This ADR does **not** reinterpret it 
 
 | ID | Decision | Alternatives | Recommendation (not approval) | Evidence / risk | State |
 |---|---|---|---|---|---|
-| ADR-01 | Does strict memory AC apply to all Apply APIs or only a new streaming path? | S1 all APIs; S2 new streaming path only; S3 bounded legacy maximum | S1 is the literal safest reading; S2 is the only compatibility-friendly path but changes AC scope; S3 is a cap, not an asymptotic solution. Require Owner to select; no silent narrowing. | Frozen return DTO proves legacy Ω(K). No data proving Issue permits API-specific AC. | **PENDING OWNER DECISION** |
-| ADR-02 | May legacy full-receipt API retain O(K)? | No; yes as compatibility API; cap/retire later | Recommend retain exact `m1a-v1` semantics, label O(K), and do not call global AC complete while it is in scope. | Existing callers can observe every element. Changing semantics is breaking. | **PENDING OWNER DECISION** |
-| ADR-03 | Required data-commit/audit guarantee? | A1 best effort; A2 durable reconciliation; A3 same-transaction audit row (Anchor optional and separate, ADR-05) | Recommend A3 for each batch's receipt, i.e. business update + receipt in one target-DB transaction. Independent enrollment, per-batch anchor acknowledgments and terminal seal are **not part of A3**; they are the separate tamper-evidence option under ADR-05 and must not be bundled into this decision. If same-target DB atomicity cannot be proved, stop rather than downgrade to A1. | DB transaction and external anchor are separate failure domains; anchor outage leaves committed data incomplete. Owner may choose A3 without an anchor. | **PENDING OWNER DECISION** |
-| ADR-04 | May target DB schema include a private audit outbox? | No schema changes; pre-provisioned namespaced tables; separate store | Recommend pre-provisioned reserved tables in the same target database, with explicit migration/validation and no silent runtime DDL. | SQLite DML in one DB transaction can be atomic; MySQL requires same primary database and transactional engine (e.g. InnoDB) for both tables. Current code does not prove/implement this. | **PENDING OWNER DECISION** |
-| ADR-05 | May an independent durable audit anchor be required? | No; local only; external append-only signer/ledger | Recommend external trust anchor for claims of tamper-evident completed runs; without it, claim only accidental-corruption detection and local consistency. | No such service exists in current product; key custody, availability, retention and threat model need owner/infrastructure approval. | **PENDING OWNER DECISION** |
-| ADR-06 | Are third-party receipt Consumers allowed? | Arbitrary callback; trusted internal sinks only; isolated process | Recommend no user-supplied callback in first streaming API. Use an internal synchronous transactional outbox writer. | A Go callback can ignore ctx, block forever, panic or re-enter. Bounded queue does not bound its execution. | **PENDING OWNER DECISION** |
-| ADR-07 | Which platforms/storage must provide durable semantics? | Linux only; Linux+Windows; SQLite local only; MySQL too | Recommend initially support only explicitly tested local SQLite rollback-journal with required sync mode; add MySQL only after proving same-DB transactional engine and durability settings. Other filesystems/platforms fail closed/UNSUPPORTED. | Prior CI proves builds/tests, not atomic/durable outbox semantics. Network filesystems and power-loss guarantees vary. | **PENDING OWNER DECISION** |
-| ADR-08 | Numeric memory/disk/metadata limits? | Define L/T/C/H/D caps; symbolic working-set claim only | Recommend symbolic budgets first, numeric values only after representative payload measurements and Owner approval; no invented “approved” cap. | Without per-row byte, plan, history and metadata limits no byte bound. Disk receipts remain Θ(K). | **PENDING OWNER DECISION** |
-| ADR-09 | Legacy Plan/approval/API revision compatibility? | Global revision bump; additive parallel version; break old approval | Recommend preserve `m1a-v1` and Plan.ID/approval behavior; define additive versioned streaming request/approval binding that coexists and does not reinterpret m1a plans. | Global `APIRevision` change is included in plan identity and `ValidateShape`; old approvals can stop validating. Exact DTO remains for a separate contract proposal. | **PENDING OWNER DECISION** |
-| ADR-10 | Which production modules may be changed next? | None; contracts only; runner+DB; CLI/history cross-module | No production changes now. If approved, authorize files/modules separately and coordinate owners; do not imply #14. | Current task authorizes design/docs/review only. | **PENDING OWNER DECISION** |
-| ADR-11 | Which attacker/threat coverage must audit completion provide? | Local corruption; known-run tampering after trusted enrollment; pre-enrollment/whole-run deletion; host/runner compromise | Minimum honest guarantee: detect alteration only after independent anchor enrollment, for runs discoverable from that independent catalog; explicitly exclude pre-enrollment rewrite and host/runner compromise. Stronger coverage requires independent admission/attestation. | Security Review on `c44a7c3` found first-anchor authenticity and unknown-run discovery underspecified. No anchor service exists. | **PENDING OWNER DECISION** |
+| ADR-01 | Does strict memory AC apply to all Apply APIs or only a new streaming path? | S1 all APIs; S2 new streaming path only; S3 bounded legacy maximum | S1 is the literal safest reading; S2 is the only compatibility-friendly path but changes AC scope; S3 is a cap, not an asymptotic solution. Require Owner to select; no silent narrowing. | Frozen return DTO proves legacy Ω(K). No data proving Issue permits API-specific AC. | **DECIDED — S2** ([direction](issue13-owner-direction-2026-10-20.md)) |
+| ADR-02 | May legacy full-receipt API retain O(K)? | No; yes as compatibility API; cap/retire later | Recommend retain exact `m1a-v1` semantics, label O(K), and do not call global AC complete while it is in scope. | Existing callers can observe every element. Changing semantics is breaking. | **DECIDED — legacy retained (O(K) labelled)** |
+| ADR-03 | Required data-commit/audit guarantee? | A1 best effort; A2 durable reconciliation; A3 same-transaction audit row (Anchor optional and separate, ADR-05) | Recommend A3 for each batch's receipt, i.e. business update + receipt in one target-DB transaction. Independent enrollment, per-batch anchor acknowledgments and terminal seal are **not part of A3**; they are the separate tamper-evidence option under ADR-05 and must not be bundled into this decision. If same-target DB atomicity cannot be proved, stop rather than downgrade to A1. | DB transaction and external anchor are separate failure domains; anchor outage leaves committed data incomplete. Owner may choose A3 without an anchor. | **DECIDED — A3 for streaming path** |
+| ADR-04 | May target DB schema include a private audit outbox? | No schema changes; pre-provisioned namespaced tables; separate store | Recommend pre-provisioned reserved tables in the same target database, with explicit migration/validation and no silent runtime DDL. | SQLite DML in one DB transaction can be atomic; MySQL requires same primary database and transactional engine (e.g. InnoDB) for both tables. Current code does not prove/implement this. | **DECIDED — pre-provisioned outbox** |
+| ADR-05 | May an independent durable audit anchor be required? | No; local only; external append-only signer/ledger | Recommend external trust anchor for claims of tamper-evident completed runs; without it, claim only accidental-corruption detection and local consistency. | No such service exists in current product; key custody, availability, retention and threat model need owner/infrastructure approval. | **DECIDED — anchor deferred (not required)** |
+| ADR-06 | Are third-party receipt Consumers allowed? | Arbitrary callback; trusted internal sinks only; isolated process | Recommend no user-supplied callback in first streaming API. Use an internal synchronous transactional outbox writer. | A Go callback can ignore ctx, block forever, panic or re-enter. Bounded queue does not bound its execution. | **DECIDED — internal sink only** |
+| ADR-07 | Which platforms/storage must provide durable semantics? | Linux only; Linux+Windows; SQLite local only; MySQL too | Recommend initially support only explicitly tested local SQLite rollback-journal with required sync mode; add MySQL only after proving same-DB transactional engine and durability settings. Other filesystems/platforms fail closed/UNSUPPORTED. | Prior CI proves builds/tests, not atomic/durable outbox semantics. Network filesystems and power-loss guarantees vary. | **DECIDED — Linux local SQLite first** |
+| ADR-08 | Numeric memory/disk/metadata limits? | Define L/T/C/H/D caps; symbolic working-set claim only | Recommend symbolic budgets first, numeric values only after representative payload measurements and Owner approval; no invented “approved” cap. | Without per-row byte, plan, history and metadata limits no byte bound. Disk receipts remain Θ(K). | **PENDING MEASUREMENT AND OWNER APPROVAL** |
+| ADR-09 | Legacy Plan/approval/API revision compatibility? | Global revision bump; additive parallel version; break old approval | Recommend preserve `m1a-v1` and Plan.ID/approval behavior; define additive versioned streaming request/approval binding that coexists and does not reinterpret m1a plans. | Global `APIRevision` change is included in plan identity and `ValidateShape`; old approvals can stop validating. Exact DTO remains for a separate contract proposal. | **DECIDED — parallel versioned contract** |
+| ADR-10 | Which production modules may be changed next? | None; contracts only; runner+DB; CLI/history cross-module | No production changes now. If approved, authorize files/modules separately and coordinate owners; do not imply #14. | Current task authorizes design/docs/review only. | **DECIDED — WP1 limited authorization** |
+| ADR-11 | Which attacker/threat coverage must audit completion provide? | Local corruption; known-run tampering after trusted enrollment; pre-enrollment/whole-run deletion; host/runner compromise | Minimum honest guarantee: detect alteration only after independent anchor enrollment, for runs discoverable from that independent catalog; explicitly exclude pre-enrollment rewrite and host/runner compromise. Stronger coverage requires independent admission/attestation. | Security Review on `c44a7c3` found first-anchor authenticity and unknown-run discovery underspecified. No anchor service exists. | **DECIDED — trusted local boundary** |
 
 ## S1/S2/S3 — strict memory AC scope
 
@@ -222,22 +226,29 @@ Still not accepted as complete: only one 1M trial per configuration; no 10k–1M
 
 ## Implementation boundary and authorization
 
-This ADR recommends only a candidate. **No production files are authorized.** Prohibited without explicit further authorization: `pkg/contracts/**`, `APIRevision`, runner Apply/receipt semantics, DB writer/commit behavior, Worker Pool, CLI write gates, History production format, BatchSize defaults, release/tag. No #14 checkpoint/resume/exactly-once work.
+**Implementation authorization is limited to WP1:** new versioned contract types, pure validation and compatibility tests under `pkg/contracts/**`, with no change to existing `m1a-v1` semantics or constants. Everything else remains prohibited without further authorization: `APIRevision`, runner Apply/receipt semantics, DB writer/commit behavior, Worker Pool, CLI write gates, History production format, BatchSize defaults, release/tag. No #14 checkpoint/resume/exactly-once work. Production outbox, MySQL outbox, Runner/CLI streaming integration and anchor/seal/verifier remain NOT AUTHORIZED/DEFERRED.
 
 If Owner approves ADR-01..ADR-11 (including threat scope) and separately authorizes implementation, estimate at least four sequenced packages: (1) contract/approval coexistence proposal; (2) DB outbox schema and transaction owner implementation; (3) runner/CLI streaming API integration; (4) external audit anchor/seal/verifier + platform security, with independent QA/Security. Split/serial ordering must follow actual file ownership. This is an estimate, not authorization.
 
-## Owner decision signature block
+## Owner decision record
 
-No approval is recorded here. The Issue Owner must explicitly select or reject each ADR-01..ADR-11; empty signature means pending.
+The delegated direction of 2026-10-20 is recorded in
+[`issue13-owner-direction-2026-10-20.md`](issue13-owner-direction-2026-10-20.md). It is a
+technical-direction record by delegation from the repository owner, **not** a GitHub review
+signature and not a maintainer attestation. Where repository process requires a maintainer
+record, that record is still outstanding and must not be fabricated.
 
-- Issue Owner decision reference/comment: **PENDING OWNER DECISION**
-- Audit threat model / pre-enrollment and host-root boundary (ADR-11): **PENDING OWNER DECISION**
-- AC scope (S1/S2/S3): **PENDING OWNER DECISION**
-- Audit guarantee (A1/A2/A3): **PENDING OWNER DECISION**
-- Outbox/schema change: **PENDING OWNER DECISION**
-- External trust anchor: **PENDING OWNER DECISION**
-- Consumer model: **PENDING OWNER DECISION**
-- Platform/storage support: **PENDING OWNER DECISION**
-- Numeric memory/disk/history limits: **PENDING OWNER DECISION**
-- API/Plan/Approval compatibility: **PENDING OWNER DECISION**
-- Production file authorization: **PENDING OWNER DECISION**
+| Decision item | State |
+|---|---|
+| AC scope (ADR-01): new streaming path carries the strict bound | **DECIDED — S2** |
+| Legacy receipt memory (ADR-02) | **DECIDED — retain and label O(K)** |
+| Audit guarantee (ADR-03): same-target-DB transaction | **DECIDED — A3 for streaming path** |
+| Target outbox schema (ADR-04) | **DECIDED — pre-provisioned, no runtime DDL** |
+| External trust anchor (ADR-05) | **DECIDED — deferred, not required for #13** |
+| Consumer model (ADR-06) | **DECIDED — controlled internal sink only** |
+| Platform/storage support (ADR-07) | **DECIDED — Linux local SQLite first; Windows streaming UNSUPPORTED; MySQL → WP2b** |
+| Numeric memory/disk/history limits (ADR-08) | **PENDING MEASUREMENT AND OWNER APPROVAL** |
+| API/Plan/Approval compatibility (ADR-09) | **DECIDED — parallel versioned contract, m1a-v1 unchanged** |
+| Production file authorization (ADR-10) | **DECIDED — WP1 only; WP2/2b/3/4 NOT AUTHORIZED** |
+| Threat model (ADR-11) | **DECIDED — trusted local execution boundary** |
+| GitHub Owner signature | **NOT PROVIDED** |

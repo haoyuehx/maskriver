@@ -134,3 +134,19 @@ The design-document review-pending wording was removed before `717b17a`; indepen
 All reviews were read-only; none ran tests, database/outbox/anchor/crash probes, or CI. They verify documentation
 consistency only, not runtime behaviour, durability, or Issue #13 acceptance. This history section is itself a
 later documentation-only commit; the exact-head CI on the final commit remains the CI gate.
+
+## Owner direction round — 2026-10-20
+
+**Decision record:** `docs/design/issue13-owner-direction-2026-10-20.md` records ADR-01..07/09/10/11
+as decided direction (S2 scope revision, legacy O(K) retained, A3 same-DB transaction for the new
+path, anchor deferred, Linux local SQLite first, parallel versioned contract, trusted local
+boundary, WP1-limited authorization). ADR-08 remains pending measurement. Provenance is the
+repository owner's delegated technical direction; it is **not** a GitHub signature.
+
+**Repository records:** the Issue #13 acceptance-scope revision is appended to the issue body with the
+original checklist preserved verbatim, and a pointer comment records the decision. Reviewers of this
+round must re-verify the documentation at the exact new head; prior-head verdicts do not carry over.
+
+**Implementation boundary:** only WP1 (new versioned contract types, pure validation, compatibility
+tests under `pkg/contracts/**`) is authorized. WP2/WP2b/WP3/WP4 remain NOT AUTHORIZED/DEFERRED.
+No outbox, anchor, durability or streaming runtime is implemented by this round.

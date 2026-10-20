@@ -4,9 +4,11 @@
 [`issue13-architecture-decision-record.md`](issue13-architecture-decision-record.md)（下称 ADR）和
 [`issue13-bounded-receipts-design.md`](issue13-bounded-receipts-design.md)（下称 Design）。
 
-**当前状态：** `DESIGN READY — PENDING OWNER APPROVAL`。ADR-01..ADR-11 全部为
-`PENDING OWNER DECISION`；生产代码、冻结契约、事务语义、CLI 写入授权、BatchSize 默认值、M1 Release
-均未获授权修改。Issue #13 保持 OPEN，#14 未启动。
+**当前状态：** `DECIDED — DESIGN DIRECTION RECORDED`（2026-10-20）。ADR-01..07/09/10/11 已按
+[`issue13-owner-direction-2026-10-20.md`](issue13-owner-direction-2026-10-20.md) 记录决定；ADR-08 仍为
+`PENDING MEASUREMENT AND OWNER APPROVAL`。仅 WP1（新增版本化契约类型与测试）获得有限授权；生产代码、
+冻结契约语义、事务行为、CLI 写入授权、BatchSize 默认值、M1 Release 均未改变。Issue #13 保持 OPEN，
+#14 未启动。决策来源是仓库所有者对本轮 AI 技术负责人的委托记录，**不是 GitHub 签名**。
 
 **证据边界：** 本包中的所有架构描述都是设计，不是已实现或已验证的能力。真实代码事实只有两类：
 (a) 现有实现的复杂度/行为推导（见 ADR "Current memory and receipt facts"），(b) Phase-5 的 42 次真实
@@ -167,33 +169,34 @@ Anchor 却继续声明篡改检测。**
 ## 5. ADR-01..ADR-11 Owner 决策表
 
 分组依据：**第一类**决定会改变 #13 的验收含义；**第二类**依赖第一类；**第三类**属实施前批准。
-所有"Owner 决议"栏均为 `PENDING OWNER DECISION`；本包不记录任何批准。
+除 ADR-08 外，"Owner 决议"栏记录 2026-10-20 的委托方向（[决策记录](issue13-owner-direction-2026-10-20.md)），
+不是 GitHub 签名，也不构成实现批准。
 
 ### 第一类 — 必须优先决定（决定 #13 能否关闭及以何种含义关闭）
 
 | ID | 决策问题 | 推荐（工程建议，未批准） | 备选 | 安全/兼容影响 | 前置依赖 | Owner 决议 | 决议依据 | 状态 |
 |---|---|---|---|---|---|---|---|---|
-| ADR-01 | 严格内存 AC 是否覆盖所有 Apply API？S1/S2/S3 | S2（显式范围收窄）或明确"S1 需要契约修订" | S1 / S3 / 保持 OPEN | 决定 #13 是否能关闭；S2 需公开承认旧 API 仍 O(K) | 无 | — | — | `PENDING OWNER DECISION` |
-| ADR-02 | 旧 API 是否允许保留 O(K)？ | 保留并在文档/CLI 标注 O(K) | 上限/退役 | 破坏 vs 诚实标注 | ADR-01 | — | — | `PENDING OWNER DECISION` |
-| ADR-03 | 审计保证级别 A1/A2/A3（+Anchor 与否） | A3 为 receipt 基线；Anchor 独立可选 | A1 / A2 / A3+Anchor | 决定"完整审计/篡改检测"能否声明 | ADR-01 | — | — | `PENDING OWNER DECISION` |
-| ADR-11 | 审计威胁模型（预登记改写、Host/Runner 被控、Anchor 回滚） | 仅承诺"登记后、目录内、可信 Runner/Anchor 边界" | 更强独立准入/attestation | 决定是否必须建设新基础设施 | ADR-03 | — | — | `PENDING OWNER DECISION` |
+| ADR-01 | 严格内存 AC 是否覆盖所有 Apply API？S1/S2/S3 | S2（显式范围收窄）或明确"S1 需要契约修订" | S1 / S3 / 保持 OPEN | 决定 #13 是否能关闭；S2 需公开承认旧 API 仍 O(K) | 无 | S2：新流式路径承担严格上界 | 2026-10-20 所有者委托记录 | **DECIDED — S2** |
+| ADR-02 | 旧 API 是否允许保留 O(K)？ | 保留并在文档/CLI 标注 O(K) | 上限/退役 | 破坏 vs 诚实标注 | ADR-01 | 保留旧 API，标注 O(K) | 2026-10-20 所有者委托记录 | **DECIDED — legacy retained** |
+| ADR-03 | 审计保证级别 A1/A2/A3（+Anchor 与否） | A3 为 receipt 基线；Anchor 独立可选 | A1 / A2 / A3+Anchor | 决定"完整审计/篡改检测"能否声明 | ADR-01 | 新路径 A3（同库同事务 outbox） | 2026-10-20 所有者委托记录 | **DECIDED — A3** |
+| ADR-11 | 审计威胁模型（预登记改写、Host/Runner 被控、Anchor 回滚） | 仅承诺"登记后、目录内、可信 Runner/Anchor 边界" | 更强独立准入/attestation | 决定是否必须建设新基础设施 | ADR-03 | 可信本地边界；不承诺主动攻击防护 | 2026-10-20 所有者委托记录 | **DECIDED — trusted local boundary** |
 
 ### 第二类 — 依赖第一类决定
 
 | ID | 决策问题 | 推荐 | 备选 | 安全/兼容影响 | 前置依赖 | Owner 决议 | 决议依据 | 状态 |
 |---|---|---|---|---|---|---|---|---|
-| ADR-04 | 目标 DB 是否可有私有 outbox 表？ | 预置、版本化、无运行时 DDL | 无 schema 变更 / 独立库 | 目标 schema 变更；需迁移/权限/保留策略 | ADR-03=A3/A2 | — | — | `PENDING OWNER DECISION` |
-| ADR-05 | 是否要求独立持久审计 Anchor？ | 仅当要求篡改证据时要求 | 仅本地 | 引入外部服务、密钥托管、可用性代价 | ADR-03, ADR-11 | — | — | `PENDING OWNER DECISION` |
-| ADR-06 | 是否允许第三方/任意 Consumer？ | 不允许；仅内部同步 outbox | 隔离进程/可信 sink | 任意回调可阻塞/重入/泄露 | ADR-03 | — | — | `PENDING OWNER DECISION` |
-| ADR-09 | Plan/Approval/API revision 兼容策略 | 保留 `m1a-v1`，新增并行版本化 surface | 全局 revision bump / 破坏旧审批 | 全局 bump 会使旧 Plan/审批失效 | ADR-01, ADR-02 | — | — | `PENDING OWNER DECISION` |
+| ADR-04 | 目标 DB 是否可有私有 outbox 表？ | 预置、版本化、无运行时 DDL | 无 schema 变更 / 独立库 | 目标 schema 变更；需迁移/权限/保留策略 | ADR-03=A3/A2 | 允许预置专用 outbox schema | 2026-10-20 所有者委托记录 | **DECIDED — pre-provisioned outbox** |
+| ADR-05 | 是否要求独立持久审计 Anchor？ | 仅当要求篡改证据时要求 | 仅本地 | 引入外部服务、密钥托管、可用性代价 | ADR-03, ADR-11 | 延期，不属于 #13 必需 | 2026-10-20 所有者委托记录 | **DECIDED — deferred** |
+| ADR-06 | 是否允许第三方/任意 Consumer？ | 不允许；仅内部同步 outbox | 隔离进程/可信 sink | 任意回调可阻塞/重入/泄露 | ADR-03 | 仅受控内部 sink，无任意回调 | 2026-10-20 所有者委托记录 | **DECIDED — internal sink only** |
+| ADR-09 | Plan/Approval/API revision 兼容策略 | 保留 `m1a-v1`，新增并行版本化 surface | 全局 revision bump / 破坏旧审批 | 全局 bump 会使旧 Plan/审批失效 | ADR-01, ADR-02 | 并行版本化契约，m1a-v1 不变 | 2026-10-20 所有者委托记录 | **DECIDED — parallel versioning** |
 
 ### 第三类 — 实施前批准（不应与基础决策捆绑）
 
 | ID | 决策问题 | 推荐 | 备选 | 安全/兼容影响 | 前置依赖 | Owner 决议 | 决议依据 | 状态 |
 |---|---|---|---|---|---|---|---|---|
-| ADR-07 | 哪些平台/存储必须提供 durable 语义？ | 先仅支持已测本地 SQLite（rollback-journal + 已验证 sync）；MySQL 验证后加入 | Linux only / +Windows / MySQL too | 未测组合必须 fail closed | ADR-03, ADR-04 | — | — | `PENDING OWNER DECISION` |
-| ADR-08 | 数值资源上限（B/W/Lrow/C/T/H/F/元数据） | 先定义符号预算，数值在测量后批准 | 直接设固定上限 / 不设上限 | 无上限则无法宣称字节界 | ADR-01 | — | — | `PENDING OWNER DECISION` |
-| ADR-10 | 下一步允许修改哪些生产模块？ | 当前无；批准后按 WP 分文件授权 | 仅 contracts / runner+DB / 跨模块 | 越界修改会破坏安全不变量 | ADR-01..09 | — | — | `PENDING OWNER DECISION` |
+| ADR-07 | 哪些平台/存储必须提供 durable 语义？ | 先仅支持已测本地 SQLite（rollback-journal + 已验证 sync）；MySQL 验证后加入 | Linux only / +Windows / MySQL too | 未测组合必须 fail closed | ADR-03, ADR-04 | Linux 本地 SQLite 优先；Windows streaming UNSUPPORTED；MySQL→WP2b | 2026-10-20 所有者委托记录 | **DECIDED — scoped** |
+| ADR-08 | 数值资源上限（B/W/Lrow/C/T/H/F/元数据） | 先定义符号预算，数值在测量后批准 | 直接设固定上限 / 不设上限 | 无上限则无法宣称字节界 | ADR-01 | 数值未批准；WP1 仅定义字段与校验 | 2026-10-20 所有者委托记录 | **PENDING MEASUREMENT** |
+| ADR-10 | 下一步允许修改哪些生产模块？ | 当前无；批准后按 WP 分文件授权 | 仅 contracts / runner+DB / 跨模块 | 越界修改会破坏安全不变量 | ADR-01..09 | 仅 WP1 有限授权；WP2/2b/3/4 未授权 | 2026-10-20 所有者委托记录 | **DECIDED — WP1 only** |
 
 > **注意：** ADR-07/08/10 不应在 ADR-01/03/11 未定时被要求一次性批准；否则 Owner 会在范围未定时被迫接受
 > 实现细节。
@@ -239,15 +242,15 @@ P3 是最小"既诚实又有完整 receipt"的路径；P4 应作为独立后续�
 
 ---
 
-## 8. 提议的实施工作包（全部 NOT AUTHORIZED）
+## 8. 实施工作包（仅 WP1 获得有限授权）
 
 | WP | 内容 | 授权前置 | 代码所有者 | 修改范围 | 安全门禁 | QA 要求 | 验收证据 | 独立 PR |
 |---|---|---|---|---|---|---|---|---|
-| WP1 | 契约与兼容性提案：双 API DTO、audit policy binding、Plan/Approval 共存、summary/错误状态、CommitUnknown、APIRevision 决定 | ADR-01/02/09 批准 + 明确 contracts 授权 | Main / Architect | `pkg/contracts/**`、`docs/contracts.md` | 不改变 m1a 语义；旧审批继续有效 | 契约测试、旧 Plan 回归、shape 校验 | 契约评审记录、兼容矩阵 | 是 |
-| WP2 | DB 事务与审计能力（**初始仅 SQLite**）：预置 schema/migration、同事务 outbox、capability/durability 探针、故障注入 | ADR-03/04/07 批准 + db 授权 | go-db | `internal/db/**`、迁移脚本 | G1–G9（**含 G4–G5 平台/路径**）、G6；无运行时 DDL；未测平台/路径 fail closed | 真实 SQLite 事务、路径替换/符号链接、ENOSPC、崩溃、CommitUnknown | 故障矩阵结果（含平台/路径） | 是 |
-| WP2b | MySQL outbox 扩展：独立验证同库/InnoDB/primary-only/durability 后才纳入 | ADR-07 的 MySQL 部分单独批准 + WP2 完成 | go-db | 同一 db 模块的 MySQL 适配 | G12；未测组合 fail closed | 真实 MySQL 事务与 durability | 跨后端证据 | 是（可独立延期） |
-| WP3 | Runner/CLI 流式集成：Q=0 同步写入、有界工作集、审批目录 chunk 扫描、显式 CLI 选择、资源上界验证、跨 worker 正确性 | ADR-08 数值批准 + ADR-10 模块授权 + WP1/WP2 完成 | Main / go-mask / go-verify | `internal/runner/**`、`cmd/maskriver/**`、`internal/history/**` | 保留 `--apply`、审批、preflight、dry-run；无自动回退 | race/fuzz/泄漏/取消、CLI 子进程规模矩阵、跨 worker 摘要一致 | 有界性证明 + 实测分布 + SKIP 清单 | 是 |
-| WP4 | 额外审计安全能力（**仅 Anchor/Seal 相关**）：独立 Anchor、Seal、Verifier、攻击/故障测试 | ADR-05/11 批准 + 新基础设施授权 | Security / Main | 新服务 + verifier + Anchor 故障测试 | G10–G11；Anchor 不可用时 AUDIT_INCOMPLETE | 篡改/删除/回滚/Anchor 宕机测试 | 攻击矩阵、密钥托管审查 | 是（可独立延期） |
+| WP1 | 版本化流式契约：协议版本、request/summary、分页 receipt、状态/错误分类、受控 sink 能力、Plan/Approval 绑定、ResourceBudget 纯校验、新旧兼容测试 | ADR-01/02/09 方向 + 本轮 contracts 有限授权 | Main | **仅新增** `pkg/contracts/**` 版本化类型与测试 | 不改 m1a 语义/常量；旧审批仍有效；跨协议混用拒绝 | `go test -race`、golden vector、正反例绑定、序列化 | 契约评审 + QA + Security 记录 | 是（独立门禁） |
+| WP2 | DB 事务与审计能力（**初始仅 SQLite**）：预置 schema/migration、同事务 outbox、capability/durability 探针、故障注入 | **NOT AUTHORIZED**；需 WP2 专项授权 + DB 所有权 | go-db | `internal/db/**`、迁移脚本 | G1–G9（**含 G4–G5 平台/路径**）、G6；无运行时 DDL；未测平台/路径 fail closed | 真实 SQLite 事务、路径替换/符号链接、ENOSPC、崩溃、CommitUnknown | 故障矩阵结果（含平台/路径） | 是 |
+| WP2b | MySQL outbox 扩展：独立验证同库/InnoDB/primary-only/durability 后才纳入 | **NOT AUTHORIZED**；WP2b 专项授权 | go-db | 同一 db 模块的 MySQL 适配 | G12；未测组合 fail closed | 真实 MySQL 事务与 durability | 跨后端证据 | 是（可独立延期） |
+| WP3 | Runner/CLI 流式集成：Q=0 同步写入、有界工作集、审批目录 chunk 扫描、显式 CLI 选择、资源上界验证、跨 worker 正确性 | **NOT AUTHORIZED**；需 ADR-08 数值 + 模块授权 + WP1/WP2 完成 | Main / go-mask / go-verify | `internal/runner/**`、`cmd/maskriver/**`、`internal/history/**` | 保留 `--apply`、审批、preflight、dry-run；无自动回退 | race/fuzz/泄漏/取消、CLI 子进程规模矩阵、跨 worker 摘要一致 | 有界性证明 + 实测分布 + SKIP 清单 | 是 |
+| WP4 | 额外审计安全能力（**仅 Anchor/Seal 相关**）：独立 Anchor、Seal、Verifier、攻击/故障测试 | **DEFERRED**（ADR-05：不属于 #13 必需） | Security / Main | 新服务 + verifier + Anchor 故障测试 | G10–G11；Anchor 不可用时 AUDIT_INCOMPLETE | 篡改/删除/回滚/Anchor 宕机测试 | 攻击矩阵、密钥托管审查 | 是（可独立延期） |
 
 **平台/路径前置：** G4–G5（Windows/Linux 文件身份、符号链接/硬链接/TOCTOU）属于 **WP2 必需门禁**，不是可延期项；未验证的平台/路径必须 fail closed，因而 WP2 交付时只能声明已验证组合。WP4 只承担 Anchor/Seal 专属门禁（G10–G11）；G12 属 WP2b 的 MySQL 门禁。
 
@@ -259,20 +262,17 @@ P3 是最小"既诚实又有完整 receipt"的路径；P4 应作为独立后续�
 不包含主动篡改检测、不包含长期保留、也不证明 durability。只有 WP4 完成且通过独立审查后，才可声称
 “登记后、catalog 内、可信 Runner/Anchor 边界”的篡改证据；否则必须使用“本地一致性”表述。
 
-**当前所有 WP 均为 `NOT AUTHORIZED`。**
+**当前：WP1 有限授权（仅新增契约类型与测试）；WP2 / WP2b / WP3 为 `NOT AUTHORIZED`；WP4 为 `DEFERRED`。**
 
 ---
 
-## 9. 待 Owner 批准的最少决策集合
+## 9. 决策后的授权状态与下一次最小授权
 
-若 Owner 希望本轮之后能规划实施，最少需要决定：
+2026-10-20 已记录的委托方向解决了 ADR-01/02/03/04/05/06/07/09/11 与 ADR-10 的 WP1 范围；
+**ADR-08 数值仍未批准**。
 
-1. **ADR-01**：#13 内存 AC 的适用范围（S1 / S2 / S3 / 保持 OPEN）。
-2. **ADR-03 + ADR-11**：审计保证级别与威胁边界（A1/A2/A3；是否要求篡改证据）。
-3. **ADR-02/09**：旧 API 与旧 Plan/审批的兼容承诺。
-4. **ADR-10**：是否以及按什么文件范围授权实施（不含具体数值）。
-
-ADR-04/05/06/07/08 可在上述确定后批准；不应提前要求 Owner 批准。
+下一次最小授权建议：**WP2（SQLite 同事务 outbox）**，前提是 WP1 契约通过独立门禁并合并。WP2 授权必须
+按文件集合（`internal/db/**` + 迁移）与安全门禁 G1–G9 明确记录，不能顺带授权 Runner/CLI 或 MySQL。
 
 ---
 
@@ -280,8 +280,10 @@ ADR-04/05/06/07/08 可在上述确定后批准；不应提前要求 Owner 批准
 
 - Issue #13：**OPEN**。原始严格内存 AC 未通过；本包不改变该事实。
 - Issue #14：**OPEN，未授权**。本包不涉及 checkpoint/resume/exactly-once。
-- PR #71：文档/设计专用；**未合并**。
-- 生产修改权限：**无**。
-- ADR-01..ADR-11：全部 `PENDING OWNER DECISION`。
+- PR #71：文档/设计专用；按文档门禁合并后即关闭该设计 PR。
+- 生产修改权限：**仅 WP1 新增契约类型与测试**；WP2/2b/3/4 无。
+- ADR-01..07/09/10/11：**已记录决定**（委托方向）；ADR-08：**PENDING MEASUREMENT**。
 
-**本包裁决：`OWNER DECISION PACKAGE READY`** —— 决策材料、原始 AC 溯源、完整 diff 审查（见 `docs/reviews/issue13-pr71-full-diff-review.md` 及其附录）与独立复核已完成；但 Owner 尚未批准任何 ADR，故**不是** `READY FOR AUTHORIZED IMPLEMENTATION`。
+**本包裁决：`DESIGN DIRECTION DECIDED — WP1 AUTHORIZED, IMPLEMENTATION UNVERIFIED`** —— 决策记录、原始 AC
+溯源、完整 diff 审查（见 `docs/reviews/issue13-pr71-full-diff-review.md` 及其附录）与独立复核已完成；这不
+等于生产实现验收，也不等于 #13 关闭。
