@@ -110,28 +110,32 @@ sequenceDiagram
   participant C as CLI/caller
   participant R as Runner
   participant DB as Target DB
-  participant A as External audit anchor (terminal seal only)
+  participant A as Independent audit anchor/catalog
   C->>R: Versioned streaming Apply + explicit write intent
   R->>R: Plan + signed approval + outbox capability preflight + full dry-run
-  R->>DB: Persist RunEnvelope / BatchPrepare before data transaction
+  R->>A: Register RunID/Plan/approval before any business write
+  A-->>R: durable catalog enrollment or fail closed
+  R->>DB: Persist RunEnvelope / BatchPrepare
+  R->>A: Anchor expected BatchPrepare
   loop each non-empty batch
-    R->>DB: BEGIN; business UPDATEs + COMMITTED event/outbox in same tx
+    R->>DB: BEGIN; business UPDATEs + BatchCommitted event in same tx
     R->>DB: COMMIT
     alt Commit returns success
       DB-->>R: data and receipt atomically committed
+      R->>A: attest observed Commit + event hash
+      A-->>R: durable per-batch acknowledgment
     else underlying Commit attempt returns error
       DB-->>R: CommitUnknown; stop, never retry data
-      R->>DB: optional authoritative lookup by BatchID after recovery
-      Note over R,DB: If unavailable/inconsistent, remain UNKNOWN
+      Note over R,A: No post-restart reconstruction from mutable DB; remain UNKNOWN/incomplete
     end
   end
-  R->>DB: append terminal DB RunSeal (only if complete)
-  R->>A: submit signed terminal digest; anchor stores append-only receipt
+  R->>DB: append terminal DB RunSeal (only if all batches acknowledged)
+  R->>A: anchor terminal digest and seal
   A-->>R: durable signed anchor receipt, or ANCHOR_PENDING
   R-->>C: bounded summary + audit status; never silent fallback
 ```
 
-业务数据与该批 outbox 记录仅在同一目标DB事务域时具有原子性；外部anchor只锚定终结hash，不与DB声称原子。CommitUnknown时不重试；同库行在事务恢复后可提供批次事实，但读取不可用时仍UNKNOWN。Anchor失败意味着数据库可能已完成而整次审计尚未 `COMPLETE_VALID`，返回 `AUDIT_INCOMPLETE/ANCHOR_PENDING`，不得声称锚定完整。无任意Consumer callback、无进程内累计receipt队列。完整状态机和 failure matrix 以 ADR 为准。
+业务数据与该批outbox记录仅在同一目标DB事务域时具有原子性；外部anchor在写前登记Run并逐批见证，但不与DB声称原子。若Commit后anchor ack缺失，则停止后续批次并保持AUDIT_INCOMPLETE/UNKNOWN；重启后不得凭可变DB重建可信attestation。仅在已登记、每批都锚定且终结seal确认时判定完整；保证仅覆盖登记后的已知run及可信Runner/anchor边界。无任意Consumer callback、无进程内累计receipt队列。完整状态机和failure matrix以ADR为准。
 
 ## 7. 审批与提交未知安全模型
 
@@ -179,22 +183,23 @@ sequenceDiagram
 
 新路径必须复用而非替换现有保障，并新增回归证明：
 
-- 既有 M1 CLI默认 dry-run；`--apply`仍是唯一业务写意图，配置/env/stream sink不可授权写入。
-- Preview仍不创建任何审计/映射/receipt文件，不写数据库；sink不能在 Preview开启。
+- 既有 M1 CLI默认 dry-run；`--apply`仍是唯一业务写意图，配置/env/streaming API/outbox均不可授权写入。
+- Preview仍不创建审计/映射/receipt记录或数据库文件，不写业务数据库；候选 Envelope/Prepare/outbox/anchor 操作仅能在全部显式写授权、审批、preflight与dry-run门禁通过后进入。
 - 签名审批仍绑定完整 Plan；stream接口不接收 reviewer私钥、不绕过 trust/history Lookup。
 - 独立 Validate继续按固定 Plan扫描；不能由 receipts代替验证，也不能因sink错误跳过验证后报告完整。
 - 现有 m1a调用方继续拿到全部 Committed receipts；不得静默迁移/丢失。旧路径明确记录 O(K) 限制。
 - source只读、target事务门禁和 per-batch原子性维持；不扩大自动重试/恢复语义。
-- Sink只允许由调用者显式提供；敏感路径/权限、DSN/密钥/原值不写事件；receipt只含已公开的TableRef/ordinal/rows或明确审查后的更少字段。表名本身可能是敏感元数据，外发/文件权限要按威胁模型处理。
+- 不提供调用者自定义Consumer、回调或receipt文件路径；候选方案仅内部同事务outbox，且anchor为终端/批次信任见证，不是业务重试许可。DSN/密钥/原值不写事件；receipt仅含经审批字段。表名/稳定摘要可能是敏感元数据，需访问控制与威胁模型审查。sink失效不得回退内存或外部文件。
 
 ## 13. 生产变更授权清单与工作包
 
 无授权前不可修改：`pkg/contracts/**`、`APIRevision`、`internal/runner/execute.go` 的事务/报告行为、`internal/db/write.go` 的Commit/Writer语义、`internal/runner/parallel.go` worker行为、`cmd/maskriver` Apply授权路径、`internal/history`审计语义、M1 Release/Tag/默认BatchSize。当前任务只授权设计文档，不授权这些文件写入。
 
-若批准推荐方向，至少拆为 **3个顺序工作包**（这是设计估算，非事实）：
-1. Main/Architect提交冻结契约提案：双API DTO、sink背压/生命周期、summary与错误状态、CommitUnknown、durability/atomicity边界及APIRevision决定；独立评审通过后获显式授权。
-2. Runner/DB owner串行实现：bounded streaming apply及同步Sink，先做明确限定的非持久/持久实验；如要求强审计原子性，另设数据库/存储owner的事务outbox工作包，不与第一版混入。不得并行修改同一模块。
-3. CLI/History/DB跨模块集成与验收：显式选择流式接口、受控持久sink和错误展示，最后完成独立QA/Security与规模/故障测试。模块边界先协调，必要时将outbox拆为第四个包。
+若Owner批准 ADR-01..10 并另授实现权，至少拆为 **4个顺序工作包**（这是设计估算，非事实）：
+1. Main/Architect提交冻结契约与approval兼容提案：双API DTO、audit policy binding、Plan/Approval共存、summary/错误状态、CommitUnknown、durability/atomicity及APIRevision决定；独立评审通过后获显式授权。
+2. DB owner提供预置schema/migration、SQLite/MySQL事务outbox与fail-closed capability/durability探针；仅同事务outbox，不实现可降级的caller Sink。
+3. Runner/CLI集成 bounded streaming Apply、授权/全量验证门禁、同步outbox、anchor状态与错误展示；无自动业务重放。
+4. 独立anchor/seal/verifier、平台路径/存储支持、崩溃/ENOSPC/CommitUnknown/资源限制故障验收与QA/Security。模块边界先协调，同一模块串行写。
 
 仅文档/实验原型无需改生产代码；若在当前授权下准备变更冻结契约或生产文件，应停止并请求明确审批。
 
@@ -217,7 +222,7 @@ sequenceDiagram
 
 ## 15. 最终架构裁决
 
-**本次ADR是候选设计，不是Owner批准或实现证明。** Current verdict remains `DESIGN BLOCKED` until fresh independent Architecture/Security reviews on the final current head assess the A3/outbox and trust-anchor proposal. Issue Owner must decide AC scope and audit level; all ADR rows are pending. The legacy API still has Θ(K) memory. New streaming receipt retention may be independent of K, but only if the approval directory, scopes/metadata and row payload have enforceable bounds and the claim is scoped to application working set. A3 removes the per-batch commit→receipt gap only when target rows and outbox share a proven durable transaction. External terminal anchoring remains separate; missing anchor means incomplete, not successful. This document authorizes no production implementation and does not claim Issue #13 AC passes.
+**本次ADR是候选设计，不是Owner批准或实现证明。** Current verdict remains `DESIGN BLOCKED`: independent Security Review on `c44a7c38785b07cfe4e5f18d0e85c2ba7a282c9a` found P0=0/P1=1/P2=2, including an open P1 on first-anchor trust and whole-run discovery; exact evidence is in [`docs/reviews/issue13-pr71-security-review-2026-10-20.md`](../reviews/issue13-pr71-security-review-2026-10-20.md). Independent Architecture Review of this head is pending. Issue Owner must decide AC scope and audit level; all ADR rows remain pending. Legacy API remains Θ(K). New streaming receipt retention may be independent of K only if metadata, approval history and row bytes are bounded and the AC scope permits it. A3 and its SQLite/MySQL durability conditions remain unimplemented/unverified; external anchoring is not transactionally atomic. This document authorizes no production implementation and does not claim Issue #13 AC passes.
 
 最终问题答复：
 1. 当前 Apply 内存复杂度：`O(K + B·C·L + T + C·(sampleLimit+1) + D + H + filenameBytes + runtime/cache)`；K在稠密可写数据时Θ(N/B)，另有审批目录O(H)扫描等规模项。
@@ -226,7 +231,7 @@ sequenceDiagram
 4. 不改变冻结公共API、不改变结果语义时，没有真正解决所有调用方的方案。内部可增加仅服务新路径的stream实现，但原API仍Θ(K)，不等于完成全局AC。
 5. 候选 D 保留m1a全量回执并新增streaming surface；新路径候选采用同一目标事务内的outbox，而非任意Sink。仍须Owner批准且独立Security复核。
 6. 候选协议在同一目标数据库单批事务中同时提交业务更新与COMMITTED outbox event；仅Commit返回成功或同一权威DB恢复后可证明该event存在时确认，CommitUnknown不重试。外部Seal/Anchor未持久确认前Run不可称完整审计；DB和Anchor之间不声称原子。A3、durability及Anchor依赖Owner审批与实现验证。
-7. 按当前共享接口演进规则，需契约修订审查；若新增public DTO/Workflow方法，应升级APIRevision（精确新revision由提案决定），旧m1a保留。
+7. 必须进行共享契约修订审查；不得原地全局更换APIRevision或让新审核模式静默改写m1a计划/审批。候选为并行版本化streaming surface与明确的新approval binding，精确revision/DTO由后续提案决定，m1a路径保持原语义。
 8. 当前不能判定#13原始内存AC PASS。A3候选若真实同库事务可解决每批数据/receipt裂缝，但批准范围、目录/metadata/row-byte界、Durability和外部Run Seal、以及其他规模/CLI/platform/allocation证据未通过实现验证。
 9. 估计至少4个顺序工作包：契约/审批共存提案；DB outbox迁移+事务能力；Runner/CLI streaming集成；独立anchor/seal/verifier与平台验收。估算，不代表授权。
 10. 未获授权前，绝不能改 `pkg/contracts/**`、APIRevision、`internal/runner/execute.go`事务/回执语义、`internal/db/write.go` commit策略、`internal/runner/parallel.go` Worker Pool、`cmd/maskriver`授权路径、`internal/history`持久审计、release/tag/BatchSize默认值。

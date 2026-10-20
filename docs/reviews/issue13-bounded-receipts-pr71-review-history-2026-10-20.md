@@ -36,6 +36,21 @@ This file preserves review summaries and their exact head provenance in the repo
 - P2: global `APIRevision` bump can invalidate old Plan validation and change Plan.ID/approval binding.
 - Scope/limits: read design and relevant contracts/runner/DB/history/CLI/tests; no code execution, no tests, no external Issue/PR verification. Original transcript stored as `ff88ff9e-4c4e-4e8e-9a98-cf06cd9c6c8a_reviewer_output.md` (session/run ID `ff88ff9e-4c4e-4e8e-9a98-cf06cd9c6c8a`).
 
-## Current design review gate
+## Current-head Architecture Review — A3/outbox proposal
 
-The above reviews are **historical** and were not performed on the updated A3/outbox ADR. New independent Architecture Review and Security Review must record their exact current final head, full file scope, tests/commands actually run, P0/P1/P2, limits and each original P1 disposition. Until then the four P1s remain OPEN for the current proposal. If provider failure occurs, record it; use another independent reviewer only transparently and do not convert failure to PASS. Issue Owner decisions remain pending.
+- Reviewer: independent `reviewer` context; read-only.
+- Reviewed head: `c44a7c38785b07cfe4e5f18d0e85c2ba7a282c9a`, verified via worktree `.git`/`HEAD`; no worktree changes at review time.
+- Verdict: **P0=0, P1=0, P2=3**; proposed `DESIGN READY — PENDING OWNER APPROVAL` for that design head only. Exact review and limits: [`issue13-pr71-architecture-review-2026-10-20.md`](issue13-pr71-architecture-review-2026-10-20.md); original transcript `eb3ffd95-119b-4422-aa19-858295b23d5b_reviewer_output.md` (run ID `eb3ffd95-119b-4422-aa19-858295b23d5b`).
+- P2s: event-row update versus append-only/grants ambiguity; whole-chain rewrite test lacked a previously anchored precondition; old design §12–§13 still had sink/API guidance inconsistent with ADR. These are corrected in later documentation changes and must be rechecked on the new head.
+- Limitations: no diff artifact; no CI, tests, DB probes or GitHub fetch. Original AC excerpt was supplied by Main; full original Issue was not independently verified.
+
+## Current-head Security Review — A3/outbox proposal
+
+- Reviewer: independent `go-reviewer` context; read-only.
+- Reviewed head: `c44a7c38785b07cfe4e5f18d0e85c2ba7a282c9a` (Main supplied the SHA; reviewer could not run git); no diff artifact and no tests/DB probes/CI query.
+- Verdict: **P0=0, P1=1, P2=2; BLOCK**. Full formal summary: [`issue13-pr71-security-review-2026-10-20.md`](issue13-pr71-security-review-2026-10-20.md); original output artifact `b2077420-4368-40b1-ba8f-7028c47e9e15_go-reviewer_output.md` (run ID `b2077420-4368-40b1-ba8f-7028c47e9e15`).
+- Historical P1-1 Commit→receipt gap: RESOLVED at design level only by same target transaction outbox; implementation unverified. P1-2 trust anchor: PARTIALLY RESOLVED, remains OPEN because first-anchor authenticity and full-run discovery/deletion guarantees are underspecified. P1-3 arbitrary Consumer: RESOLVED at design level only by eliminating callback/channel; runtime unverified. P1-4 separate sink path: PARTIALLY RESOLVED by removing it; target DB path identity/permissions/durability checks remain launch gates.
+- New P1: an attacker able to modify DB before first anchor can rewrite records and submit a rewritten digest as the first anchor; a known-RunID lookup cannot discover a wholly deleted run if IDs are only read from mutable DB. The design must narrow its claim to post-first-anchor tampering for known IDs, or define independently trusted run enrollment/catalog/commit authorization. Do not treat P1-2 as closed.
+- P2: DB durability/path conditions are not yet executable preflight; old design §12–§13 still described a caller-supplied Sink and optional later outbox. The latter stale text has been removed in a subsequent documentation commit; current-head review needed for that edit.
+
+The independent Architecture Review on `c44a7c...` is still pending. Any edits after this SHA require follow-up reviews of the corrected final head; no previous report silently transfers to it. Issue Owner decisions remain pending, no production implementation is authorized, and PR #71 stays unmerged.
