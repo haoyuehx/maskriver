@@ -36,7 +36,7 @@ This file preserves review summaries and their exact head provenance in the repo
 - P2: global `APIRevision` bump can invalidate old Plan validation and change Plan.ID/approval binding.
 - Scope/limits: read design and relevant contracts/runner/DB/history/CLI/tests; no code execution, no tests, no external Issue/PR verification. Original transcript stored as `ff88ff9e-4c4e-4e8e-9a98-cf06cd9c6c8a_reviewer_output.md` (session/run ID `ff88ff9e-4c4e-4e8e-9a98-cf06cd9c6c8a`).
 
-## Current-head Architecture Review — A3/outbox proposal
+## Architecture Review — A3/outbox proposal at c44a7c3
 
 - Reviewer: independent `reviewer` context; read-only.
 - Reviewed head: `c44a7c38785b07cfe4e5f18d0e85c2ba7a282c9a`, verified via worktree `.git`/`HEAD`; no worktree changes at review time.
@@ -44,7 +44,7 @@ This file preserves review summaries and their exact head provenance in the repo
 - P2s: event-row update versus append-only/grants ambiguity; whole-chain rewrite test lacked a previously anchored precondition; old design §12–§13 still had sink/API guidance inconsistent with ADR. These are corrected in later documentation changes and must be rechecked on the new head.
 - Limitations: no diff artifact; no CI, tests, DB probes or GitHub fetch. Original AC excerpt was supplied by Main; full original Issue was not independently verified.
 
-## Current-head Security Review — A3/outbox proposal
+## Security Review — A3/outbox proposal at c44a7c3
 
 - Reviewer: independent `go-reviewer` context; read-only.
 - Reviewed head: `c44a7c38785b07cfe4e5f18d0e85c2ba7a282c9a` (Main supplied the SHA; reviewer could not run git); no diff artifact and no tests/DB probes/CI query.
@@ -53,4 +53,9 @@ This file preserves review summaries and their exact head provenance in the repo
 - New P1: an attacker able to modify DB before first anchor can rewrite records and submit a rewritten digest as the first anchor; a known-RunID lookup cannot discover a wholly deleted run if IDs are only read from mutable DB. The design must narrow its claim to post-first-anchor tampering for known IDs, or define independently trusted run enrollment/catalog/commit authorization. Do not treat P1-2 as closed.
 - P2: DB durability/path conditions are not yet executable preflight; old design §12–§13 still described a caller-supplied Sink and optional later outbox. The latter stale text has been removed in a subsequent documentation commit; current-head review needed for that edit.
 
-The independent Architecture Review on `c44a7c...` is still pending. Any edits after this SHA require follow-up reviews of the corrected final head; no previous report silently transfers to it. Issue Owner decisions remain pending, no production implementation is authorized, and PR #71 stays unmerged.
+## Follow-up reviews — A3/trust-enrollment proposal at 46b2cf1
+
+- Independent Architecture Review verified exact head `46b2cf1127905eeeda6d3b2c4a953e85d6980f87` and inspected both supplied diffs plus current source. Verdict **P0=0, P1=1, P2=4; BLOCK**. P1: an explicit INCOMPLETE seal could still satisfy COMPLETE_VALID; missing-seal classifications conflict. P2s: per-batch BatchPrepare outside loop in diagram; blanket batch-ID uniqueness shorthand; implementation checklist omitted ADR-11; this review history incorrectly said the completed c44 review was pending. Formal summary: [`issue13-pr71-architecture-review-2026-10-20-head-46b2cf.md`](issue13-pr71-architecture-review-2026-10-20-head-46b2cf.md); original artifact `2365767b-efcd-4b1c-b22e-46e7837f306f_reviewer_output.md` (run ID `2365767b-efcd-4b1c-b22e-46e7837f306f`).
+- Independent Security Review received supplied diff and current docs/source at `46b2cf1127905eeeda6d3b2c4a953e85d6980f87` (SHA not independently verified). Verdict **P0=0, P1=0, P2=3**. Prior P1-1/2/3 resolved only at design level (P1-2 within ADR-11 scope); P1-4 partly resolved because target path controls remain unimplemented. P2s: platform/durability preflight not executable, BatchPrepare outside loop, implementation checklist omitted ADR-11. Formal summary: [`issue13-pr71-security-review-2026-10-20-head-46b2cf.md`](issue13-pr71-security-review-2026-10-20-head-46b2cf.md); original artifact `544ea5bb-509e-4dc5-a527-2175d8485e56_go-reviewer_output.md` (run ID `544ea5bb-509e-4dc5-a527-2175d8485e56`).
+
+The above two reviews both concern the exact 46b2cf1 head, **not** later corrections. The newest architecture P1 is a merge/design blocker until corrected and independently reviewed. Current-head CI on 46b2cf1 has Ubuntu/Windows/isolated-MySQL checks PASS, but these are docs-PR checks, not outbox implementation evidence. Issue Owner decisions remain pending; no production implementation is authorized; PR #71 stays unmerged. Any further edit requires fresh reviews of its exact final head.

@@ -81,19 +81,19 @@ Phase-5 sampler不是产品路径，但每100ms将资源记录 append进`rows`�
 
 | 维度 | A 保持 ApplyReport | B 直接 Receipt Consumer | C 持久 Receipt Store | D 双层 API（推荐方向） |
 |---|---|---|---|---|
-| 内存峰值 | Θ(K)+临时工作集 | 消费者可同步时 O(工作集+有限队列)；消费者自己可攒成 Θ(K) | 应用 heap O(工作集+摘要/游标)，但 OS page cache/native cache另计 | 新 API/CLI可 O(工作集+有界sink buffer)；旧 API 仍 Θ(K) |
+| 内存峰值 | Θ(K)+临时工作集 | 消费者同步时可 O(工作集+有限队列)，消费者自己仍可累积Θ(K) | 应用heap O(工作集+摘要/游标)，但OS page cache/native cache另计 | 新API可不保留K个回执；旧API仍Θ(K)，全流程上界还取决资源限额与AC范围 |
 | 总批次数相关内存 | 是，线性 | 仅消费者违反流式契约时；无界队列也线性 | 记录不在应用 heap；磁盘 Θ(K) | 按各 API 明确不同 |
-| 持久化开销 | 无 receipt store | 取决消费者；stdout不是可靠审计 | Θ(K) 文件/SQLite行 + index/WAL/空间 | 新 API 可由持久 Sink 承担，旧 API内存 |
-| API 兼容性 | 完全兼容 | 新增回调/接口签名；改变失败可见性 | 需要句柄/store契约 | M1保留；新增 APIRevision/接口或能力 |
-| 事务一致性 | 成功提交后报告，当前语义明晰 | commit成功后调用 Sink；Sink失败时已提交却无法完整交付 | 外置 store 与 DB 无原子事务；同 DB receipt 表可能同事务但只适用于明确 DB/架构 | 需定义 sink durability + CommitUnknown 协议；仍不能默认原子 |
-| CommitUnknown | 当前 batch 未列入 Committed，标记 unknown | 必须发 unknown 事件；不能发“已提交” receipt | intent/final-state协议复杂；未知不能伪装成提交/回滚 | 新 API 必须暴露 confirmed prefix + unknown + sink failure；绝不自动重试 |
-| 取消/背压 | 无消费者背压 | 同步回调自然背压；回调阻塞会阻塞 Apply；取消必须有界退出 | 写盘同步背压；空间/IO故障处理复杂 | bounded queue=0/小定长；取消先停止新事务，已提交记录不可撤销 |
-| 完整审计 | 进程内返回，调用者需持久化 | 若消费方不持久/进程崩溃，事件丢失 | 可持久化，但跨存储原子性/崩溃窗口待定义 | 可提供 durable sink 句柄，但此语义须作为新契约显式设计 |
+| 持久化开销 | 无 receipt store | 取决消费者；stdout不是可靠审计 | Θ(K) 文件/SQLite行 + index/WAL/空间 | 新API候选为目标DB同事务outbox Θ(K)及独立anchor事件；旧API内存 |
+| API 兼容性 | 完全兼容 | 新增回调/接口签名；改变失败可见性 | 需要句柄/store契约 | 保留m1a语义；并行版本化surface/approval binding需另行契约审查，不原地全局换revision |
+| 事务一致性 | 成功提交后报告，当前语义明晰 | commit成功后调用Sink；Sink失败时已提交却无法完整交付 | 外置store与DB无原子事务；同DB receipt表可同事务但须明确后端 | A3要求业务写+outbox同DB tx；外部anchor逐批见证仍非原子，缺ack必须不完整 |
+| CommitUnknown | 当前batch未列入Committed，标记unknown | 不能发已提交receipt | intent/final-state协议复杂，未知不能伪装 | 业务+本地outbox同成败；底层commit错误仍UNKNOWN不重试，anchor缺ack后续停止 |
+| 取消/背压 | 无消费者背压 | 同步回调会阻塞，且可能忽略ctx | 写盘同步背压；空间/IO故障处理复杂 | Q=0内部outbox；每批anchor ack后才继续；driver/kernel卡死时不承诺硬退出 |
+| 完整审计 | 进程内返回，调用者需持久化 | 消费方不持久或崩溃可丢事件 | 需定义跨存储原子性/崩溃窗口 | 先独立登记Run，再同库原子receipt+逐批anchor+终结seal；anchor不可用则AUDIT_INCOMPLETE |
 | 故障恢复 | 不承诺跨进程恢复 | 不自动恢复 | 可能诱发 checkpoint/replay/恢复承诺，需严格防止扩展 | 保持无 resume/exactly-once；只记录观察到的状态 |
 | 测试/性能 | 简单；小常数优化无效于阶 | 回调死锁/错误/取消测试；吞吐受消费速度限制 | crash/fsync/disk-full/tamper/permissions测试多 | 最大复杂度；双路径兼容、sink状态机、故障矩阵 |
 | 安全风险 | 丢失进程就丢报告；无持久审计 | Sink 可能泄密或误用；任意callback可重入/阻塞 | 文件路径/权限/篡改、敏感元数据、空间耗尽 | 同时有 API 和审计语义复杂度，需安全审查 |
-| 冻结契约 | 否 | 需新增签名/接口，不改旧字段也属于契约扩展 | 需定义存储/句柄 DTO | 必须评审共享契约；建议 APIRevision 新修订 |
-| 原始 AC | **不满足** | 可满足新 streaming 调用的内存项，不满足旧完整列表 API | 进程 heap 可满足，但磁盘增长；现契约报告语义仍需改 | 可使明确指定的流式端到端路径满足；不能宣称旧路径满足 |
+| 冻结契约 | 否 | 新callback/interface属于契约扩展 | 需定义存储/句柄DTO | 必须评审共享契约；旧m1a与新approval binding并行兼容策略待决 |
+| 原始 AC | **不满足** | 可满足新streaming调用的部分内存项，不满足旧完整列表API | 进程heap可满足但磁盘增长；现契约报告语义仍需改 | 只有Owner明确接受S2且所有资源界/证据通过，才可能满足限定新路径；不能宣称旧路径或全局AC满足 |
 
 **A：不推荐**。减少结构体、准确预分配只减常数，完整结果仍 Θ(K)。容量收缩只会丢数据或另行复制，后者仍需同时驻留/额外峰值。
 
@@ -115,9 +115,11 @@ sequenceDiagram
   R->>R: Plan + signed approval + outbox capability preflight + full dry-run
   R->>A: Register RunID/Plan/approval before any business write
   A-->>R: durable catalog enrollment or fail closed
-  R->>DB: Persist RunEnvelope / BatchPrepare
-  R->>A: Anchor expected BatchPrepare
+  R->>DB: Persist RunEnvelope
   loop each non-empty batch
+    R->>DB: Persist this BatchPrepare
+    R->>A: Anchor this expected BatchPrepare
+    A-->>R: durable prepare acknowledgment or stop
     R->>DB: BEGIN; business UPDATEs + BatchCommitted event in same tx
     R->>DB: COMMIT
     alt Commit returns success
@@ -142,7 +144,7 @@ sequenceDiagram
 - 保持现有门禁顺序：合法 Plan、`ExplicitApply=true`、CLI审批声明、对同 Plan/源快照/目标/策略/scopes 的签名决策校验、静态 preflight、完整 dry-run，以上都成功才打开 Writer。[代码/测试]
 - Receipt 消费不是审批；不能新增基于 sink 的写入授权，也不能让消费者错误降级安全闸门。
 - Commit 成功返回是当前唯一已确认批次证据；**底层 SQL Commit 调用尝试后**产生的错误可能是 unknown，不能据错误文本猜定失败；Commit调用前的校验/cancellation拒绝是确定前置失败。Unknown批次不得自动 retry、rollback声称成功、发 confirmed receipt 或声明全局 rollback。[代码/测试]
-- 流式协议需区分 ConfirmedReceipt、CommitOutcomeUnknown、SinkFailure/Incomplete；事件序列与摘要不得把 Unknown 合并为 0 行成功。
+- 流式协议需区分 ConfirmedReceipt、CommitOutcomeUnknown、AnchorFailure/AuditIncomplete；事件序列与摘要不得把 Unknown 合并为0行成功。
 - 新设计不宣称恢复、幂等重放或 exactly-once。若未来有 reconciliation/checkpoint，必须独立授权为 #14/后续范围，设计源快照/plan/目标状态绑定、重复脱敏风险与审批有效期，不能从本次审计 Sink 推出。
 
 ## 8. API、CLI、能力边界
@@ -150,7 +152,7 @@ sequenceDiagram
 - `m1a-v1` 不得原地改变 `ApplyReport.Committed` 类型或删除其全量语义；否则调用者可静默丢回执，是破坏性契约变更。
 - 备选：单纯把全局 `APIRevision` 从m1a改成新值并不自动保持兼容：`Plan.ValidateShape`只接受当前revision，且revision参与Plan.ID/审批绑定，旧Plan可能被拒绝或重算出不同审批ID。契约提案必须明确双版本共存/旧Plan及审批验证策略；优先评估单独版本化streaming接口/DTO而非破坏性替换常量。新增共享surface仍须契约评审与明确授权，本轮没有授权。
 - CLI在Owner决定前保持旧API行为。只有显式批准新契约后，CLI才能显式选择streaming/outbox协议；详细回执通过有界分页读取同库outbox。不得新增任意用户路径或回调，也不能只打印计数而丢掉逐批审计。
-- 只有新 streaming 端到端路径在有界 sink 队列下可以主张“应用 heap 的批次维度不随 K 增长”；旧 API仍 O(K)，故若原 AC针对 MaskRiver 全部 Apply API，则全局 AC仍不通过。应由 Issue owner正式判定原AC的作用域，不得通过文案规避。
+- 只有Owner明确将AC限定到新streaming端到端路径、且历史目录/scopes/payload/runtime范围有经批准的界及证据后，才可主张其应用heap回执保留与K无关；旧API仍O(K)，因此Issue原文若覆盖全部Apply，则全局AC仍不通过。不得通过文案规避。
 - 候选A3通过“业务行+outbox行同目标DB单事务”提供每批原子性，磁盘仍O(K)；跨目标DB、文件、外部anchor均不属于该事务。外部anchor是独立最终封存，缺失时Run不完整，不宣称事务原子。SQLite/MySQL、sync设置、DB引擎和文件系统支持尚未实测/证明。
 
 ## 9. 资源预算与复杂度验收定义
@@ -166,10 +168,10 @@ sequenceDiagram
 ## 10. 验证方案（尚未执行）
 
 1. **测量维度**：固定 B/W，N=10k/100k/1M；同环境重复至少5次（1M资源允许时），新旧 API分别测。再固定 N 变化 B（例如16/64/256/1000）和 W（1/2/4/8/16），每格按预算重复。真实 Runner完整 Scan→Plan→Preview→Approve→Apply→Validate，并单独测 Apply 与全过程。
-2. **采集**：应用 heap `HeapAlloc/HeapInuse/TotalAlloc/NumGC/PauseTotalNs`、进程峰值/持续 RSS、GC周期时点、receipt backing bytes（legacy）、sink buffer bytes、goroutine、SQL pool Open/InUse/WaitCount、SQLite native/cache估算分开记录；执行固定采样并另用进程级peak工具，明确采样会漏尖峰。测量结果全部独立归档，不把估算混入实测。
-3. **拆分来源**：legacy 返回值基准保留 report 引用到测量终点；streaming 测量同步写入临时 sink 后不保留事件；同一程序用 heap profile/allocation trace定位 slice；运行后强制 GC并分别记录 live heap 与 RSS，解释 GC/runtime保留、OS page cache/native SQLite cache。不能以强制 GC 后 HeapAlloc下降证明峰值有界。
+2. **采集**：应用heap `HeapAlloc/HeapInuse/TotalAlloc/NumGC/PauseTotalNs`、进程峰值/持续RSS、GC周期时点、receipt backing bytes（legacy）、新API outbox/event临时对象、goroutine、SQL pool Open/InUse/WaitCount、SQLite native/cache估算分开记录；执行固定采样并另用进程级peak工具，明确采样会漏尖峰。测量结果全部独立归档，不把估算混入实测。
+3. **拆分来源**：legacy返回值基准保留report引用到测量终点；streaming测量走候选同事务outbox并不保留事件；性能测试可用内部测试替身，不增加public callback；同一程序用heap profile/allocation trace定位slice；运行后强制GC并分别记录live heap与RSS，解释GC/runtime保留、OS page cache/native SQLite cache。不能以强制GC后HeapAlloc下降证明峰值有界。
 4. **数学证明**：用 API 类型/对象流证明旧接口 Ω(K)；新实现审查无累计容器，队列容量固定，消费函数同步阻塞；在固定 B/W/C/L条件下，live retained receipt memory对N斜率为零。三个规模的实验只能佐证，不替代代码不变量/复杂度证明。
-5. **正确性**：独立逐批比较 sink records 与事务成功记录、总行数/批次数；确认无 receipt被删、重排或重复；Apply结束后sink可重读并验证封存完整性；任何序列断号则失败关闭。
+5. **正确性**：独立逐批比较目标DB outbox记录与事务成功记录、总行数/批次数；确认无receipt被删、重排或重复；Apply结束后从outbox与锚定事件有界分页重读并验证seal；任何序列断号则失败关闭。
 
 所有上述实验均为计划，**本轮未执行原型或新增测量**。历史10k/100k/1M Phase5数据不被改写/重算成新架构结果。
 
@@ -195,7 +197,7 @@ sequenceDiagram
 
 无授权前不可修改：`pkg/contracts/**`、`APIRevision`、`internal/runner/execute.go` 的事务/报告行为、`internal/db/write.go` 的Commit/Writer语义、`internal/runner/parallel.go` worker行为、`cmd/maskriver` Apply授权路径、`internal/history`审计语义、M1 Release/Tag/默认BatchSize。当前任务只授权设计文档，不授权这些文件写入。
 
-若Owner批准 ADR-01..10 并另授实现权，至少拆为 **4个顺序工作包**（这是设计估算，非事实）：
+若Owner批准 ADR-01..11（含威胁边界）并另授实现权，至少拆为 **4个顺序工作包**（这是设计估算，非事实）：
 1. Main/Architect提交冻结契约与approval兼容提案：双API DTO、audit policy binding、Plan/Approval共存、summary/错误状态、CommitUnknown、durability/atomicity及APIRevision决定；独立评审通过后获显式授权。
 2. DB owner提供预置schema/migration、SQLite/MySQL事务outbox与fail-closed capability/durability探针；仅同事务outbox，不实现可降级的caller Sink。
 3. Runner/CLI集成 bounded streaming Apply、授权/全量验证门禁、同步outbox、anchor状态与错误展示；无自动业务重放。
@@ -222,7 +224,7 @@ sequenceDiagram
 
 ## 15. 最终架构裁决
 
-**本次ADR是候选设计，不是Owner批准或实现证明。** Current verdict remains `DESIGN BLOCKED`: independent Security Review on `c44a7c38785b07cfe4e5f18d0e85c2ba7a282c9a` found P0=0/P1=1/P2=2, including an open P1 on first-anchor trust and whole-run discovery; exact evidence is in [`docs/reviews/issue13-pr71-security-review-2026-10-20.md`](../reviews/issue13-pr71-security-review-2026-10-20.md). Independent Architecture Review of this head is pending. Issue Owner must decide AC scope and audit level; all ADR rows remain pending. Legacy API remains Θ(K). New streaming receipt retention may be independent of K only if metadata, approval history and row bytes are bounded and the AC scope permits it. A3 and its SQLite/MySQL durability conditions remain unimplemented/unverified; external anchoring is not transactionally atomic. This document authorizes no production implementation and does not claim Issue #13 AC passes.
+**本次ADR是候选设计，不是Owner批准或实现证明。** `46b2cf1`独立Architecture Review发现P1=1（COMPLETE_VALID未要求seal outcome必须COMPLETE），Security Review在缩窄且明确的ADR-11威胁边界下P1=0；两份精确报告位于 `docs/reviews/`。本修订增加严格 outcome precedence等修正，但尚未复核，故保持 `DESIGN BLOCKED — FINAL-HEAD REVIEW PENDING`。Issue Owner须决定AC范围与审计保证；全部ADR行仍待决。Legacy API仍Θ(K)。新streaming receipts只有在历史目录/metadata/row payload有硬界且Owner接受AC范围后才可能与K无关。A3及SQLite/MySQL durability尚未实现/验证；外部anchor不与DB事务原子。本文件不授权生产实现，也不声称Issue #13 AC通过。
 
 最终问题答复：
 1. 当前 Apply 内存复杂度：`O(K + B·C·L + T + C·(sampleLimit+1) + D + H + filenameBytes + runtime/cache)`；K在稠密可写数据时Θ(N/B)，另有审批目录O(H)扫描等规模项。
@@ -236,8 +238,8 @@ sequenceDiagram
 9. 估计至少4个顺序工作包：契约/审批共存提案；DB outbox迁移+事务能力；Runner/CLI streaming集成；独立anchor/seal/verifier与平台验收。估算，不代表授权。
 10. 未获授权前，绝不能改 `pkg/contracts/**`、APIRevision、`internal/runner/execute.go`事务/回执语义、`internal/db/write.go` commit策略、`internal/runner/parallel.go` Worker Pool、`cmd/maskriver`授权路径、`internal/history`持久审计、release/tag/BatchSize默认值。
 
-### 独立评审状态
+### 独立评审状态与当前裁决
 
-独立架构审查记录：`reviewer`在`ee3b445daba30d03bfcdedb8e7d8807a2b945793`审阅文档与来源代码，发现2项P1 readiness/遗漏O(H)及3项P2；作者修订。对`ea89ecc8d45cf0e2f32a02da3f9f350b89b2f585`的follow-up确认P0=0/P1=0，提出4项P2（K需按表求和、预算公式加O(H)、移除独立信息论表述、区分Commit尝试前后错误）。当前版本采纳这些修正。对`97d781ebf8a32cc644d5a3658b2fe0cf497ea2b8`的独立架构复核确认P0=0/P1=0，提出2项P2：经核实候选heap公式实际已包含`A(H,filenameBytes)`，该项与文档矛盾、不采纳；首轮review P2数量误记有效并已纠正。其报告：`/home/haoyue/.pi/agent/sessions/--home-haoyue-Project-maskriver--/subagent-artifacts/97ddb842-806b-409c-a272-80d0580bbc2e_reviewer_output.md`。
+历史与当前审查的实际SHA、严重度、限制、四项Security P1逐条处置及原始证据关系保存在 [`docs/reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md`](../reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md)。在 `46b2cf1127905eeeda6d3b2c4a953e85d6980f87` 上，独立Architecture Review结果P0=0/P1=1/P2=4（COMPLETE_VALID可接收INCOMPLETE seal）；独立Security Review结果P0=0/P1=0/P2=3。二者均为设计review，不是实现或AC验收。
 
-此前Security Review在`97d781ebf8a32cc644d5a3658b2fe0cf497ea2b8`的P0=0/P1=4/P2=1结论及原始证据关联见 [`docs/reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md`](../reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md)。其中P1针对旧的提交后外部Sink候选；本次A3/outbox修改是新设计，不得据此宣布原P1已关闭。当前PR最终head的Architecture/Security Review仍须重新执行，逐项评估outbox、seal/trust anchor、Consumer边界和目标DB路径安全。所有此前go-reviewer余额失败均无审查效力。
+本次文档草案已按Architecture P1/P2更新完成seal outcome严格分类、缺失事件分类优先级、每批Prepare位置、batch event role唯一性、ADR-11授权前提和review history状态。但这些修改尚未在新head接受独立复核；因此当前状态仍 `DESIGN BLOCKED — FINAL-HEAD REVIEW PENDING`。只有新head独立评审P0/P1=0，才可把文档状态改为 `DESIGN READY — PENDING OWNER APPROVAL`。所有Owner选项仍待决，当前产品P1实现风险未因设计文字而关闭。
