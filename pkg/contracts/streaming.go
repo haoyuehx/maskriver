@@ -217,22 +217,21 @@ type OutboxCapabilities struct {
 	// commit from a known failure instead of guessing.
 	SupportsCommitUnknown bool
 	SchemaVersion         string
-	ProtocolVersions      []string
-	MaxReceiptPage        int
+	// ProtocolVersion is the single streaming protocol revision this provider
+	// implements. A single value is intentional: a slice would be an unbounded
+	// declaration that the contract cannot cap.
+	ProtocolVersion string
+	MaxReceiptPage  int
 }
 
 // Supports reports whether the capability set names protocol and offers a
 // positive receipt-page bound.
 func (c OutboxCapabilities) Supports(protocol string) bool {
-	if !c.Preprovisioned || !c.SameDatabase || !c.Transactional || !c.SupportsCommitUnknown || c.SchemaVersion == "" || c.MaxReceiptPage < 1 {
+	if !c.Preprovisioned || !c.SameDatabase || !c.Transactional || !c.SupportsCommitUnknown ||
+		c.SchemaVersion == "" || c.MaxReceiptPage < 1 || c.ProtocolVersion == "" {
 		return false
 	}
-	for _, candidate := range c.ProtocolVersions {
-		if candidate == protocol {
-			return true
-		}
-	}
-	return false
+	return c.ProtocolVersion == protocol
 }
 
 // Validate checks the capability declaration against a required protocol. A

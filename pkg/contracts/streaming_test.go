@@ -89,7 +89,7 @@ func streamingTestOutbox() OutboxCapabilities {
 		Transactional:         true,
 		SupportsCommitUnknown: true,
 		SchemaVersion:         "outbox-v1",
-		ProtocolVersions:      []string{StreamingProtocolRevision},
+		ProtocolVersion:       StreamingProtocolRevision,
 		MaxReceiptPage:        100,
 	}
 }
@@ -143,7 +143,7 @@ func TestStreamingRequestRejectsUnsafeOrUnsupported(t *testing.T) {
 		{"outbox cannot classify unknown", func(r *StreamingApplyRequest) { r.Outbox.SupportsCommitUnknown = false }, ErrUnsupported},
 		{"outbox schema missing", func(r *StreamingApplyRequest) { r.Outbox.SchemaVersion = "" }, ErrUnsupported},
 		{"outbox protocol mismatch", func(r *StreamingApplyRequest) {
-			r.Outbox.ProtocolVersions = []string{"m2-stream-v2"}
+			r.Outbox.ProtocolVersion = "m2-stream-v2"
 		}, ErrUnsupported},
 		{"approval plan id mismatch", func(r *StreamingApplyRequest) { r.Approval.PlanID = "other" }, ErrUnsafe},
 		{"approval snapshot mismatch", func(r *StreamingApplyRequest) { r.Approval.SourceSnapshotID = "other" }, ErrUnsafe},
@@ -468,7 +468,7 @@ func TestOutboxCapabilitiesSupports(t *testing.T) {
 		t.Fatal("unknown protocol supported")
 	}
 	legacy := caps
-	legacy.ProtocolVersions = []string{APIRevision}
+	legacy.ProtocolVersion = APIRevision
 	if legacy.Supports(StreamingProtocolRevision) {
 		t.Fatal("legacy protocol advertised as streaming")
 	}
