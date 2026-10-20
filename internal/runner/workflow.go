@@ -29,6 +29,10 @@ type Engine struct {
 	// approvals is the read-only review-decision seam Apply requires. It is nil
 	// unless injected, and a nil seam refuses Apply instead of allowing writes.
 	approvals ApprovalQuery
+	// streamingApprovals is the separate streaming (m2) verification seam. It is
+	// deliberately independent from approvals so a legacy record can never
+	// authorize the streaming path.
+	streamingApprovals StreamingApprovalQuery
 }
 
 // Open requires two independent, existing SQLite files and opens only Readers.
@@ -143,6 +147,12 @@ func (e *Engine) describe(ctx context.Context, name string) (contracts.TableSche
 // scope that can not produce evidence fails the whole call: neither a scan
 // report nor a plan may silently describe a subset of the declared scopes.
 func (e *Engine) gather(ctx context.Context) (evidenceSet, error) {
+	// Reserved outbox tables are audit infrastructure, never business scopes.
+	for _, scope := range e.cfg.ResolvedScopes() {
+		if reservedOutboxName(scope.Table) {
+			return evidenceSet{}, contracts.ErrUnsafe
+		}
+	}
 	set := evidenceSet{schemas: make(map[string]contracts.TableSchema)}
 	for _, scope := range e.cfg.ResolvedScopes() {
 		if err := ctx.Err(); err != nil {

@@ -1,0 +1,20 @@
+{
+  "head_sha": "a4a2e415e662c5fa2e4c6c312cec3e1d4895f37e",
+  "os": "Linux 7.0.0-38-generic x86_64",
+  "go": "go1.26.3",
+  "sqlite_driver": "modernc.org/sqlite v1.60.1",
+  "cpu": "AMD Ryzen 9 7940H w/ Radeon 780M Graphics",
+  "logical_cpus": 16,
+  "filesystem": "local temp dir under /tmp on this machine",
+  "data": "synthetic; 64 distinct emails (short + one 62-byte local part), NULL every 8th row, extra unplanned column, journal_mode=delete",
+  "commands": [
+    "MASKRIVER_WP3_SCALE=quick MASKRIVER_WP3_SCALE_DIR=/tmp/wp3-scale go test ./internal/runner -run TestStreamingScaleEvidence -count=1 -timeout 40m",
+    "MASKRIVER_WP3_SCALE=quick MASKRIVER_WP3_SCALE_DIR=/tmp/wp3-scale-1m MASKRIVER_WP3_SCALE_ONE_MILLION=1 go test ./internal/runner -run TestStreamingScaleEvidence -count=1 -timeout 40m"
+  ],
+  "notes": [
+    "Runner-level measurement, not CLI subprocess and not uninstrumented production throughput.",
+    "Each cell builds fresh source/target copies inside the measured test; fixture creation is outside the apply timer but inside the same process.",
+    "peak_rss_kb is -1 because VmHWM was unavailable in this environment; heap numbers are Go runtime only.",
+    "1M was executed once (single sample) as a bounded smoke, not as a repeated matrix."
+  ]
+}

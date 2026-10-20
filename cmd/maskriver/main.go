@@ -58,9 +58,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintln(stdout, "MaskRiver", version)
 		return 0
-	case "scan", "mask", "validate", "approve", "revoke":
+	case "scan", "mask", "validate", "approve", "revoke", "init-outbox":
 	default:
 		return usageError(stderr)
+	}
+	if args[0] == "init-outbox" {
+		return runInitOutbox(args[1:], stdout, stderr)
 	}
 	command := args[0]
 	// reviewCommand covers the explicit issuance surface. Neither command runs a
@@ -75,7 +78,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var trustFile, historyDir string
 	var reviewerKeyID, reviewerKeyFile, reviewerID string
 	var validFor time.Duration
-	var apply, strict bool
+	var apply, strict, streaming bool
+	var budgetFile, runID string
+	var receiptPage int
 	var strategy, keyID string
 	var scopes scopeFlag
 	flags.StringVar(&source, "source", "", "existing absolute SQLite source-snapshot path")
@@ -100,13 +105,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if command == "mask" {
 		flags.BoolVar(&apply, "apply", false, "explicitly request writes after full preview")
+		flags.BoolVar(&streaming, "streaming", false, "use the explicit m2-stream-v1 transaction/outbox path")
 		flags.StringVar(&trustFile, "trust-file", "", "deployment-provisioned reviewer trust file (required with --apply)")
 		flags.StringVar(&historyDir, "history-dir", "", "review-decision store directory (required with --apply)")
+		flags.StringVar(&budgetFile, "budget-file", "", "explicit ResourceBudget JSON (required with --streaming)")
+		flags.StringVar(&runID, "run-id", "", "32-hex run identity (generated when omitted)")
+		flags.IntVar(&receiptPage, "receipt-page-size", 0, "receipt page bound (required with --streaming)")
 	}
 	if command == "validate" {
 		flags.BoolVar(&strict, "strict", true, "refuse any incomplete or warning coverage")
 	}
 	if reviewCommand {
+		flags.BoolVar(&streaming, "streaming", false, "issue/read an m2 streaming approval instead of a legacy m1 decision")
 		flags.StringVar(&trustFile, "trust-file", "", "deployment-provisioned reviewer trust file")
 		flags.StringVar(&historyDir, "history-dir", "", "review-decision store directory")
 		flags.StringVar(&reviewerKeyID, "reviewer-key-id", "", "trusted signer key id the reviewer key belongs to")
@@ -159,6 +169,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if command == "mask" && apply && !cfg.Approved {
 		return fail(stderr, 2) // rule classification alone never grants writes
 	}
+	if command == "mask" && streaming && !apply {
+		return fail(stderr, 2) // --streaming never replaces explicit write intent
+	}
 	// The review commands state every deployment input explicitly. A missing
 	// trust file or reviewer key is a configuration error, not an operation
 	// refusal, so it exits 2 without echoing a path.
@@ -191,6 +204,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if command == "mask" && apply && (trustFile == "" || historyDir == "") {
 		return fail(stderr, 2)
 	}
+	var budget contracts.ResourceBudget
+	if command == "mask" && streaming {
+		if budgetFile == "" || receiptPage <= 0 {
+			return fail(stderr, 2)
+		}
+		budget, err = loadResourceBudget(budgetFile)
+		if err != nil || receiptPage > budget.MaxReceiptPage || cfg.BatchSize > budget.MaxBatchSize ||
+			cfg.Workers > budget.MaxWorkers {
+			return fail(stderr, 2)
+		}
+	}
 	var reviewStore *history.Store
 	if reviewCommand {
 		reviewStore, err = openSigningStore(trustFile, historyDir, reviewerKeyID, reviewerKeyFile)
@@ -222,7 +246,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return fail(stderr, 1)
 	}
 	if reviewCommand {
-		return issueDecision(ctx, command, reviewStore, plan, reviewerID, validFor, stdout, stderr)
+		return issueDecision(ctx, command, reviewStore, plan, reviewerID, validFor, streaming, stdout, stderr)
 	}
 	if command == "validate" {
 		report, err := engine.Validate(ctx, validationRequest(plan, strict))
@@ -252,9 +276,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(stderr, 2)
 	}
-	approvalStore, err := history.Open(history.Config{Dir: historyDir, Trust: trust})
+	storeCfg := history.Config{Dir: historyDir, Trust: trust}
+	if streaming {
+		// The streaming run's declared history bounds apply to every directory
+		// enumeration this process performs.
+		storeCfg.MaxEntries = budget.MaxHistoryEntries
+		storeCfg.MaxNameBytes = int(budget.MaxHistoryNameBytes)
+	}
+	approvalStore, err := history.Open(storeCfg)
 	if err != nil {
 		return fail(stderr, 2)
+	}
+	if streaming {
+		return streamingApply(ctx, engine, approvalStore, plan, cfg, budget, runID, receiptPage, stdout, stderr)
 	}
 	engine.SetApprovalQuery(approvalStore)
 	report, err := engine.Apply(ctx, contracts.ApplyRequest{
@@ -314,7 +348,27 @@ func openSigningStore(trustFile, historyDir, reviewerKeyID, reviewerKeyFile stri
 // issueDecision persists one explicit reviewer decision. The printed summary
 // carries counts and the requested window only: no plan id, path, key or value.
 func issueDecision(ctx context.Context, command string, store *history.Store, plan contracts.Plan,
-	reviewerID string, validFor time.Duration, stdout, stderr io.Writer) int {
+	reviewerID string, validFor time.Duration, streaming bool, stdout, stderr io.Writer) int {
+	if streaming {
+		if command == "revoke" {
+			if _, err := store.RevokeStreaming(ctx, plan, time.Now()); err != nil {
+				return fail(stderr, 1)
+			}
+			fmt.Fprintln(stdout, "revoke: stored=true protocol=m2-stream-v1")
+			return 0
+		}
+		now := time.Now()
+		record, err := store.ApproveStreaming(ctx, history.StreamingApproveRequest{
+			Plan: plan, ReviewerID: reviewerID,
+			IssuedAt: now, ExpiresAt: now.Add(validFor),
+		})
+		if err != nil {
+			return fail(stderr, 1)
+		}
+		fmt.Fprintf(stdout, "approve: stored=true protocol=m2-stream-v1 scopes=%d valid_for=%s\n",
+			len(record.Scopes), validFor)
+		return 0
+	}
 	if command == "revoke" {
 		if _, err := store.Revoke(ctx, history.RevokeRequest{Plan: plan, RevokedAt: time.Now()}); err != nil {
 			return fail(stderr, 1)
@@ -403,7 +457,7 @@ func (f *scopeFlag) Set(raw string) error {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "MaskRiver — bounded SQLite data masking (M1 in development)")
-	fmt.Fprintln(w, "Usage: maskriver <scan|mask|validate|approve|revoke|version> [flags]")
+	fmt.Fprintln(w, "Usage: maskriver <scan|mask|validate|approve|revoke|init-outbox|version> [flags]")
 	fmt.Fprintln(w, "Two independent pre-existing SQLite files are required; mask defaults to dry run.")
 	fmt.Fprintln(w, "mask --apply --approved also requires a stored reviewer decision bound to the plan.")
 	fmt.Fprintln(w, "approve/revoke sign with a reviewer key; apply reads the deployment trust file only.")
