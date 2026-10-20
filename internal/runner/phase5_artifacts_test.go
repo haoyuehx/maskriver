@@ -2,6 +2,7 @@ package runner
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -124,6 +125,9 @@ func TestPhase5ArchivedArtifactConsistency(t *testing.T) {
 	if err := validatePhase5PreflightSummary(dir, string(summary)); err != nil {
 		t.Fatalf("summary preflight values disagree with archived artifacts: %v", err)
 	}
+	if err := validatePhase5Provenance(dir, samples, len(parsedResources)); err != nil {
+		t.Fatalf("source provenance disagrees with harness or evidence: %v", err)
+	}
 }
 
 func TestPhase5ArchivedArtifactValidatorsRejectMetricMutation(t *testing.T) {
@@ -208,6 +212,16 @@ func TestPhase5ArchivedArtifactValidatorsRejectMetricMutation(t *testing.T) {
 	if err := validatePhase5PreflightSummary(dir, mutatedPreflight); err == nil {
 		t.Fatal("preflight summary validator accepted a mutated disk value")
 	}
+	provenance, err := readPhase5Provenance(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutatedProvenance := provenance
+	mutatedProvenance.HarnessSHA256 = clonePhase5StringMap(provenance.HarnessSHA256)
+	mutatedProvenance.HarnessSHA256["internal/runner/phase5_scale_test.go"] = strings.Repeat("0", 64)
+	if err := validatePhase5ProvenanceRecord(dir, mutatedProvenance, samples, len(resourceRecords)-1); err == nil {
+		t.Fatal("provenance validator accepted a mutated harness digest")
+	}
 }
 
 func validatePhase5ArchivedSampleClaims(sample phase5Sample) error {
@@ -225,6 +239,62 @@ func validatePhase5ArchivedSampleClaims(sample phase5Sample) error {
 		return errors.New("recorded receipt slice capacity bytes are inconsistent")
 	}
 	return nil
+}
+
+type phase5Provenance struct {
+	MeasurementBaseGitSHA string            `json:"measurement_base_git_sha"`
+	HarnessSHA256         map[string]string `json:"harness_source_sha256"`
+	RawSampleCount        int               `json:"raw_sample_count"`
+	ResourceSampleCount   int               `json:"resource_sample_count"`
+}
+
+var phase5HarnessFiles = []string{
+	"internal/runner/phase5_scale_test.go",
+	"internal/runner/phase5_disk_linux_test.go",
+	"internal/runner/phase5_disk_other_test.go",
+}
+
+func readPhase5Provenance(dir string) (phase5Provenance, error) {
+	var provenance phase5Provenance
+	err := readPhase5JSON(filepath.Join(dir, "source-provenance.json"), &provenance)
+	return provenance, err
+}
+
+func validatePhase5Provenance(dir string, samples []phase5Sample, resourceCount int) error {
+	provenance, err := readPhase5Provenance(dir)
+	if err != nil {
+		return err
+	}
+	return validatePhase5ProvenanceRecord(dir, provenance, samples, resourceCount)
+}
+
+func validatePhase5ProvenanceRecord(dir string, provenance phase5Provenance, samples []phase5Sample, resourceCount int) error {
+	if provenance.MeasurementBaseGitSHA == "" || provenance.RawSampleCount != len(samples) || provenance.ResourceSampleCount != resourceCount {
+		return errors.New("provenance counts or base SHA are inconsistent with archived evidence")
+	}
+	if len(provenance.HarnessSHA256) != len(phase5HarnessFiles) {
+		return errors.New("provenance harness file set is incomplete")
+	}
+	root := filepath.Clean(filepath.Join(dir, "..", "..", ".."))
+	for _, relative := range phase5HarnessFiles {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
+		if err != nil {
+			return fmt.Errorf("read harness %s: %w", relative, err)
+		}
+		digest := fmt.Sprintf("%x", sha256.Sum256(data))
+		if provenance.HarnessSHA256[relative] != digest {
+			return fmt.Errorf("harness digest mismatch for %s", relative)
+		}
+	}
+	return nil
+}
+
+func clonePhase5StringMap(source map[string]string) map[string]string {
+	out := make(map[string]string, len(source))
+	for key, value := range source {
+		out[key] = value
+	}
+	return out
 }
 
 func phase5ArtifactDir(t *testing.T) string {
