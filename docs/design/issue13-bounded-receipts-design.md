@@ -33,7 +33,7 @@ CLI mask --apply --approved
 ```
 
 - Receipt 在批次 `Commit(ctx)` **成功返回之后**创建/append；其三个字段是可确认的数据库提交记账（表、批次局部 ordinal、受影响行数），不含行键、原值、替换值或摘要。[代码：`internal/runner/execute.go:650-735`，`pkg/contracts/contracts.go:338-347`]
-- Commit 返回错误时，db writer 将提交结果归类为 `ErrCommitUnknown`；调用方不进行 rollback 或 retry，报告仅标示 unknown，不能确定该批已写或未写。真实 SQLite 的“提交后确认丢失”测试证明目标可能已变更但该批不出现在 Committed。[代码/测试：`internal/db/write.go:Commit`、`internal/runner/workflow_acceptance_test.go` 中 `TestApplyWrappedCommitUnknownAfterDurableCommitReportsUnknown`]
+- 底层 SQL `Commit` **调用已尝试后**返回错误时，db writer 将结果归类为 `ErrCommitUnknown`；调用方不进行 rollback 或 retry，报告仅标示 unknown，不能确定该批已写或未写。Commit调用之前的 nil/context/closed 状态校验失败属于确定的前置拒绝，不是 CommitUnknown。真实 SQLite 的“提交后确认丢失”测试证明目标可能已变更但该批不出现在 Committed。[代码/测试：`internal/db/write.go:246-261`、`internal/runner/workflow_acceptance_test.go` 中 `TestApplyWrappedCommitUnknownAfterDurableCommitReportsUnknown`]
 - 后续批次失败/取消时，前序已确认 receipts 保留，`Complete=false`；未提交本批回滚。测试覆盖首批成功、第二批失败及取消；不代表整表/全局事务回滚。[测试：`TestApplyRetainsReceiptForEarlierCommittedBatch`、`TestApplyRollsBackBeginBatchFailuresAndCancellation`、`multi_apply_test.go`]
 - `ApplyReport` 由 `Engine.Apply` 初始化，`applyRun` 通过指针持有并 append；返回后由调用者持有。CLI 的 `applySummary` 逐项读取并临时按表聚合。CLI 当前没有将详细 receipts 持久化：history Store 仅保存签名审批决定；审批数据不是 Apply 审计记录。[代码：`cmd/maskriver/main.go:applySummary`、`internal/history/record.go`]
 - Validate 不接受 ApplyReport/Receipt；它独立扫描 source/target 和固定 Plan。它每侧保留一个最多 256 行的 keyset 页面并聚合有限类别/列的 Issues，不需要完整 receipts。[代码：`internal/verify/verify.go`；测试计划与安全测试]
@@ -42,7 +42,7 @@ CLI mask --apply --approved
 
 ## 3. 完整内存生命周期与复杂度
 
-符号：`N`=行数，`B`=Apply请求的分页/批次上限，`W`=mask workers，`C`=计划列数，`T`=计划表数，`D`=数据库中所有表元数据规模，`H`=审批目录entry数，`L`=最大单值/单行投影字节数，`K`=本次成功Commit且过滤后至少有一行可写的页面数。分页在过滤全NULL行之前进行，因此一般 `K ≤ ceil(N/B)`，全NULL页不产receipt，混合NULL会使 `K` 不等于 `ceil(writable_rows/B)`；仅在稠密可写数据的最坏情形有 `K=Θ(N/B)`。失败/取消会只留下成功前缀。复杂度须把字符串/byte payload纳入；只按对象个数计算不是字节上界。
+符号：`Nᵢ`=第i张计划表的行数，`B`=Apply请求的分页/批次上限，`W`=mask workers，`C`=计划列数，`T`=计划表数，`D`=数据库中所有表元数据规模，`H`=审批目录entry数，`L`=最大单值/单行投影字节数，`K`=本次成功Commit且过滤后至少有一行可写的页面数。分页在过滤全NULL行之前进行，因此 `K ≤ Σᵢ ceil(Nᵢ/B)`；全NULL页不产receipt，混合NULL会使K不等于基于可写行数的简单公式。固定表数且稠密可写数据时最坏情形 `K=Θ(N/B)`；若T可增长，表边界本身可能使K接近T。失败/取消只留下成功前缀。复杂度须把字符串/byte payload纳入；只按对象个数计算不是字节上界。
 
 | 子系统/生命周期 | 当前保留对象 | 规模关系与说明 |
 |---|---|---|
@@ -62,7 +62,7 @@ Phase-5 sampler不是产品路径，但每100ms将资源记录 append进`rows`�
 
 ## 4. 原始严格 AC 的可满足性
 
-**否：若当前公共 API 必须在 Apply 返回时提供全部完整 `Committed []BatchReceipt`，不可能在不改变结果语义的前提下让返回结果大小与总批次数无关。** 证明：调用者可在 Apply 返回时观察任意批次的 Table、Ordinal、Rows；这些独立记录要求至少 Ω(K) 个可区分结果/信息位。一次性返回的切片必须同时驻留这些元素，故返回对象内存 Ω(K)。把它放到另一个 heap、全局 map、隐藏 goroutine 或进程外的未计量缓冲都没有改变对象/语义，并且不符合要求。
+**否：若当前公共 API 必须在 Apply 返回时提供全部完整 `Committed []BatchReceipt`，不可能在不改变结果语义的前提下让当前切片表示的内存与总批次数无关。** 直接依据是 API 返回包含K个非零尺寸 `BatchReceipt` 元素的 slice，元素 backing array 至少按K线性增长；这是当前具体表示的 Ω(K) 下界。无需假设每个字段携带独立信息（TableRef可能重复，ordinal可顺序生成）。把它放到另一个 heap、全局 map、隐藏 goroutine 或进程外的未计量缓冲都没有改变对象/语义，并且不符合要求。
 
 必须区分：
 
@@ -155,7 +155,7 @@ sequenceDiagram
 
 候选新 API 目标（设计假设）：
 
-`HeapLive <= H0 + α·B·C·Lmax + β·W·Lmax + γ·Q·R + M(T,C,D) + G(runtime)`, `Q≤1`（同步消费/容量1），不含完整 receipts。若要声称绝对 bytes bound，必须另外设并验证 Lmax、T/C/D限额及驱动/native cache预算；原 AC若仅指 batch×workers 的数据工作集，需定义这些固定元数据项允许存在。
+`HeapLive <= H0 + α·B·C·Lmax + β·W·Lmax + γ·Q·R + M(T,C,D) + A(H,filenameBytes) + G(runtime)`, `Q≤1`（同步消费/容量1），不含完整 receipts。该式只有在审批目录项被有界索引/明确上限约束时才是对N无关的预算；目前 `ReadDir` 的O(H)并未解决。若要声称绝对bytes bound，必须另外设并验证Lmax、T/C/D限额及driver/native cache预算；原AC若仅指batch×workers的数据工作集，需定义这些固定元数据项允许存在。
 
 持久 store容量约 `K*(record header + receipt fields + integrity metadata) + index/WAL`，随批次数增长。不得宣称总资源有界；应提供可预检容量、保留/轮替政策或磁盘满失败计划，但不能在缺少可靠审计时静默回退到内存数组。
 
@@ -234,7 +234,7 @@ sequenceDiagram
 最终问题答复：
 1. 当前 Apply 内存复杂度：`O(K + B·C·L + T + C·(sampleLimit+1) + D + H + filenameBytes + runtime/cache)`；K在稠密可写数据时Θ(N/B)，另有审批目录O(H)扫描等规模项。
 2. 否，不止 Receipt：Plan/evidence随scope/table/sample上限增长，preflight需数据库元数据，Apply页/副本随B·C·L，CLI摘要随表数，Verify issues随列数，runtime/native cache不受B×W严格限定。明确没有发现按每个数据行累计的持久映射或Validate全行集合。
-3. 是；全量回执列表使现有ApplyReport和总批次数无关内存存在信息论/对象大小冲突。
+3. 是；当前具体的`[]BatchReceipt`返回表示需要K个非零尺寸slice元素，其backing array随K线性增长；不能通过缩小元素常数消除这一表示下界。
 4. 不改变冻结公共API、不改变结果语义时，没有真正解决所有调用方的方案。内部可增加仅服务新路径的stream实现，但原API仍Θ(K)，不等于完成全局AC。
 5. 候选推荐 D（新流式API + 有界sink），但仅作为待决方向；durable sink是否足以审计，取决于尚未确定的原子性/崩溃协议。
 6. 复用现有审批、dry-run、单批事务；仅Commit成功后才产生 confirmed事件；CommitUnknown永不自动重试并明确 unknown；Sink失败后停止，不宣称完整。跨库审计原子性未解决，必须先设计/批准同库事务outbox或明确“不保证完整审计”。
@@ -245,4 +245,4 @@ sequenceDiagram
 
 ### 独立评审状态
 
-本设计文档首版需要独立架构与Security Review。评审必须针对**包含本文件的实际 Head SHA**，记录评审者/独立上下文、完整范围、P0/P1/P2和限制。设计作者不作为自己的独立评审者。P0/P1需修正并由另一个独立上下文复核。本次仓库基线/文档评审本身不是独立评审，也不能把PR70既有review冒充本设计review。
+独立架构首轮审查记录：`reviewer`在`ee3b445daba30d03bfcdedb8e7d8807a2b945793`审阅文档与来源代码，发现P1 readiness/遗漏O(H)及四项P2；作者在后续HEAD修正。对`ea89ecc8d45cf0e2f32a02da3f9f350b89b2f585`的独立follow-up确认P0=0/P1=0，提出四项P2（K需按表求和、预算公式加O(H)、移除独立信息论表述、区分Commit尝试前后错误）；这些修正正在当前版本落实。follow-up报告在`/home/haoyue/.pi/agent/sessions/--home-haoyue-Project-maskriver--/subagent-artifacts/4890d6ce-6a15-4957-8c43-44c114555639_reviewer_output.md`（本机审查证据路径，不是仓库文件）。当前修改后的最终Head尚需一次独立架构复核。Security Review尝试在首版因go-reviewer provider `Insufficient Balance`失败，没有结果；不得记录为PASS。Security Review仍未完成，PR不可合并。审查记录必须区分每个实际SHA与范围；设计作者不作为独立评审者，P0/P1需修正并由另一个独立上下文复核；不得将PR70 review冒充本设计review。
