@@ -22,6 +22,9 @@ const outboxTestRunID = "0123456789abcdef0123456789abcdef"
 
 func outboxTestOptions(t *testing.T) (OutboxOptions, string) {
 	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("streaming outbox is Linux-only in this version; see TestOutboxUnsupportedPlatform")
+	}
 	path := filepath.Join(t.TempDir(), "synthetic-outbox.db")
 	seed, err := sql.Open("sqlite", "file:"+path+"?mode=rwc")
 	if err != nil {
@@ -226,7 +229,7 @@ func TestOutboxReceiptFailureRollsBackBusiness(t *testing.T) {
 	plan := outboxPlan(t, o, "people", "email", "nickname")
 	// A pre-existing receipt with the same sequence makes the in-transaction
 	// INSERT fail after the UPDATE has been executed.
-	tx0, err := o.BeginBatch(context.Background(), outboxTestRunID, plan, outboxReceipt(0, 1, "batch-000"))
+	tx0, err := o.BeginBatch(context.Background(), outboxTestRunID, plan, outboxReceipt(0, 0, "batch-000"))
 	if err != nil {
 		t.Fatalf("begin seed: %v", err)
 	}
@@ -281,6 +284,45 @@ func TestOutboxDuplicateBatchIdentityRejected(t *testing.T) {
 	}
 	if got := queryString(t, path, `SELECT email FROM people WHERE id=2`); got != "fixture-02@example.invalid" {
 		t.Fatalf("duplicate commit leaked a business update: %q", got)
+	}
+}
+
+func TestOutboxReceiptRowCountMismatchRollsBack(t *testing.T) {
+	opts, path := outboxTestOptions(t)
+	installOutbox(t, opts)
+	o := openOutbox(t, opts)
+	plan := outboxPlan(t, o, "people", "email")
+	tx, err := o.BeginBatch(context.Background(), outboxTestRunID, plan, outboxReceipt(0, 2, "batch-000"))
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if _, err := tx.Update(context.Background(), []contracts.RowChange{emailChange(t, 1, "fixture-01@example.invalid", "masked-01@example.invalid")}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if err := tx.Commit(context.Background()); !errors.Is(err, contracts.ErrConflict) {
+		t.Fatalf("commit err=%v", err)
+	}
+	if got := queryString(t, path, `SELECT email FROM people WHERE id=1`); got != "fixture-01@example.invalid" {
+		t.Fatalf("mismatched receipt committed data: %q", got)
+	}
+	if got := queryCount(t, path, `SELECT COUNT(*) FROM maskriver_outbox_batch`); got != 0 {
+		t.Fatalf("mismatched receipt persisted: %d", got)
+	}
+}
+
+func TestOutboxRejectsReservedBusinessTable(t *testing.T) {
+	opts, _ := outboxTestOptions(t)
+	installOutbox(t, opts)
+	o := openOutbox(t, opts)
+	ref := contracts.TableRef{Database: "fixture", Schema: "main", Table: OutboxBatchTable}
+	plan := contracts.TablePlan{Table: ref, PrimaryKey: []string{"run_id"}, Columns: []contracts.ColumnPlan{{
+		Column: contracts.ColumnRef{TableRef: ref, Column: "batch_id"}, Type: contracts.Type{Kind: contracts.Text},
+	}}}
+	_, err := o.BeginBatch(context.Background(), outboxTestRunID, plan, contracts.StreamingBatchReceipt{
+		Table: ref, BatchID: "b", Ordinal: 0, Rows: 0, Outcome: contracts.BatchCommitted,
+	})
+	if !errors.Is(err, contracts.ErrUnsafe) {
+		t.Fatalf("reserved table err=%v", err)
 	}
 }
 
@@ -889,6 +931,44 @@ func TestOutboxSessionPragmasAndCapabilities(t *testing.T) {
 	if caps.SchemaVersion != OutboxSchemaVersion || caps.ProtocolVersion != contracts.StreamingProtocolRevision ||
 		!caps.Supports(contracts.StreamingProtocolRevision) || caps.MaxReceiptPage != opts.MaxReceiptPage {
 		t.Fatalf("capabilities=%+v", caps)
+	}
+}
+
+func TestOutboxUnsupportedPlatform(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("Linux is the supported platform")
+	}
+	opts := OutboxOptions{
+		DatabaseOptions: contracts.DatabaseOptions{
+			Dialect: contracts.SQLite, DSN: testValue(t, contracts.Text, filepath.Join(t.TempDir(), "x.db")),
+			DatasetID: "fixture", Schemas: []string{"main"}, MaxOpenConns: 2,
+			ConnectTimeout: time.Second,
+		},
+		Protocol: contracts.StreamingProtocolRevision, JournalMode: "delete", MaxReceiptPage: 10,
+	}
+	if _, err := OpenOutbox(context.Background(), opts); !errors.Is(err, contracts.ErrUnsupported) {
+		t.Fatalf("non-Linux outbox err=%v", err)
+	}
+}
+
+func TestOutboxShapeTamperRejected(t *testing.T) {
+	opts, path := outboxTestOptions(t)
+	installOutbox(t, opts)
+	conn, err := sql.Open("sqlite", "file:"+path+"?mode=rw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`DROP TABLE maskriver_outbox_batch`,
+		`CREATE TABLE maskriver_outbox_batch (run_id TEXT, batch_sequence TEXT)`,
+	} {
+		if _, err := conn.Exec(statement); err != nil {
+			t.Fatalf("tamper: %v", err)
+		}
+	}
+	_ = conn.Close()
+	if _, err := OpenOutbox(context.Background(), opts); !errors.Is(err, contracts.ErrUnsupported) {
+		t.Fatalf("shape tamper err=%v", err)
 	}
 }
 

@@ -281,7 +281,109 @@ func (o *Outbox) verifySchema(ctx context.Context) error {
 	if len(versions) != 1 || versions[0] != OutboxSchemaVersion {
 		return contracts.ErrUnsupported
 	}
+	// The version marker alone cannot prove the marker still describes the
+	// tables next to it: a modified or replaced run/batch table would otherwise
+	// be accepted. Compare the actual column shape with the schema this package
+	// writes and fails closed on any difference.
+	for _, table := range outboxShape {
+		if err := verifyOutboxTableShape(ctx, o.conn, table); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// outboxColumn is one expected SQLite column definition.
+type outboxColumn struct {
+	name    string
+	typ     string
+	notNull int
+	pk      int
+}
+
+// outboxShape is the exact schema shape written by outbox_schema_v1.sql.
+var outboxShape = []struct {
+	table   string
+	columns []outboxColumn
+}{
+	{outboxSchemaTable, []outboxColumn{
+		{"version", "TEXT", 1, 1},
+		{"created_at", "TEXT", 1, 0},
+	}},
+	{OutboxRunTable, []outboxColumn{
+		{"run_id", "TEXT", 1, 1},
+		{"protocol", "TEXT", 1, 0},
+		{"plan_id", "TEXT", 1, 0},
+		{"approval_binding", "TEXT", 1, 0},
+		{"target_digest", "TEXT", 1, 0},
+		{"scope_digest", "TEXT", 1, 0},
+		{"created_at", "TEXT", 1, 0},
+	}},
+	{OutboxBatchTable, []outboxColumn{
+		{"run_id", "TEXT", 1, 1},
+		{"batch_sequence", "INTEGER", 1, 2},
+		{"batch_id", "TEXT", 1, 0},
+		{"table_schema", "TEXT", 1, 0},
+		{"table_name", "TEXT", 1, 0},
+		{"affected_rows", "INTEGER", 1, 0},
+		{"outcome", "INTEGER", 1, 0},
+		{"receipt_version", "TEXT", 1, 0},
+		{"created_at", "TEXT", 1, 0},
+	}},
+}
+
+// rowQueryer is satisfied by both *sql.DB and *sql.Conn.
+type rowQueryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// verifyOutboxTableShape compares PRAGMA table_xinfo with the expected
+// definition. Column order, names, declared types, NOT NULL and primary-key
+// positions must match exactly.
+func verifyOutboxTableShape(ctx context.Context, q rowQueryer, table struct {
+	table   string
+	columns []outboxColumn
+}) error {
+	rows, err := q.QueryContext(ctx, "PRAGMA main.table_xinfo("+quoteIdentifier(table.table)+")")
+	if err != nil {
+		return dbError(err)
+	}
+	defer rows.Close()
+	var got []outboxColumn
+	for rows.Next() {
+		var (
+			cid       int
+			name, typ string
+			notNull   int
+			defaultV  sql.NullString
+			pk        int
+			hidden    int
+		)
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultV, &pk, &hidden); err != nil {
+			return dbError(err)
+		}
+		if hidden != 0 {
+			continue
+		}
+		got = append(got, outboxColumn{name: name, typ: strings.ToUpper(typ), notNull: notNull, pk: pk})
+	}
+	if err := rows.Err(); err != nil {
+		return dbError(err)
+	}
+	if len(got) != len(table.columns) {
+		return contracts.ErrUnsupported
+	}
+	for i := range got {
+		if got[i] != table.columns[i] {
+			return contracts.ErrUnsupported
+		}
+	}
+	return nil
+}
+
+// quoteIdentifier quotes a fixed internal identifier.
+func quoteIdentifier(name string) string {
+	return "\"" + strings.ReplaceAll(name, "\"", "\"\"") + "\""
 }
 
 // verifyFileIdentity rechecks that the path still names the same regular file
@@ -356,6 +458,9 @@ func (o *Outbox) BeginBatch(ctx context.Context, runID string, plan contracts.Ta
 		receipt.Ordinal < 0 || receipt.Rows < 0 || receipt.Outcome != contracts.BatchCommitted ||
 		receipt.Table != plan.Table {
 		return nil, contracts.ErrInvalid
+	}
+	if IsOutboxTable(plan.Table.Table) {
+		return nil, contracts.ErrUnsafe
 	}
 	if err := o.verifyFileIdentity(); err != nil {
 		return nil, err
@@ -569,6 +674,7 @@ type outboxTx struct {
 	receipt contracts.StreamingBatchReceipt
 	mu      sync.Mutex
 	ended   bool
+	updated int64
 }
 
 var _ contracts.WriteTx = (*outboxTx)(nil)
@@ -580,7 +686,14 @@ func (t *outboxTx) Update(ctx context.Context, changes []contracts.RowChange) (i
 	if ended {
 		return 0, contracts.ErrClosed
 	}
-	return t.tx.Update(ctx, changes)
+	n, err := t.tx.Update(ctx, changes)
+	if err != nil {
+		return n, err
+	}
+	t.mu.Lock()
+	t.updated += n
+	t.mu.Unlock()
+	return n, nil
 }
 
 // Commit inserts the receipt in the same transaction and then attempts the one
@@ -606,6 +719,12 @@ func (t *outboxTx) Commit(ctx context.Context) error {
 			t.abortLocked()
 			return contracts.ErrDatabase
 		}
+	}
+	if t.updated != t.receipt.Rows {
+		// A receipt must not over- or under-state the rows this transaction
+		// actually changed; roll back rather than persist a misleading receipt.
+		t.abortLocked()
+		return contracts.ErrConflict
 	}
 	if err := t.insertReceipt(ctx); err != nil {
 		t.abortLocked()
@@ -725,6 +844,11 @@ func InstallOutboxSchema(ctx context.Context, opts OutboxOptions) error {
 			return contracts.ErrConflict
 		}
 		if existing == OutboxSchemaVersion {
+			for _, table := range outboxShape {
+				if err := verifyOutboxTableShape(ctx, a.db, table); err != nil {
+					return err
+				}
+			}
 			return nil
 		}
 		return contracts.ErrUnsupported

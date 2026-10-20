@@ -52,8 +52,10 @@ Reserved names are exposed as `db.OutboxTables()` / `db.IsOutboxTable`; business
 must reject them (runner integration is WP3). The tables contain identifiers, counts, outcome and
 timestamps — never source values, replacements, primary keys, keys or DSNs.
 
-Install behaviour: equal version = no-op; different version, partially created reserved tables, or
-a differently shaped schema = `ErrConflict`/`ErrUnsupported`, never automatic repair.
+Install behaviour: equal version and an exact column-shape match = no-op; different version,
+partially created reserved tables, or any column/type/NOT NULL/primary-key difference =
+`ErrConflict`/`ErrUnsupported`, never automatic repair. `OpenOutbox` re-verifies the shape, so a
+retained version marker cannot legitimise altered tables.
 
 ## 3. Same-transaction atomicity (G1)
 
@@ -76,7 +78,9 @@ proves a failing receipt INSERT (real UNIQUE violation) aborts the business UPDA
 - Error returned by `tx.Commit()` itself: always `contracts.ErrCommitUnknown`; no retry, no
   guessing from message text, no post-hoc "probably committed" claim.
 - A committed batch always has its receipt in the same database; an interrupted/uncommitted batch
-  has none.
+  has none. The receipt's row count must equal the rows actually updated in that transaction, or
+  the batch rolls back with `ErrConflict` (a receipt can never over- or under-state the batch).
+- Plans targeting reserved outbox tables are refused with `ErrUnsafe`.
 
 `TestOutboxCommitUnknownIsConservative` injects a post-commit error while the real commit happened
 and confirms the caller still receives `ErrCommitUnknown` and exactly one receipt exists (no retry
@@ -135,6 +139,9 @@ Disk usage still grows with the number of batches: **bounded memory is not bound
 | SQLite page limit (SQLITE_FULL) | `TestOutboxFullDiskFailsClosed` | PASS — real storage failure, no change/receipt |
 | Process exit before commit | `TestOutboxCrashBeforeCommit` | PASS — SQLite rollback journal restores |
 | Process exit immediately after commit | `TestOutboxCrashAfterCommit` | PASS — data + receipt survive |
+| Receipt row-count mismatch | `TestOutboxReceiptRowCountMismatchRollsBack` | PASS — `ErrConflict`, rollback |
+| Reserved outbox table as business target | `TestOutboxRejectsReservedBusinessTable` | PASS — `ErrUnsafe` |
+| Altered table shape with valid marker | `TestOutboxShapeTamperRejected` | PASS — `ErrUnsupported` |
 | Process kill *during* commit | — | **UNVERIFIED** (no deterministic seam without a hostile fixture) |
 | ENOSPC injected exactly at receipt INSERT | — | **UNVERIFIED** (full-disk was exercised at UPDATE; receipt-time ENOSPC is not deterministically producible) |
 | Legacy M1 DB without outbox | `TestOutboxLegacyDatabaseWithoutSchema` | PASS — legacy writer unaffected; outbox refuses |
