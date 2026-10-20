@@ -1,0 +1,25 @@
+{
+  "head_sha": "41e96b18130d9becfabb15d2bca502054331c1cd",
+  "os": "Linux 7.0.0-38-generic x86_64",
+  "go": "go1.26.3",
+  "sqlite_driver": "modernc.org/sqlite v1.60.1",
+  "cpu": "AMD Ryzen 9 7940H w/ Radeon 780M Graphics",
+  "logical_cpus": 16,
+  "filesystem": "local /tmp on the test machine",
+  "data": "synthetic; 64 distinct valid emails, table people(id INTEGER PRIMARY KEY, email TEXT NOT NULL)",
+  "measurement": {
+    "process": "real CLI child process (re-exec of the test binary through main.run)",
+    "rss": "/proc/<pid>/status VmHWM polled every 50 ms; only the apply phase is reported; short phases are under-sampled and omitted",
+    "timing": "wall clock around each child invocation; scan/preview/approve/apply/validate are separate processes; fixture creation and file copies are outside all timed phases",
+    "heap": "not available for the child process; the runner-level harness records Go heap (see docs/perf/issue13-wp3-a4a2e41)"
+  },
+  "commands": [
+    "MASKRIVER_WP3F_CLI_SCALE=1 MASKRIVER_WP3F_SCALE_DIR=/tmp/wp3f-cli MASKRIVER_WP3F_CLI_ROWS=10000,100000,1000000 MASKRIVER_WP3F_CLI_REPEATS=5 go test ./cmd/maskriver -run TestCLIStreamingScaleEvidence -count=1 -timeout 90m"
+  ],
+  "notes": [
+    "10k: 5 samples per configuration; 100k and 1M: 3 samples per configuration.",
+    "Each sample re-copies the pristine source to a fresh target and uses a distinct RunID.",
+    "The apply phase includes rebuilding the plan inside the CLI process, so it is not a pure database-write measurement.",
+    "Peak RSS is process-wide and includes the Go runtime, the pure-Go SQLite driver and page cache touched by the process."
+  ]
+}

@@ -126,7 +126,7 @@ func (e *Engine) StreamingApply(ctx context.Context, req contracts.StreamingAppl
 	// sequence across the whole run.
 	run := &streamingRun{
 		engine: e, outbox: outbox, summary: &summary,
-		batch: req.BatchSize, sequence: 0,
+		batch: req.BatchSize, sequence: 0, budget: req.Budget,
 	}
 	summary = contracts.StreamingApplySummary{
 		Protocol: req.Protocol, PlanID: req.Plan.ID, RunID: req.RunID,
@@ -216,6 +216,16 @@ func validateStreamingStructure(req contracts.StreamingApplyRequest, cfg config.
 	if cfg.Workers < 1 || cfg.Workers > req.Budget.MaxWorkers {
 		return contracts.ErrInvalid
 	}
+	// MaxQueue is the internal sink queue. This implementation only supports
+	// synchronous delivery, so a non-zero queue is an unsupported request rather
+	// than a silently ignored setting.
+	if req.Budget.MaxQueue != 0 {
+		return contracts.ErrUnsupported
+	}
+	// Reject a worst case that cannot fit MaxProcessBytes before any I/O.
+	if err := validateProcessBudgetCombination(req.Budget); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -300,6 +310,7 @@ type streamingRun struct {
 	summary  *contracts.StreamingApplySummary
 	batch    int
 	sequence int64
+	budget   contracts.ResourceBudget
 }
 
 // applyTable streams one planned table in batch-sized pages. Rows whose planned
@@ -337,11 +348,23 @@ func (r *streamingRun) applyTable(ctx context.Context, table contracts.TablePlan
 			}
 			return contracts.ErrIncomplete
 		}
+		// Enforce the row and working-set budgets on the page that was just
+		// materialised, before masking, SQL or receipts exist. This is a
+		// post-materialisation check: the reader already allocated the page, but
+		// the retained working set stays a fixed function of BatchSize and
+		// MaxRowBytes rather than of the table row count.
+		pageBytes, err := pagePayloadBytes(left.Rows, r.budget.MaxRowBytes)
+		if err != nil {
+			return err
+		}
+		if err := r.engine.checkPageResources(ctx, left.Rows, pageBytes, r.budget); err != nil {
+			return err
+		}
 		changes, err := r.engine.pageChanges(ctx, table, left.Rows, right.Rows)
 		if err != nil {
 			return err
 		}
-		if err := r.writeBatch(ctx, table, changes); err != nil {
+		if err := r.writeBatch(ctx, table, changes, pageBytes); err != nil {
 			return err
 		}
 		if left.Done {
@@ -385,7 +408,7 @@ func (r *streamingRun) countTable(ctx context.Context, table contracts.TablePlan
 // writeBatch commits one page through the outbox. The receipt is inserted by the
 // same transaction and the commit is attempted once. An unknown outcome stops
 // the run; it is never retried and never reported as success.
-func (r *streamingRun) writeBatch(ctx context.Context, table contracts.TablePlan, changes []contracts.RowChange) error {
+func (r *streamingRun) writeBatch(ctx context.Context, table contracts.TablePlan, changes []contracts.RowChange, pageBytes int64) error {
 	pending := make([]contracts.RowChange, 0, len(changes))
 	for _, change := range changes {
 		if assignsNothing(change) {
@@ -398,6 +421,11 @@ func (r *streamingRun) writeBatch(ctx context.Context, table contracts.TablePlan
 	}
 	// The outbox reader starts its cursor at 0, so batch sequences start at 0
 	// and grow deterministically across the whole run.
+	// Narrow the pre-write window as far as this layer can: re-check disk
+	// admission immediately before the transaction starts.
+	if err := checkDiskAdmission(r.engine.cfg.Target, pageBytes, r.budget.MaxDiskBytes); err != nil {
+		return err
+	}
 	sequence := r.sequence
 	receipt := contracts.StreamingBatchReceipt{
 		Table: table.Table, BatchID: batchID(r.summary.RunID, sequence),
@@ -431,7 +459,9 @@ func (r *streamingRun) writeBatch(ctx context.Context, table contracts.TablePlan
 	r.summary.BatchesTotal++
 	r.summary.BatchesCommitted++
 	r.summary.RowsCommitted += n
-	return nil
+	// The batch is already committed. If it pushed the target over the declared
+	// disk budget, report a failure and stop; the receipt is not deleted.
+	return checkDiskAfterCommit(r.engine.cfg.Target, r.budget.MaxDiskBytes)
 }
 
 // classify records the bounded batch counters for one terminal batch failure and

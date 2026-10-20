@@ -32,10 +32,10 @@ func requireLinuxOutbox(t *testing.T) {
 func (f *e2eFixture) budgetFile(t *testing.T) string {
 	t.Helper()
 	budget := contracts.ResourceBudget{
-		MaxBatchSize: 1000, MaxWorkers: 16, MaxRowBytes: 1 << 20, MaxColumns: 64,
+		MaxBatchSize: 256, MaxWorkers: 16, MaxRowBytes: 1 << 20, MaxColumns: 64,
 		MaxTables: 8, MaxHistoryEntries: 512, MaxHistoryNameBytes: 4096,
 		MaxReceiptPage: 64, MaxIssueCounts: 16, MaxQueue: 0,
-		MaxProcessBytes: 1 << 30, MaxDiskBytes: 1 << 30,
+		MaxProcessBytes: 2 << 30, MaxDiskBytes: 8 << 30,
 	}
 	raw, err := json.Marshal(budget)
 	if err != nil {
@@ -262,4 +262,29 @@ func newE2EFixtureAt(t *testing.T, dir, source, target string, statements ...str
 		strings.Repeat("K", 40),
 	}
 	return f
+}
+
+func TestE2EStreamingRefusesWorldWritableTargetDirectory(t *testing.T) {
+	requireLinuxOutbox(t)
+	f := newE2EFixture(t, e2eOneTable...)
+	unsafeDir := filepath.Join(t.TempDir(), "shared")
+	if err := os.MkdirAll(unsafeDir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(unsafeDir, 0o777); err != nil { // defeat umask
+		t.Fatal(err)
+	}
+	target := filepath.Join(unsafeDir, "target.db")
+	raw, err := os.ReadFile(f.target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.run(t, 1, "init-outbox", "--target", target)
+	// The target path must not appear in the refusal output.
+	if code, output := runCLIProcess(t, "init-outbox", "--target", target); code == 0 || strings.Contains(output, target) {
+		t.Fatalf("unsafe dir accepted or leaked: code=%d output=%q", code, output)
+	}
 }
