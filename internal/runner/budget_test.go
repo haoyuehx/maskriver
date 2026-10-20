@@ -23,6 +23,7 @@ import (
 
 func customStreamingFixture(t *testing.T, statements []string, scopes []config.Scope) (*Engine, contracts.Plan, string) {
 	t.Helper()
+	requireLinuxStreaming(t)
 	dir := t.TempDir()
 	source, target := filepath.Join(dir, "source.db"), filepath.Join(dir, "target.db")
 	for _, path := range []string{source, target} {

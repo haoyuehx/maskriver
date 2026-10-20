@@ -54,8 +54,9 @@ resource was already used.
 
 ## Conclusion
 
-The streaming path is structurally bounded by `BatchSize`, `MaxRowBytes`, worker count and receipt
-page size, and the 1M CLI evidence shows flat RSS. It is **not** a guarantee that an oversized field is
-rejected before allocation. `MaxProcessBytes` and `MaxDiskBytes` are admission/observability bounds,
+The streaming path's *retained* working set is a function of `BatchSize`, the projected row size,
+worker count and receipt page size, and the 1M CLI evidence shows flat RSS. It is **not** a guarantee
+that an oversized field is rejected before allocation: the source and target pages are materialised
+first, so peak allocation is not bounded by `MaxRowBytes`. `MaxProcessBytes` and `MaxDiskBytes` are admission/observability bounds,
 not OS-level hard limits. ADR-08 must record these meanings; formal approval cannot convert them into
 stronger guarantees.
