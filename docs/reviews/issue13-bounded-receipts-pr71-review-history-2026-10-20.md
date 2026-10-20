@@ -119,3 +119,18 @@ The design-document review-pending wording was removed before `717b17a`; indepen
 - All three reviewers were read-only and ran no tests or DB/anchor probes. Their exact-head re-review of
   the corrected head is required before any merge recommendation; none of these reviews authorizes
   implementation or Issue #13 acceptance.
+
+## Convergence reviews at 7a95a7c / 4e35f3d
+
+| Review | Head | Result | Findings / disposition |
+|---|---|---|---|
+| Full diff (H1) | `7a95a7c` | P0=0/P1=0/P2=2 | A3 row still said “durable receipt”; full-diff addendum claimed a review not yet recorded. Both fixed in `4e35f3d` (durability separated; addendum now says exact-head review is not claimed). Artifact `eb7eb1b2-df7e-4b1a-935d-a9fc0ca7c592_reviewer_output.md`. |
+| Architecture (H2) | `7a95a7c` | P0=0/P1=0/P2=1 | SQLite platform/path gates G4–G5 sat in deferrable WP4. Fixed in `4e35f3d`: WP2 now requires G1–G9 including G4–G5 with fail-closed unsupported combinations; WP4 keeps only anchor-specific gates. Artifact `12dfc8e1-108b-4ba1-8ad5-f9a73d5dbf88_reviewer_output.md`. |
+| Security (H2) | `7a95a7c` | P0=0/P1=0/P2=0 | Terminology, A3/anchor separation, gates and invariants verified; no new finding. Artifact `2fb2c4c5-2f1b-4072-bc6f-5bac34482baa_go-reviewer_output.md`. |
+| Full diff (H1) | `4e35f3d` | P0=0/P1=0/P2=0 | Docs-only diff confirmed; both prior P2 fixes present; no overclaim. Artifact `71c87c6e-694d-4c39-99c9-f41fcedbf9f2_reviewer_output.md`. |
+| Security (H2) | `4e35f3d` | P0=0/P1=0/P2=0 | Same-transaction wording, anchor scope, WP2 gates and write invariants confirmed. Artifact `f853c9ee-dcc3-478f-86cb-3c5225bb4125_go-reviewer_output.md`. |
+| Architecture (H2) | `4e35f3d` | see next entry after completion | Convergence check of WP2/WP4 gate placement. |
+
+All reviews were read-only; none ran tests, database/outbox/anchor/crash probes, or CI. They verify documentation
+consistency only, not runtime behaviour, durability, or Issue #13 acceptance. This history section is itself a
+later documentation-only commit; the exact-head CI on the final commit remains the CI gate.
