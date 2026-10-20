@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -312,6 +313,9 @@ func TestLegacyLookupKeepsLargeDirectoryBehaviour(t *testing.T) {
 }
 
 func TestStreamingUnreadableAmbiguityFailsClosed(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("mode-000 files are not meaningful on this platform")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root can read mode-000 files")
 	}

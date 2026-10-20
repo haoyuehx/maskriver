@@ -29,6 +29,7 @@ type scaleCell struct {
 func scaleMode() string { return os.Getenv("MASKRIVER_WP3_SCALE") }
 
 func TestStreamingScaleEvidence(t *testing.T) {
+	requireLinuxStreaming(t)
 	mode := scaleMode()
 	if mode == "" {
 		t.Skip("set MASKRIVER_WP3_SCALE=quick|full to run streaming scale evidence")

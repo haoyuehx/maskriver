@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -70,8 +71,18 @@ var testBudget = contracts.ResourceBudget{
 	MaxProcessBytes: 1 << 30, MaxDiskBytes: 1 << 30,
 }
 
+// requireLinuxStreaming skips when the SQLite outbox is explicitly unsupported.
+// The unsupported refusal itself is covered by internal/db unit tests.
+func requireLinuxStreaming(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("streaming outbox is Linux-only; the refusal is covered by db tests")
+	}
+}
+
 func streamingFixture(t *testing.T, rows []string) (*Engine, contracts.Plan, string, func()) {
 	t.Helper()
+	requireLinuxStreaming(t)
 	dir := t.TempDir()
 	source, target := filepath.Join(dir, "source.db"), filepath.Join(dir, "target.db")
 	cfg, key := streamingFixtureFiles(t, rows, source, target)
