@@ -205,7 +205,7 @@ func (s *Store) Approve(ctx context.Context, req ApproveRequest) (Record, error)
 	if !s.now().Before(record.ExpiresAt) {
 		return Record{}, unsafeError(errExpired)
 	}
-	if err := s.requireUnambiguous(req.Plan.ID); err != nil {
+	if err := s.requireUnambiguous(ctx, req.Plan.ID); err != nil {
 		return Record{}, err
 	}
 	if err := s.write(ctx, record); err != nil {
@@ -306,7 +306,7 @@ func (s *Store) load(ctx context.Context, plan contracts.Plan) (Record, error) {
 	if err := ctx.Err(); err != nil {
 		return Record{}, err
 	}
-	if err := s.requireUnambiguous(plan.ID); err != nil {
+	if err := s.requireUnambiguous(ctx, plan.ID); err != nil {
 		return Record{}, err
 	}
 	raw, err := readCapped(path)
@@ -349,9 +349,11 @@ func (s *Store) verify(raw []byte) (Record, error) {
 // one decodable record claiming it. A second copy would otherwise make "which
 // record applies" depend on the file name an attacker chose. Files that do not
 // declare a plan id can never be loaded as a record and are ignored.
-func (s *Store) requireUnambiguous(planID string) error {
+func (s *Store) requireUnambiguous(ctx context.Context, planID string) error {
 	canonical := planID + recordSuffix
-	return s.eachEntry(context.Background(), func(entry fs.DirEntry) error {
+	// Legacy lookup keeps its original behaviour: chunked reading bounds memory,
+	// but no entry/name cap is imposed on pre-existing M1 directories.
+	return s.walkDirectory(ctx, func(entry fs.DirEntry) error {
 		if entry.IsDir() || entry.Name() == canonical ||
 			!strings.HasSuffix(entry.Name(), recordSuffix) {
 			return nil

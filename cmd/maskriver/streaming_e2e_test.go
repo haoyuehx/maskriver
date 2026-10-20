@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -17,6 +18,16 @@ import (
 )
 
 const e2eRunID = "0123456789abcdef0123456789abcdef"
+
+// requireLinuxOutbox skips streaming E2E on platforms where the SQLite outbox
+// is explicitly unsupported. The unsupported refusal itself is covered by unit
+// tests; these tests exercise the supported runtime.
+func requireLinuxOutbox(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("streaming outbox is Linux-only; refusing elsewhere is covered by unit tests")
+	}
+}
 
 func (f *e2eFixture) budgetFile(t *testing.T) string {
 	t.Helper()
@@ -59,6 +70,7 @@ func (f *e2eFixture) initOutbox(t *testing.T) {
 }
 
 func TestE2EStreamingFullWorkflow(t *testing.T) {
+	requireLinuxOutbox(t)
 	f := newE2EFixture(t, e2eOneTable...)
 	scopes := []string{"people.email"}
 	budget := f.budgetFile(t)
@@ -106,6 +118,7 @@ func TestE2EStreamingFullWorkflow(t *testing.T) {
 }
 
 func TestE2EStreamingRequiresExplicitApplyAndApproval(t *testing.T) {
+	requireLinuxOutbox(t)
 	f := newE2EFixture(t, e2eOneTable...)
 	scopes := []string{"people.email"}
 	budget := f.budgetFile(t)
@@ -123,6 +136,7 @@ func TestE2EStreamingRequiresExplicitApplyAndApproval(t *testing.T) {
 }
 
 func TestE2EStreamingRejectsLegacyApproval(t *testing.T) {
+	requireLinuxOutbox(t)
 	f := newE2EFixture(t, e2eOneTable...)
 	scopes := []string{"people.email"}
 	budget := f.budgetFile(t)
@@ -136,6 +150,7 @@ func TestE2EStreamingRejectsLegacyApproval(t *testing.T) {
 }
 
 func TestE2EStreamingRevokedAndMissingSchema(t *testing.T) {
+	requireLinuxOutbox(t)
 	t.Run("revoked", func(t *testing.T) {
 		f := newE2EFixture(t, e2eOneTable...)
 		scopes := []string{"people.email"}
@@ -187,11 +202,13 @@ func TestE2EStreamingRevokedAndMissingSchema(t *testing.T) {
 }
 
 func TestE2EStreamingRefusesReservedBusinessScope(t *testing.T) {
+	requireLinuxOutbox(t)
 	f := newE2EFixture(t, e2eOneTable...)
 	f.run(t, 1, f.previewArgs("maskriver_outbox_batch.id")...)
 }
 
 func TestE2EStreamingTenThousandRows(t *testing.T) {
+	requireLinuxOutbox(t)
 	if testing.Short() {
 		t.Skip("scale test skipped in -short")
 	}

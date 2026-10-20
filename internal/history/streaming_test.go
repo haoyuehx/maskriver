@@ -280,3 +280,55 @@ func TestBoundedHistoryEnumeration(t *testing.T) {
 		t.Fatalf("cancel not honoured: %v", err)
 	}
 }
+
+func TestLegacyLookupKeepsLargeDirectoryBehaviour(t *testing.T) {
+	dir := t.TempDir()
+	public, private, _ := ed25519.GenerateKey(nil)
+	trust, _ := NewTrustedKeys(TrustedKey{SignerKeyID: "reviewer-1", Public: public})
+	store, err := Open(Config{
+		Dir: dir, Trust: trust, MaxEntries: 4,
+		Signer: &Signer{SignerKeyID: "reviewer-1", Private: private},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 8; i++ {
+		if err := os.WriteFile(filepath.Join(dir, "noise-"+string(rune('a'+i))+".txt"), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan := streamingPlan(t)
+	now := time.Now()
+	// The legacy path keeps its old behaviour: the streaming entry cap does not
+	// reject a pre-existing large M1 directory.
+	if _, err := store.Approve(context.Background(), ApproveRequest{
+		Plan: plan, ReviewerID: "reviewer-a", IssuedAt: now, ExpiresAt: now.Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("legacy approve in large directory: %v", err)
+	}
+	if _, err := store.Lookup(context.Background(), plan); err != nil {
+		t.Fatalf("legacy lookup in large directory: %v", err)
+	}
+}
+
+func TestStreamingUnreadableAmbiguityFailsClosed(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can read mode-000 files")
+	}
+	dir := t.TempDir()
+	store, _ := streamingStore(t, dir)
+	plan := streamingPlan(t)
+	now := time.Now()
+	if _, err := store.ApproveStreaming(context.Background(), StreamingApproveRequest{
+		Plan: plan, ReviewerID: "reviewer-a", IssuedAt: now, ExpiresAt: now.Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	candidate := filepath.Join(dir, "other"+streamingSuffix)
+	if err := os.WriteFile(candidate, []byte("unreadable"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.LoadStreamingApproval(context.Background(), plan); !errors.Is(err, contracts.ErrUnsafe) {
+		t.Fatalf("unreadable candidate did not fail closed: %v", err)
+	}
+}

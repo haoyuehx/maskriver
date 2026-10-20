@@ -345,7 +345,7 @@ func (s *Store) ApproveStreaming(ctx context.Context, req StreamingApproveReques
 	if !s.now().Before(record.ExpiresAt) {
 		return StreamingRecord{}, unsafeError(errExpired)
 	}
-	if err := s.requireUnambiguousStreaming(req.Plan.ID); err != nil {
+	if err := s.requireUnambiguousStreaming(ctx, req.Plan.ID); err != nil {
 		return StreamingRecord{}, err
 	}
 	if err := s.writeStreaming(ctx, record); err != nil {
@@ -585,7 +585,7 @@ func (s *Store) loadStreaming(ctx context.Context, plan contracts.Plan) (Streami
 	if err := ctx.Err(); err != nil {
 		return StreamingRecord{}, err
 	}
-	if err := s.requireUnambiguousStreaming(plan.ID); err != nil {
+	if err := s.requireUnambiguousStreaming(ctx, plan.ID); err != nil {
 		return StreamingRecord{}, err
 	}
 	raw, err := readCapped(path)
@@ -694,16 +694,22 @@ func claimedStreamingPlanID(raw []byte) (string, bool) {
 // requireUnambiguousStreaming is the streaming counterpart of
 // requireUnambiguous: it scans the whole directory through the bounded
 // enumerator, and any other streaming file claiming the same plan is ambiguous.
-func (s *Store) requireUnambiguousStreaming(planID string) error {
+func (s *Store) requireUnambiguousStreaming(ctx context.Context, planID string) error {
 	canonical := planID + streamingSuffix
-	return s.eachEntry(context.Background(), func(entry fs.DirEntry) error {
+	return s.eachEntry(ctx, func(entry fs.DirEntry) error {
 		if entry.IsDir() || entry.Name() == canonical ||
 			!strings.HasSuffix(entry.Name(), streamingSuffix) {
 			return nil
 		}
 		raw, err := readCapped(filepath.Join(s.dir, entry.Name()))
 		if err != nil {
-			return nil
+			if errors.Is(err, fs.ErrNotExist) {
+				// A benign concurrent removal can not hide a live second record.
+				return nil
+			}
+			// An unreadable candidate means a conflicting record can not be ruled
+			// out, so the streaming lookup fails closed.
+			return unsafeError(errRead)
 		}
 		if claimed, ok := claimedStreamingPlanID(raw); ok && claimed == planID {
 			return conflictError(errAmbiguous)
@@ -734,6 +740,18 @@ func (s *Store) eachEntry(ctx context.Context, fn func(fs.DirEntry) error) error
 	if maxNameLen <= 0 {
 		maxNameLen = defaultMaxHistoryNameLen
 	}
+	return s.walk(ctx, maxEntries, maxNameLen, fn)
+}
+
+// walkDirectory keeps the chunked, constant-memory enumeration without imposing
+// the streaming entry/name caps. The legacy lookup uses it so existing large
+// directories keep their old behaviour, while the streaming lookup uses the
+// explicitly bounded eachEntry.
+func (s *Store) walkDirectory(ctx context.Context, fn func(fs.DirEntry) error) error {
+	return s.walk(ctx, 0, 0, fn)
+}
+
+func (s *Store) walk(ctx context.Context, maxEntries, maxNameLen int, fn func(fs.DirEntry) error) error {
 	dir, err := os.Open(s.dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -753,13 +771,13 @@ func (s *Store) eachEntry(ctx context.Context, fn func(fs.DirEntry) error) error
 		}
 		for _, entry := range chunk {
 			total++
-			if total > maxEntries {
+			if maxEntries > 0 && total > maxEntries {
 				return unsafeError(errRead)
 			}
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if len(entry.Name()) > maxNameLen &&
+			if maxNameLen > 0 && len(entry.Name()) > maxNameLen &&
 				(strings.HasSuffix(entry.Name(), recordSuffix) ||
 					strings.HasSuffix(entry.Name(), streamingSuffix)) {
 				return unsafeError(errRead)

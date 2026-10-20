@@ -441,10 +441,17 @@ func (r *streamingRun) classify(outcome contracts.BatchOutcome, cause error) err
 	switch outcome {
 	case contracts.BatchCommitted:
 		r.summary.BatchesCommitted++
-	case contracts.BatchCommitUnknown, contracts.BatchAuditIncomplete:
+	case contracts.BatchCommitUnknown:
+		// Only a genuinely uncertain commit is reported as unknown.
 		r.summary.BatchesUnknown++
 		r.summary.Audit = contracts.AuditStateIncomplete
 		r.summary.State = contracts.RunStateCommitUnknown
+	case contracts.BatchAuditIncomplete:
+		// Data may be committed but the receipt state is not confirmed. This is
+		// an audit gap, not an unknown commit; it must not be counted as one.
+		r.summary.BatchesFailed++
+		r.summary.Audit = contracts.AuditStateIncomplete
+		r.summary.State = contracts.RunStateAuditIncomplete
 	case contracts.BatchCommitFailed, contracts.BatchFailedBeforeCommit:
 		r.summary.BatchesFailed++
 	default:

@@ -63,7 +63,8 @@ it. The outbox schema is installed only by the explicit `init-outbox` command; A
   redesigned.
 - Only constant-size counters are retained per batch (`BatchesTotal/Committed/Unknown/Failed`,
   `RowsCommitted`, bounded `IssueCounts`). No `[]StreamingBatchReceipt`, no accumulated channel, map
-  or error list.
+  or error list. `BatchesUnknown` counts only genuinely uncertain commits; an audit-only gap is
+  reported as `RunStateAuditIncomplete` and is never counted as an unknown commit.
 - Batch sequences start at 0 and increase across the run; `BatchID` is run-scoped.
 - Zero-row pages (all planned columns NULL) produce no statement and no receipt.
 - The first failure stops later batches; previously committed batches remain in the outbox and are
@@ -91,10 +92,14 @@ maskriver mask --streaming --apply --approved --budget-file <json> --receipt-pag
 
 ## 6. Bounded history enumeration
 
-`Store` now enumerates the review directory in fixed 64-entry chunks with `MaxEntries` and
-`MaxNameBytes` bounds (context-aware, fail closed on overflow) while preserving the legacy
-"more than one file claiming this plan is ambiguous" rule. The streaming run wires its budget's
-history limits into the store.
+`Store` now enumerates the review directory in fixed 64-entry chunks (constant memory), so no
+allocation grows with directory size. The **streaming** lookup additionally enforces `MaxEntries`
+and `MaxNameBytes` from the run budget and fails closed on overflow or an unreadable candidate
+record, preserving the "more than one file claiming this plan is ambiguous" rule and propagating
+context cancellation.
+
+The **legacy** lookup also uses chunked reading but deliberately keeps its original entry/name
+behaviour: it imposes no entry cap, so existing large m1a-v1 directories are not newly rejected.
 
 ## 7. ADR-08 status
 
