@@ -1,6 +1,6 @@
 # Issue #13：严格内存上界与批次回执架构评审
 
-**状态：DESIGN READY — PENDING OWNER APPROVAL。独立Architecture与Security在`240ce83`均为P0=0/P1=0；Owner决策仍未完成，生产实现未授权。当前状态更新所在的新Head还需独立复核。严格全局内存AC仍未满足或证明通过。**
+**状态：DESIGN READY — PENDING OWNER APPROVAL。独立Architecture与Security在`45f754d`均未发现P0/P1；Owner决策仍未完成，生产实现未授权。严格全局内存AC仍未满足或证明通过。**
 
 本文件 §5–§15 的早期候选方案曾讨论提交后外部Sink；该模型现由 `docs/design/issue13-architecture-decision-record.md` 中 A3（目标数据库同事务 outbox）替代为推荐候选。ADR是当前方案来源；本文件中与A3冲突的旧 sink 时序/测试表应视为历史分析，不是待实现设计。
 
@@ -224,7 +224,7 @@ sequenceDiagram
 
 ## 15. 最终架构裁决
 
-**本次ADR是候选设计，不是Owner批准或实现证明。** `240ce83`独立Architecture与Security均P0=0/P1=0/P2=1；Architecture建议`DESIGN READY — PENDING OWNER APPROVAL`，Security P2将durability/目标路径支持保留为实现门禁。当前status更新所在的新Head仍需独立复核。Owner须决定AC范围与审计保证；全部ADR行仍待决。Legacy API仍Θ(K)。新streaming receipts只有在历史目录/metadata/row payload有硬界且Owner接受AC范围后才可能与K无关。A3及SQLite/MySQL durability尚未实现/验证；外部anchor不与DB事务原子。本文件不授权生产实现，也不声称Issue #13 AC通过。
+**本次ADR是候选设计，不是Owner批准或实现证明。** `45f754d`独立Architecture与Security均P0=0/P1=0/P2=1；Architecture建议`DESIGN READY — PENDING OWNER APPROVAL`，其P2为过期的review-pending文字，本次移除；Security P2将durability/目标路径支持保留为实现门禁。Owner须决定AC范围与审计保证；全部ADR行仍待决。Legacy API仍Θ(K)。新streaming receipts只有在历史目录/metadata/row payload有硬界且Owner接受AC范围后才可能与K无关。A3及SQLite/MySQL durability尚未实现/验证；外部anchor不与DB事务原子。本文件不授权生产实现，也不声称Issue #13 AC通过。
 
 最终问题答复：
 1. 当前 Apply 内存复杂度：`O(K + B·C·L + T + C·(sampleLimit+1) + D + H + filenameBytes + runtime/cache)`；K在稠密可写数据时Θ(N/B)，另有审批目录O(H)扫描等规模项。
@@ -240,6 +240,6 @@ sequenceDiagram
 
 ### 独立评审状态与当前裁决
 
-历史与当前审查的实际SHA、严重度、限制、四项Security P1逐条处置及原始证据关系保存在 [`docs/reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md`](../reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md)。`240ce839a2a36ebb703ab4082386eb3d163fa8ab`的独立Architecture与Security Review均P0=0/P1=0/P2=1；前者建议设计就绪待Owner批准，后者将durability/path存储支持保留为实现门禁。精确报告及限制位于`docs/reviews/`；未执行测试或证明实现。
+历史与当前审查的实际SHA、严重度、限制、四项Security P1逐条处置及原始证据关系保存在 [`docs/reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md`](../reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md)。`45f754d47e753ef4798050feb6a961b90bfa4687`的独立Architecture与Security Review均P0=0/P1=0/P2=1；前者指出过期的review-pending文字，后者将durability/path存储支持保留为实现门禁。精确报告及限制位于`docs/reviews/`；未执行测试或证明实现。本次更新移除review-pending文字，不改变Owner待批准状态。
 
-Candidate status is now `DESIGN READY — PENDING OWNER APPROVAL`: this means only that the design is ready for Owner decision, not Owner approval, production authorization, or Issue #13 AC completion. The status update itself must be independently reviewed on the new head. All Owner decisions remain pending; durability/path capabilities remain unverified and Issue #13 remains OPEN.
+`DESIGN READY — PENDING OWNER APPROVAL`仅表示设计可交Owner裁决，不代表Owner批准、生产授权或Issue #13 AC完成。All Owner decisions remain pending; durability/path capabilities remain unverified and Issue #13 remains OPEN.

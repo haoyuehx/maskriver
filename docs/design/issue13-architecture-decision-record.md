@@ -2,9 +2,9 @@
 
 **Status:** DESIGN READY — PENDING OWNER APPROVAL. All owner decisions below remain `PENDING OWNER DECISION`. This is readiness for Owner decision only, not authorization to change production behavior or frozen contracts.
 
-**Current PR context at drafting:** PR #71, branch `design/issue13-bounded-receipts-20261020`. Baseline `main=9d6e03627c15fa31df051b16370f79e895e96bcc`. Independent Architecture and Security reviews examined head `240ce839a2a36ebb703ab4082386eb3d163fa8ab`, found P0=0/P1=0, and their findings/limits are recorded in `docs/reviews/`. The current revision records those reviews and updates the design status; this new exact head still requires independent review.
+**Current PR context at drafting:** PR #71, branch `design/issue13-bounded-receipts-20261020`. Baseline `main=9d6e03627c15fa31df051b16370f79e895e96bcc`. Independent Architecture and Security reviews examined head `45f754d47e753ef4798050feb6a961b90bfa4687`, found P0=0/P1=0, and their findings/limits are recorded in `docs/reviews/`. This revision removes stale status-review wording identified by Architecture; the status remains pending Owner approval, not implementation authorization.
 
-**Repository facts at `240ce83`:** PR #70 is merged; Issue #13 is OPEN; #14 is not authorized; `pkg/contracts.APIRevision=m1a-v1` is frozen; `v0.1.0-dev` is unchanged. Main observed Ubuntu/Windows checks pending and isolated MySQL adapter check passed at drafting. These documentation checks do not validate a later head or any outbox implementation.
+**Repository facts at `45f754d`:** PR #70 is merged; Issue #13 is OPEN; #14 is not authorized; `pkg/contracts.APIRevision=m1a-v1` is frozen; `v0.1.0-dev` is unchanged. Main observed Ubuntu/Windows checks pending and isolated MySQL adapter check passed at drafting. These documentation checks do not validate this later head or any outbox implementation.
 
 ## Purpose and invariant
 
