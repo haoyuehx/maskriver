@@ -1,0 +1,220 @@
+# Issue #13 Architecture Decision Record — bounded Apply receipts and audit consistency
+
+**Status:** PROPOSED; all owner decisions below remain `PENDING OWNER DECISION`. This ADR is not authorization to change production behavior or frozen contracts.
+
+**Current PR context:** PR #71, branch `design/issue13-bounded-receipts-20261020`. Baseline `main=9d6e03627c15fa31df051b16370f79e895e96bcc`. Previously known PR head `8dd2f3e4eb9c2c2ff39c63ed9f65be45c323c70c`; its design/security reviews were performed on `97d781ebf8a32cc644d5a3658b2fe0cf497ea2b8`, so they do not review this ADR. Update exact final review SHA after the current documents are committed.
+
+**Current repository facts:** PR #70 is merged; Issue #13 is OPEN; #14 is not authorized; `pkg/contracts.APIRevision=m1a-v1` is frozen; `v0.1.0-dev` is unchanged. The remote confirmed Ubuntu, Windows, isolated MySQL CI passed for prior PR #71 head `8dd2f3e`; those checks do not validate this ADR or a future head.
+
+## Purpose and invariant
+
+Decide what evidence would be needed to satisfy Issue #13's original memory AC without losing receipts, masking partial commits, weakening approval, or pretending that separate durable stores form one transaction. This document distinguishes a proposal from owner approval and from implementation evidence.
+
+Original AC wording remains authoritative. This ADR does **not** reinterpret it to mean “only the new API” or “only Go heap” without an explicit Issue Owner decision. No design decision here changes `m1a-v1`, Apply transaction policy, CLI authorization, BatchSize defaults, release, or #14 scope.
+
+## Current memory and receipt facts
+
+- Legacy `Apply` returns every confirmed batch in `ApplyReport.Committed []BatchReceipt`. Its backing array is Θ(K), where K is successful non-empty committed pages; for fixed table count and dense writable rows, worst-case K=Θ(N/B). Current CLI also materializes this report, then iterates it.
+- The runner processes one keyset page/transaction at a time and has a bounded worker pool, but that does not bound the returned receipt slice.
+- Approval lookup currently calls `os.ReadDir` over the complete history directory to preserve duplicate-plan ambiguity detection, so an Apply can allocate O(H + filename bytes) even at fixed N.
+- Plans/scopes/schema metadata, row payload, page lookahead, verifier issue locations, DB driver buffers, SQLite/MySQL caches, Go GC/runtime and OS file cache are separate resource terms. Phase-5 measured receipt capacities are evidence for its fixture only, not proof of a strict bound.
+- Existing phase-5 resource sampler itself appends one record per 100 ms and copies the collected slice at stop; it is test instrumentation, not product memory evidence for arbitrarily long runs.
+
+## Formal decision table
+
+| ID | Decision | Alternatives | Recommendation (not approval) | Evidence / risk | State |
+|---|---|---|---|---|---|
+| ADR-01 | Does strict memory AC apply to all Apply APIs or only a new streaming path? | S1 all APIs; S2 new streaming path only; S3 bounded legacy maximum | S1 is the literal safest reading; S2 is the only compatibility-friendly path but changes AC scope; S3 is a cap, not an asymptotic solution. Require Owner to select; no silent narrowing. | Frozen return DTO proves legacy Ω(K). No data proving Issue permits API-specific AC. | **PENDING OWNER DECISION** |
+| ADR-02 | May legacy full-receipt API retain O(K)? | No; yes as compatibility API; cap/retire later | Recommend retain exact `m1a-v1` semantics, label O(K), and do not call global AC complete while it is in scope. | Existing callers can observe every element. Changing semantics is breaking. | **PENDING OWNER DECISION** |
+| ADR-03 | Required data-commit/audit guarantee? | A1 best effort; A2 durable reconciliation; A3 same-transaction audit row | Recommend A3 for each batch's receipt; use an external signed run seal only for tamper-evident whole-run completion. If same-target DB atomicity cannot be proved, stop rather than downgrade to A1. | Same transaction is the only local atomicity boundary available; external seal has its own availability/finalization status. | **PENDING OWNER DECISION** |
+| ADR-04 | May target DB schema include a private audit outbox? | No schema changes; pre-provisioned namespaced tables; separate store | Recommend pre-provisioned reserved tables in the same target database, with explicit migration/validation and no silent runtime DDL. | SQLite DML in one DB transaction can be atomic; MySQL requires same primary database and transactional engine (e.g. InnoDB) for both tables. Current code does not prove/implement this. | **PENDING OWNER DECISION** |
+| ADR-05 | May an independent durable audit anchor be required? | No; local only; external append-only signer/ledger | Recommend external trust anchor for claims of tamper-evident completed runs; without it, claim only accidental-corruption detection and local consistency. | No such service exists in current product; key custody, availability, retention and threat model need owner/infrastructure approval. | **PENDING OWNER DECISION** |
+| ADR-06 | Are third-party receipt Consumers allowed? | Arbitrary callback; trusted internal sinks only; isolated process | Recommend no user-supplied callback in first streaming API. Use an internal synchronous transactional outbox writer. | A Go callback can ignore ctx, block forever, panic or re-enter. Bounded queue does not bound its execution. | **PENDING OWNER DECISION** |
+| ADR-07 | Which platforms/storage must provide durable semantics? | Linux only; Linux+Windows; SQLite local only; MySQL too | Recommend initially support only explicitly tested local SQLite rollback-journal with required sync mode; add MySQL only after proving same-DB transactional engine and durability settings. Other filesystems/platforms fail closed/UNSUPPORTED. | Prior CI proves builds/tests, not atomic/durable outbox semantics. Network filesystems and power-loss guarantees vary. | **PENDING OWNER DECISION** |
+| ADR-08 | Numeric memory/disk/metadata limits? | Define L/T/C/H/D caps; symbolic working-set claim only | Recommend symbolic budgets first, numeric values only after representative payload measurements and Owner approval; no invented “approved” cap. | Without per-row byte, plan, history and metadata limits no byte bound. Disk receipts remain Θ(K). | **PENDING OWNER DECISION** |
+| ADR-09 | Legacy Plan/approval/API revision compatibility? | Global revision bump; additive parallel version; break old approval | Recommend preserve `m1a-v1` and Plan.ID/approval behavior; define additive versioned streaming request/approval binding that coexists and does not reinterpret m1a plans. | Global `APIRevision` change is included in plan identity and `ValidateShape`; old approvals can stop validating. Exact DTO remains for a separate contract proposal. | **PENDING OWNER DECISION** |
+| ADR-10 | Which production modules may be changed next? | None; contracts only; runner+DB; CLI/history cross-module | No production changes now. If approved, authorize files/modules separately and coordinate owners; do not imply #14. | Current task authorizes design/docs/review only. | **PENDING OWNER DECISION** |
+
+## S1/S2/S3 — strict memory AC scope
+
+### S1 — every Apply API, including legacy
+
+Legacy callers require `ApplyReport.Committed` with all K receipts when the call returns. The concrete non-zero-sized slice must retain K elements; for fixed B and dense writable data, that is Ω(N/B). Keeping `m1a-v1` result semantics and satisfying a strict N-independent result-memory bound are incompatible. Achieving S1 would require breaking/retiring/changing the legacy result contract or redefining “returned results” as an external cursor, which is a contract change. `m1a-v1` is frozen, so S1 is **not implementable under the current authorization**. A cap only makes memory bounded by a fixed maximum, not “BatchSize × Workers”, and does not preserve unrestricted large-dataset intent.
+
+### S2 — only a new streaming path
+
+A new API can emit one receipt synchronously or use Q=0/1 queue and return a compact summary. Legacy API remains available and O(K); existing callers still receive all receipts. CLI must opt into the new path explicitly; no silent fallback to the legacy path if the sink fails. The streaming path can claim only a specifically scoped memory guarantee after its metadata, approval scan, row bytes and runtime scope are bounded. S2 is a plausible implementation boundary but **changes the acceptance scope** if Issue #13 presently means all Apply. Only Issue Owner can approve that interpretation.
+
+### S3 — cap legacy receipt count
+
+A hard maximum Kmax can reject a run before opening the writer if a safe upper bound is known. To avoid partial work, it must precompute a conservative maximum `Σᵢ ceil(Nᵢ/B)` and fail before any write if it exceeds Kmax; all-NULL rows make this conservative. This caps the maximum, but receipt memory is still O(K) up to Kmax and is not a streaming/asymptotic solution. A late runtime cap after some commits is unacceptable unless it reports partial commit, but then does not protect against partial work. S3 is only a compatibility/resource guard and cannot alone pass the original AC.
+
+**Recommendation:** evaluate S2 only after explicit Owner scope decision; retain legacy behavior. No option is approved by this ADR.
+
+## A1/A2/A3 — audit consistency
+
+| Model | Guarantee | Failure consequence | Decision assessment |
+|---|---|---|---|
+| A1 Best effort | Commit data, then append receipt to independent sink | Post-commit sink error/crash leaves committed data with missing durable receipt. Must report `AUDIT_INCOMPLETE`; cannot claim complete audit. | Does not satisfy complete audit requirement; not recommended and cannot be used to close P1 absent Owner-approved weaker guarantee. |
+| A2 Durable reconciliation | A durable attempt record plus stable transaction/batch ID lets recovery inspect authoritative database-side state; unknown remains unknown when authoritative DB unavailable | Supports later classification without replay. If data and audit domains are separate, a crash can leave prepared/committed disagreement; reconciliation is not exactly-once and needs protocol and authoritative reads. | Candidate only if Owner accepts reconciliation as a future recovery surface; avoid expanding into checkpoint/resume/#14. |
+| A3 Transactionally atomic batch audit | Data UPDATEs and a receipt/attempt-state transition are written in the same target DB transaction | Atomicity means both effects commit or neither, assuming one DB transaction, transactional tables and configured durability. CommitUnknown remains unknown to the caller until authoritative read. | Recommended candidate for per-batch receipt correctness. Not yet implemented/proven on SQLite/MySQL. |
+
+A3 constraints:
+
+1. Receipt/outbox must be a table in the exact target database/transaction. A sidecar DB, separate SQLite file, local append file, remote service, or independent `fsync` is not atomic with business writes.
+2. SQLite: same `main` database and same `sql.Tx`; only supported rollback-journal modes (`DELETE`/`TRUNCATE`/`PERSIST`), verified synchronous/durability setting, local filesystem with tested locking/fsync semantics. WAL/memory/off/unknown mode is UNSUPPORTED until tested/proven for the intended contract. Current code only has a source quiescence probe; target durability settings are not currently verified.
+3. MySQL: same database/schema and same primary transaction; all business tables and outbox must use transactional engine (require verified InnoDB); verify server durability/commit settings. Cross-database, nontransactional table, replica/lagging read, or adapter-only evidence is not accepted. Current product has no MySQL CLI E2E; MySQL A3 remains UNVERIFIED.
+4. Outbox schema must be pre-provisioned and versioned before Apply; no DDL during Apply. It must be excluded from business scopes but included in explicit audit preflight. Schema migration/rollback/backup/retention must be approved. New target-only table is a target schema change and must not be hidden from validation/operator reporting.
+5. Disk exhaustion within the same transaction must abort the whole batch or yield CommitUnknown; no business row may commit without its outbox record. If commit returns unknown, do not retry. Query same authoritative primary after recovery; matching committed record resolves the batch committed; an authoritative prepared/absent state after recovery can resolve aborted only if DB guarantees transaction recovery and no tampering. If query unavailable or evidence inconsistent, retain UNKNOWN.
+6. Same-DB atomicity protects against process crash between business commit and receipt. It does **not** by itself protect against a privileged actor rewriting the DB file/tables.
+
+## Proposed audit protocol (not implemented)
+
+### Canonical envelope and event records
+
+All serialization must be versioned canonical encoding (e.g. canonical CBOR with fixed schema or strictly specified canonical JSON; exact format is contract proposal). Never persist raw source values, replacements, primary keys, masking keys, DSNs, or approval private keys.
+
+`RunEnvelope` fields: `protocol_version`, random 128-bit `run_id`, `plan_id`, `plan_revision`, target-database identity digest (not path/DSN), ordered table/scope digest, strategy/version/key IDs (opaque IDs only), explicit approval record digest/ID, audit policy ID, start timestamp, initial sequence, and state `STARTED`. Bind envelope to exact approved Plan and audit protocol. Scope/table identifiers can themselves be sensitive metadata; access control and publication must be reviewed.
+
+`BatchPrepare` (durably inserted before the data tx): `(run_id, seq, batch_id, table_ref, table_ordinal, row_count_expected, prev_hash, event_hash, status=PREPARED)`. `batch_id` is random/unique and idempotency metadata only, not a resume token. No values/keys. The separate prepare transaction is not evidence of data commit.
+
+In the data transaction, execute target UPDATEs and insert/transition the receipt event to `COMMITTED` with actual affected row count, plus chain hash. Presence of this event is atomic with the business rows. Do not label it committed before this transaction commits. To preserve append-only semantics, prefer a new `BatchCommitted` event referencing `BatchPrepare`; avoid mutable rows if possible. A known rollback can append `BatchAborted` in a later transaction; if that fails, PREPARED remains and run is incomplete/unknown, not success.
+
+`CommitUnknown` after the underlying commit attempt: immediately return/record volatile unknown and stop. Never write a misleading ABORTED or COMMITTED event outside the data transaction. If the atomic event is visible on the authoritative recovered DB, it proves the transaction committed; if not safely observable, retain unknown. No data retry/replay is implied.
+
+`RunSeal`: after all planned pages complete and final counts match, append a `COMPLETE` or `INCOMPLETE` terminal event containing final sequence, counts by status, final chain hash, plan/target/audit-policy binding, algorithm, and seal time. A crash before seal means run is **UNSEALED/INCOMPLETE**, even if all batches appear committed. An error path attempts an INCOMPLETE seal only if it can do so without changing business data; failure to seal remains detectable as no seal. A seal never upgrades an unknown batch to confirmed.
+
+### Hash chain, signature and trust anchor
+
+For each event define `hash_i = SHA-256(domain || canonical(event_without_hash_or_signature) || hash_(i-1))`; check canonical encoding, protocol/domain separation, exact sequence, previous-hash match, run ID, Plan ID, and record types. Hash chaining detects accidental corruption and internal discontinuity, **not** malicious rewrite of the entire log.
+
+A trusted external append-only Audit Anchor must receive and durably retain a signed terminal digest `(run_id, plan_id, outcome, final_seq, final_hash, protocol_version)`. Its signing key is separate from reviewer Ed25519 keys and masking keys, held in a separately administered HSM/KMS/anchor service; Apply never receives it. Anchor enforces unique run ID and idempotent same-digest submission, rejects conflicting digest, returns a signed receipt, and offers authenticated lookup. External anchor outage means `ANCHOR_PENDING/AUDIT_INCOMPLETE`, not a successful tamper-evident seal. No local file or DB-only hash chain can claim protection against an actor able to rewrite the DB and recompute hashes. Threat model must say whether host root/DB owner is excluded; if included, external anchor is mandatory.
+
+A run seal and its external anchor are not one atomic transaction with the target DB. A3 guarantees each data batch has its DB outbox event atomically. Whole-run completion trust is a two-domain protocol: absence of an external anchor is incomplete, never success. Retrying anchor publication for an identical existing DB seal is audit finalization only, not replay of business writes; do not describe it as exactly-once. Owner must approve this distinction.
+
+### Verification outcomes
+
+Verifier must return exactly one of:
+
+- `COMPLETE_VALID`: canonical envelope, unique run, contiguous legal event state machine, all committed events match unique batch IDs/rows, expected final sequence/counts, valid terminal COMPLETE seal, and valid external anchor signature matching final hash.
+- `INCOMPLETE_VALID`: valid envelope and event prefix, but no terminal/anchor seal or explicit INCOMPLETE outcome. It does not claim all writes were observed.
+- `TRUNCATED_OR_MISSING`: committed/prepared sequence mismatch, missing middle record or missing expected seal/anchor relative to trusted anchor state.
+- `ORDER_OR_STATE_INVALID`: duplicate/out-of-order sequence, illegal transition, cross-run record, committed receipt without corresponding prepare, or prepare/final mismatch.
+- `TAMPERED_OR_UNTRUSTED`: hash mismatch, signature mismatch, wrong key, conflicting anchor entry, unknown protocol or noncanonical encoding.
+- `UNKNOWN`: authoritative DB/anchor unavailable or outcome cannot be determined.
+
+An unsigned/unanchored database dump cannot establish absence of deletion by a privileged actor. Restoring both DB and its local records to an older backup is detectable only if external anchor retention is independent and monotonic. If the external anchor is also rolled back/compromised, detection is not guaranteed. Never reuse approval private key or trust signer identity for audit seal.
+
+## P1-1 state machine and failure table
+
+States: `PREPARED` (attempt record durable, no business commit claim); `COMMIT_ATTEMPTED` (volatile process state only); `COMMIT_CONFIRMED` (Commit returned success and same-transaction receipt is visible/acknowledged); `COMMIT_UNKNOWN` (underlying Commit attempted and returned ambiguous error); `RECEIPT_DURABLE` (DB transaction and its outbox row satisfy configured durability policy); `AUDIT_INCOMPLETE` (missing seal/anchor or append failure); `FAILED_BEFORE_COMMIT` (known pre-commit error and rollback known). `COMMIT_CONFIRMED` and `RECEIPT_DURABLE` are not synonyms until durability settings are proven.
+
+| Injection point | Data state | Durable event | Return/report | Further writes/retry |
+|---|---|---|---|---|
+| Before PREPARED | No current-batch data | None | Failed before commit | Stop; no retry in same run |
+| PREPARED write fails/ENOSPC | No data tx started | No trustworthy prepare | Sanitized sink/database error | Fail closed before first update; do not fallback to memory |
+| After PREPARED, before data Commit | No batch data if rollback is known | PREPARED only; possibly ABORTED if separately persisted | Failed-before-commit or incomplete if rollback cannot be proven | Stop; never reapply automatically |
+| Underlying Commit attempt in progress | Possibly none or all batch rows | Commit+receipt are atomic together | No report until driver returns; on ambiguous return mark UNKNOWN | Stop; no retry |
+| Commit returns nil | Batch data and COMMITTED outbox event both committed in the same transaction | Receipt event durable only if configured sync policy ensures it | Add summary counts; no need retain all event objects | Continue only if caller context active |
+| Commit returns `ErrCommitUnknown` | Either batch data+receipt both committed, or neither, under A3; never only one | Query same authoritative DB after resolution; unavailable/inconsistent => UNKNOWN | `Complete=false`, `CommitOutcomeUnknown=true`; prior confirmed prefix retained | Stop; no data retry |
+| After commit, before in-memory report/event | Both data and outbox receipt already atomic/durable | Outbox survives process crash per storage policy | Process may die; restart sees unsealed run and receipts | Never rerun Apply from scratch automatically |
+| Seal/anchor fails | All batch data/receipts may be committed | DB run is unsealed or external anchor missing | `AUDIT_INCOMPLETE`; operation not reported fully successful | Do not perform more business writes; identical seal anchoring is audit finalization only if explicitly authorized |
+| Sink/DB short write/fsync/ENOSPC | In-transaction failure aborts batch or CommitUnknown; no separate audit file | No claim unless atomic transaction row exists | Fail closed / UNKNOWN | No fallback, no retry |
+| Process restart | DB crash recovery resolves atomic tx as committed or rolled back; external anchor may be absent | Inspect prepared/committed event and seal; if source unavailable, UNKNOWN | Incomplete/unsealed as appropriate | No automatic data replay |
+
+Linearization boundary is the database transaction commit, not callback notification. A confirmed receipt means the database acknowledged that transaction and its outbox event together. `Durable` requires verified engine/filesystem sync policy and is not assumed from Go `Commit()==nil` alone. Sink error before commit causes rollback; no post-commit external per-batch sink exists. `CommitUnknown` is only an error after underlying SQL Commit was attempted; validation/cancellation rejection before that is known pre-attempt failure.
+
+## P1-3 consumer, backpressure and cancellation model
+
+Candidate uses **C1 only**: a trusted internal DB outbox writer inside the transaction. No arbitrary caller callback, user-supplied channel, or third-party sink in first version. Queue capacity Q=0 (synchronous); no abandoned goroutine. Receipt insertion occurs before Commit in same transaction, so a slow DB insert delays/fails the still-uncommitted batch rather than creating a known committed/no-receipt window. Slow target/outbox operations backpressure by blocking the transaction and prevent the next batch from starting.
+
+Context is propagated to DB operations. Cancellation before Commit attempts rollback; cancellation/driver error after commit attempt may be `CommitUnknown`. The implementation does **not** promise a hard finite wall-clock exit if a database driver, filesystem or kernel I/O fails to return. It does promise not to spawn and abandon a callback goroutine. If Owner requires a hard deadline, that requires separate driver/process isolation and must be designed; no goroutine timeout trick is acceptable. Panic containment is not relevant to user callback (none); internal code panic remains a defect, not a recover-and-continue condition.
+
+## P1-4 persistent storage/file-system boundary
+
+Per-batch receipts are not written to an arbitrary path, temp file, sidecar database, stdout or user-selected directory. They are rows in the already selected target DB, in the same transaction as changed business rows. Outbox is pre-provisioned by a separate reviewed migration, in an explicit reserved schema/table with unique `(run_id,seq)` and `batch_id`, append-only application grants, retention/backup policy, and no runtime DDL. This eliminates a separate receipt-path alias/no-clobber/symlink/rename/fsync protocol, but does not eliminate target DB file/path security.
+
+For SQLite, require an owner-controlled private directory, existing regular target file, source-target distinct identity, no untrusted parent-directory writers, reject symlink/reparse paths and unexpected hardlink count at preflight, bind/recheck file identity before writer open and every transaction, and use local filesystems with tested SQLite lock/journal/fsync semantics. Because current `sqliteDSN` opens by pathname after `Stat` and does not pin an OS handle, TOCTOU hardening is **not implemented/proven**; do not claim resistance to a hostile concurrent path replacer until a platform-specific safe-open design is tested. Unsupported file systems/platform semantics fail closed. Windows requires native reparse-point/file-ID/ACL tests; Linux requires no-follow and inode/device checks; network filesystems are unsupported until tested.
+
+For MySQL, no user filesystem audit path is added; require private database/schema, least-privilege grants, primary-only reads, transactional engine for every modified/outbox table, and verified durability configuration. Unsupported engine, replica, cross-database transaction or unverified commit durability is UNSUPPORTED. Existing MySQL adapter CI is not MySQL CLI/outbox evidence.
+
+Disk/quota growth remains Θ(K) in the target database. Check budgets before any write where possible, but same-transaction DB errors still fail/rollback or produce CommitUnknown. Never delete/truncate prior receipts, fall back to memory or continue business writes after outbox failure. If target storage is full, stop; status is failed/unknown according to commit boundary. OS file cache is not counted as bounded application heap.
+
+## API compatibility matrix (proposal only)
+
+| Caller/data | Legacy `m1a-v1 Apply` | New streaming surface (candidate) |
+|---|---|---|
+| Existing `Plan` and signed approval | Continue to validate exactly as today; same Plan.ID and existing history record; complete `Committed` slice | Must not silently reinterpret. Either use the same Plan/approval only if Owner approves audit mode not needing a separate approval binding, or define a new streaming Plan/approval v2 bound to audit protocol/outbox identity. The latter preserves m1a path unchanged but requires explicit new signed record format. |
+| Existing `Workflow` implementers | No new required method; preserve interface/return semantics | Add a separate versioned interface/type (not mutate old method). Do not change global `APIRevision` in place; additive parallel revision/surface requires Main-owned contracts proposal. |
+| Receipts | All receipts in returned slice, O(K) | Bounded summary + queryable durable outbox/run handle; complete detail read through a paged iterator requiring bounded page size; no accumulation by default. |
+| CLI | Legacy path remains explicit and documented O(K), or becomes deprecated only after Owner decision | CLI can select new protocol only via explicit flag/version, no automatic fallback. Apply authorization and signature checks remain mandatory. |
+| Cross-use | m1a plan/approval valid only on legacy m1a path unless exact binding compatibility is proven | No v2 approval authorizes legacy path; no legacy approval authorizes altered audit protocol unless explicitly bound/approved. |
+
+A global `APIRevision` bump changes the revision included in Plan identity and `Plan.ValidateShape` currently accepts only one constant; it can invalidate old Plan/Approval. Therefore “bump the version” is not a compatibility design. Exact names/DTO/signature coexistence require Owner approval and a separate contract proposal.
+
+## Resource budget and proof boundary
+
+Current proposal makes no numeric resource cap an approved requirement. Define `Lrow` (maximum bytes of projected values per row), `B`, `W`, `C`, `T`, `H`, `F` (filename bytes), `D` (schema metadata), `Q` (queue), `R` (runtime/driver/cache), and `K` (committed pages). Candidate outbox API has Q=0 and does not retain receipts in app heap. Required upper-bound shape:
+
+`AppLive <= fixed + α·B·Lrow·Ccopies + β·W·Lvalue + metadata(T,C,D) + approvalIndex(H,F) + runtime/driver(R)`.
+
+This is N-independent only if metadata, approval directory scan, row/value bytes, and runtime/driver terms are separately bounded or explicitly excluded from the claimed AC. Receipt storage in target DB remains disk Θ(K); OS cache is separately reported. No complete process RSS bound has been proven.
+
+- Existing validated maxima: Apply `B≤1000`; worker count `W≤16`; reader requested pages ≤10000 but lookahead allocations are one item larger. These do not bound L/T/C/H/D.
+- Approval history: retain duplicate-plan ambiguity protection but enumerate directory in fixed `ReadDir(n)` chunks, sum entry count and name bytes, fail before any target write if `H > Hmax` or `F > Fmax`. Proposed values only: `Hmax=10,000`, `Fmax=4 MiB`; test worst-case names and directories. The bound must apply before accumulating entries; simply call `ReadDir(0)` then check is not bounded.
+- Proposed but unapproved strict-mode caps to investigate: `B≤64`, `W≤16`, `Lrow≤64 KiB`, `C≤32`, `T≤128`, `H≤10,000`, `F≤4 MiB`, schema metadata ≤16 MiB, Q=0. These are **PROPOSED — OWNER APPROVAL REQUIRED**, not product defaults or demonstrated safe budgets. Their product implies multi-copy page memory and must be measured; if too costly, lower caps or define less ambitious working-set claim.
+- Single-value limits must be enforced before materializing large values where possible (DB-side byte-length predicate/adapter support). Enforcing after driver has already copied an unbounded blob is too late to prove a hard peak. Driver/native engine internal memory may still depend on value size and DB implementation; either bound it experimentally/contractually or exclude it from application-heap claim honestly.
+- Plan scopes and schema enumeration must stop at caps before retaining unbounded maps/slices; otherwise T/C/D terms remain unbounded. Error/Issue aggregation must stay category-bounded or cap distinct column locations.
+- Go runtime/GC and OS cache are not strict B×W variables. A data-working-set asymptotic claim can be proven from object lifetimes; an absolute process RSS guarantee cannot be claimed without a separately approved resource envelope and platform runtime evidence. GOMEMLIMIT is a soft runtime target, not a proof.
+
+## Design-level failure-injection plan (not executed)
+
+All rows below are **planned**, not passing tests. A prototype/model check was not run. Production Go tests, real SQLite/MySQL outbox transaction probes, crash/restart/power-loss tests, and platform filesystem tests remain UNVERIFIED.
+
+| # | Initial state / injection | Expected DB state | Audit state/error | Continue? Retry? | Verification / contract |
+|---:|---|---|---|---|---|
+| 1 | PREPARED absent; fail before insert | no business change | no envelope/receipt; sanitized pre-write error | no | verify no Writer/UPDATE; m1a gates preserved |
+| 2 | fail after PREPARED, before data tx | PREPARED only | run incomplete | stop; no data retry | reopen DB and inspect exact run/batch; new API only |
+| 3 | fail before Commit / Update error | business tx rolled back | PREPARED, optionally ABORTED; no COMMITTED event | stop; no automatic retry | SQL readback and outbox transaction log |
+| 4 | CommitUnknown | atomic all-or-none business+COMMITTED event | same-primary query: present=>committed; unresolved=>UNKNOWN | never blind retry | inject commit-before/after-durable acknowledgement |
+| 5 | process crash after Commit success before caller return | business+receipt both persist if configured durable | run unsealed; receipt discoverable | never rerun Apply | child-process kill at exact seam; restart DB recovery |
+| 6 | outbox INSERT partial/SQL error/ENOSPC | same tx rollback or CommitUnknown | no independent half-file; no success without committed row | stop | forced DB quota/full + target/outbox readback |
+| 7 | file fsync / parent fsync failure | no separate receipt file; DB durability depends engine config | unsupported/unverified sync => reject before Apply; commit error=>unknown | stop | SQLite settings + fsync fault harness; MySQL durability probe |
+| 8 | delete middle outbox event | business rows unaffected after tampering | chain gap/mismatch => tampered/incomplete; external seal detects | no reapply | verifier checks contiguous sequence and anchor |
+| 9 | truncate tail / omit seal | database may contain committed prefix | no seal=>INCOMPLETE; anchored complete run with missing tail=>TAMPERED | no | compare external anchor final sequence/hash |
+| 10 | replace RunID or replay another run records | business state unchanged | run/plan binding or signature mismatch | no | canonical envelope and unique RunID tests |
+| 11 | modify seal/signature | business state unchanged | invalid signature/anchor mismatch | no | independent public-key verification |
+| 12 | rewrite complete hash chain | business state unchanged | hash-only chain could be recomputed; external signed anchor must reject altered root | no | attacker with no anchor key rewrites all DB rows |
+| 13 | internal sink blocks/slow | current batch uncommitted while INSERT blocks | ctx-aware driver returns; otherwise call may hang (no hard deadline guarantee) | do not abandon goroutine | slow DB and cancellation tests, monitor same caller goroutine |
+| 14 | context cancellation | precommit rollback; after commit attempt unknown possible | canceled/unknown as appropriate | no automatic retry | assert no detached goroutine, writer closes when driver returns |
+| 15 | repeated RunID/batch ID | unique constraint rejects before conflicting records | conflict; no overwrite | no | deterministic duplicate injection |
+| 16 | symlink/hardlink/path replacement | unsupported path refused before writer | no audit path created | no | native Linux/Windows path identity and race tests; until then private trusted directory assumption |
+| 17 | approval directory > Hmax/Fmax | no target transaction opened | sanitized resource-limit refusal; approval ambiguity check preserved | no | directory with Hmax+1 entries; chunked scan memory cap |
+| 18 | value/row > Lrow | preflight/reader refuses before data update | resource-limit error; no receipt | no | oversized text/blob on SQLite/MySQL; ensure not copied unbounded before check |
+| 19 | slow DB/outbox backpressure | no next batch begins; current tx state follows DB | cancellation/failure/unknown | no automatic retry | event ordering and connection stats |
+| 20 | second batch failure after first committed | first business+receipt atomic; second rolled back/unknown | partial/unsealed run, first receipt remains | no rerun | readback both tables, verify exact chain and no false Complete |
+
+## Other Issue #13 evidence gaps
+
+Still not accepted as complete: only one 1M trial per configuration; no 10k–1M CLI subprocess scale matrix; native Windows/macOS performance absent (Windows CI tests are not perf; cross-build is not native); full-flow B/op/allocs/op missing; PR70 preflight TMPDIR/cgroup P2; child env/output sanitization; unvalidated environment prose; 100ms sample misses short peaks; phase-5 sampler memory grows with duration; evidence path/source-hash coupling; no MySQL CLI E2E (adapter CI is not CLI). Reassess each against the original Issue text, do not expand to #14 or erase required AC.
+
+## Implementation boundary and authorization
+
+This ADR recommends only a candidate. **No production files are authorized.** Prohibited without explicit further authorization: `pkg/contracts/**`, `APIRevision`, runner Apply/receipt semantics, DB writer/commit behavior, Worker Pool, CLI write gates, History production format, BatchSize defaults, release/tag. No #14 checkpoint/resume/exactly-once work.
+
+If Owner approves S2/A3 and required infrastructure, estimate at least four sequenced packages: (1) contract/approval coexistence proposal; (2) DB outbox schema and transaction owner implementation; (3) runner/CLI streaming API integration; (4) external audit anchor/seal/verifier + platform security, with independent QA/Security. Split/serial ordering must follow actual file ownership. This is an estimate, not authorization.
+
+## Owner decision signature block
+
+No approval is recorded here. The Issue Owner must explicitly select or reject each ADR-01..ADR-10; empty signature means pending.
+
+- Issue Owner decision reference/comment: **PENDING OWNER DECISION**
+- AC scope (S1/S2/S3): **PENDING OWNER DECISION**
+- Audit guarantee (A1/A2/A3): **PENDING OWNER DECISION**
+- Outbox/schema change: **PENDING OWNER DECISION**
+- External trust anchor: **PENDING OWNER DECISION**
+- Consumer model: **PENDING OWNER DECISION**
+- Platform/storage support: **PENDING OWNER DECISION**
+- Numeric memory/disk/history limits: **PENDING OWNER DECISION**
+- API/Plan/Approval compatibility: **PENDING OWNER DECISION**
+- Production file authorization: **PENDING OWNER DECISION**

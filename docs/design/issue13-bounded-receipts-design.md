@@ -1,6 +1,8 @@
 # Issue #13：严格内存上界与批次回执架构评审
 
-**状态：架构调查已形成候选方案；生产实现未授权。裁决：DESIGN BLOCKED（AC范围、审计原子性及资源界契约尚未决；独立Security Review未完成）。**
+**状态：候选架构与Owner决策包已形成；生产实现未授权。裁决暂为 DESIGN BLOCKED，等待本次新 Head 的独立架构/Security Review。全部产品决策仍为 `PENDING OWNER DECISION`。**
+
+本文件 §5–§15 的早期候选方案曾讨论提交后外部Sink；该模型现由 `docs/design/issue13-architecture-decision-record.md` 中 A3（目标数据库同事务 outbox）替代为推荐候选。ADR是当前方案来源；本文件中与A3冲突的旧 sink 时序/测试表应视为历史分析，不是待实现设计。
 
 - 仓库基线：`9d6e03627c15fa31df051b16370f79e895e96bcc`（main，与 origin/main 一致；调查时工作树干净）。
 - Issue #13：OPEN；PR #70：MERGED，head `b82bb6d65fce0d4ec7ca61787d7ac19435b15bdb`，merge `9d6e03627c15fa31df051b16370f79e895e96bcc`。
@@ -99,7 +101,7 @@ Phase-5 sampler不是产品路径，但每100ms将资源记录 append进`rows`�
 
 **C：可作 B/D 的 sink 实现，不宜单独作为 M2 恢复协议。** 本地 append-only 文件或 SQLite audit 表将完整 receipts 外置，heap可有界，磁盘仍 Θ(K)。外部 DB+target DB 无分布式事务；先提交数据再写 receipt 有“已写无审计”窗口，先写 intent 再提交则 crash/CommitUnknown留下待判定 intent。只有同一个目标 DB 的 receipts 表与 data UPDATE 在一个 tx 中原子提交才消除这类窗口，但需改变 Writer、目标 schema/权限、Verify/CLI、保留策略，且对现有 SQLite/MySQL 适配、目标只读门禁有跨模块影响；不等于支持 checkpoint/resume/exactly-once。磁盘满必须在 Commit 前保证审计容量，或事先记录 intent 并把不确定状态作为合法结果；不能在 commit 成功后因写 receipt 失败仍宣称完整审计。
 
-**D：推荐作为产品演进形态，但不是无条件最终实现选择。** 保留 `Apply` 旧行为用于兼容；提供新 streaming/durable API，返回小型摘要（plan id、完整标志、confirmed count/rows、unknown flag、sink outcome）并逐批消费完整 receipt。CLI需显式选用新路径，不能静默丢 receipts。若要“完整审计”，新路径必须要求可靠 sink；sink输出存储 O(K) 磁盘，或规定调用者消费责任。必须通过冻结契约审查明确新旧语义、错误返回与 CommitUnknown。这个 recommendation 确需合同决策，故此文没有实施。
+**D：兼容演进候选。** 保留 `m1a-v1 Apply` 全量回执语义（仍O(K)），只在Owner批准后增设独立 streaming surface。推荐的回执记录不是外部 callback/file sink，而是与每批业务更新处于同一目标数据库事务域的预置 outbox；具体事务状态、Seal/Trust Anchor、平台限制及兼容性见 `docs/design/issue13-architecture-decision-record.md`。新API只可返回小摘要并提供有界分页审计读取；CLI必须显式选择，不自动回退旧API。任何新接口/approval binding/API revision 仍需共享契约评审与授权。本建议不改变Issue AC作用范围，也不构成实现批准。
 
 ## 6. 推荐数据流与事务时序（拟议，不是现状）
 
@@ -107,31 +109,29 @@ Phase-5 sampler不是产品路径，但每100ms将资源记录 append进`rows`�
 sequenceDiagram
   participant C as CLI/caller
   participant R as Runner
-  participant W as Writer/DB
-  participant S as Receipt Sink
-  C->>R: StreamingApply(plan, explicit intent, bounded batch)
-  R->>R: validate shape + signed approval + preflight + full dry-run
-  loop each batch
-    R->>W: Begin + Update
-    R->>W: Commit
-    alt Commit confirmed
-      W-->>R: success
-      R->>S: append confirmed BatchReceipt (sync; bounded)
-      S-->>R: durable/accepted or error
-    else Commit outcome unknown
-      W-->>R: ErrCommitUnknown
-      R->>S: append OutcomeUnknown(batch position, no success claim)
-      S-->>R: durable/accepted or error
-      R-->>C: stop; unknown; no retry
-    else definite pre-commit failure
-      W-->>R: failure + rollback where valid
-      R-->>C: stop; prior confirmed prefix remains
+  participant DB as Target DB
+  participant A as External audit anchor (terminal seal only)
+  C->>R: Versioned streaming Apply + explicit write intent
+  R->>R: Plan + signed approval + outbox capability preflight + full dry-run
+  R->>DB: Persist RunEnvelope / BatchPrepare before data transaction
+  loop each non-empty batch
+    R->>DB: BEGIN; business UPDATEs + COMMITTED event/outbox in same tx
+    R->>DB: COMMIT
+    alt Commit returns success
+      DB-->>R: data and receipt atomically committed
+    else underlying Commit attempt returns error
+      DB-->>R: CommitUnknown; stop, never retry data
+      R->>DB: optional authoritative lookup by BatchID after recovery
+      Note over R,DB: If unavailable/inconsistent, remain UNKNOWN
     end
   end
-  R-->>C: bounded summary + sink handle/status
+  R->>DB: append terminal DB RunSeal (only if complete)
+  R->>A: submit signed terminal digest; anchor stores append-only receipt
+  A-->>R: durable signed anchor receipt, or ANCHOR_PENDING
+  R-->>C: bounded summary + audit status; never silent fallback
 ```
 
-若 sink 失败发生在已确认 Commit 后，行已提交而完整 receipt 外送失败。新 API 必须返回**非成功**、`Complete=false`、confirmed totals 仍如实反映，但不能提供已丢的全部 receipt；是否用同库 transaction/outbox 消除此差异是需另行授权的关键决策。Consumer取消/失败不能撤销先前 commit。Unknown事件本身若无法持久化，也不能假称审计完整；过程只能明确返回 unknown + audit incomplete，并停止。
+业务数据与该批 outbox 记录仅在同一目标DB事务域时具有原子性；外部anchor只锚定终结hash，不与DB声称原子。CommitUnknown时不重试；同库行在事务恢复后可提供批次事实，但读取不可用时仍UNKNOWN。Anchor失败意味着数据库可能已完成而整次审计尚未 `COMPLETE_VALID`，返回 `AUDIT_INCOMPLETE/ANCHOR_PENDING`，不得声称锚定完整。无任意Consumer callback、无进程内累计receipt队列。完整状态机和 failure matrix 以 ADR 为准。
 
 ## 7. 审批与提交未知安全模型
 
@@ -145,17 +145,17 @@ sequenceDiagram
 
 - `m1a-v1` 不得原地改变 `ApplyReport.Committed` 类型或删除其全量语义；否则调用者可静默丢回执，是破坏性契约变更。
 - 备选：单纯把全局 `APIRevision` 从m1a改成新值并不自动保持兼容：`Plan.ValidateShape`只接受当前revision，且revision参与Plan.ID/审批绑定，旧Plan可能被拒绝或重算出不同审批ID。契约提案必须明确双版本共存/旧Plan及审批验证策略；优先评估单独版本化streaming接口/DTO而非破坏性替换常量。新增共享surface仍须契约评审与明确授权，本轮没有授权。
-- CLI是旧 API消费者；要满足流式内存目标必须经显式迁移到新路径，并把详细回执写入用户选择且权限受控的 sink，或要求同步消费者。不能只把 `applySummary` 改为打印计数、丢弃逐批回执。
+- CLI在Owner决定前保持旧API行为。只有显式批准新契约后，CLI才能显式选择streaming/outbox协议；详细回执通过有界分页读取同库outbox。不得新增任意用户路径或回调，也不能只打印计数而丢掉逐批审计。
 - 只有新 streaming 端到端路径在有界 sink 队列下可以主张“应用 heap 的批次维度不随 K 增长”；旧 API仍 O(K)，故若原 AC针对 MaskRiver 全部 Apply API，则全局 AC仍不通过。应由 Issue owner正式判定原AC的作用域，不得通过文案规避。
-- 对外审计完整性与严格内存上界可以同时成立（流式写入 durable sink），但磁盘 O(K)，且跨数据库提交/审计原子性尚未设计证明。仅调用回调并不自动获得持久审计。
+- 候选A3通过“业务行+outbox行同目标DB单事务”提供每批原子性，磁盘仍O(K)；跨目标DB、文件、外部anchor均不属于该事务。外部anchor是独立最终封存，缺失时Run不完整，不宣称事务原子。SQLite/MySQL、sync设置、DB引擎和文件系统支持尚未实测/证明。
 
 ## 9. 资源预算与复杂度验收定义
 
 当前可证明的结构上界是返回逻辑长度，而非完整backing存储或固定字节值：Apply页≤B≤1000但Reader最多保留B+1 lookahead；workers≤16；Verify页≤256/side但最多保留257；sample≤10000/scope但最多保留10001；审批目录`ReadDir`为O(H)；Row.Value payload、scope/table count、schema/D容量、SQLite cache、Go runtime均未纳入固定上限。[代码]
 
-候选新 API 目标（设计假设）：
+候选新 API 目标（设计假设；所有数值/范围需Owner批准）：
 
-`HeapLive <= H0 + α·B·C·Lmax + β·W·Lmax + γ·Q·R + M(T,C,D) + A(H,filenameBytes) + G(runtime)`, `Q≤1`（同步消费/容量1），不含完整 receipts。该式只有在审批目录项被有界索引/明确上限约束时才是对N无关的预算；目前 `ReadDir` 的O(H)并未解决。若要声称绝对bytes bound，必须另外设并验证Lmax、T/C/D限额及driver/native cache预算；原AC若仅指batch×workers的数据工作集，需定义这些固定元数据项允许存在。
+`HeapLive <= H0 + α·B·C·Lrow·copies + β·W·Lvalue + M(T,C,D) + A(H,filenameBytes) + G(runtime/driver)`, 无外部Q队列（Q=0），不含完整 receipts。保留目录歧义检查但须改为固定chunk枚举并设置H/F上限，不能`ReadDir(0)`后再检查。若要声称绝对bytes bound，必须另外设并验证Lrow/T/C/D限额及driver/native cache预算；所有候选数值见ADR并标记PROPOSED。原AC如只针对应用数据working-set，必须由Owner明确；不能称进程总RSS已严格受B×W限制。
 
 持久 store容量约 `K*(record header + receipt fields + integrity metadata) + index/WAL`，随批次数增长。不得宣称总资源有界；应提供可预检容量、保留/轮替政策或磁盘满失败计划，但不能在缺少可靠审计时静默回退到内存数组。
 
@@ -169,21 +169,11 @@ sequenceDiagram
 
 所有上述实验均为计划，**本轮未执行原型或新增测量**。历史10k/100k/1M Phase5数据不被改写/重算成新架构结果。
 
-## 11. 失败注入矩阵（拟议）
+## 11. 失败注入矩阵（当前A3候选）
 
-| 点 | 可能已提交 | 确定/未知 | 可安全重试？ | 审计/成功报告要求 |
-|---|---|---|---|---|
-| Receipt对象构造前、Begin/Update前失败 | 无当前批；之前前缀已提交 | 当前批确定未提交（按Writer契约/可回滚错误） | 不自动重试；人工新运行还需新检查 | 记录此前前缀；不声称全局回滚 |
-| Commit调用前故障 | 当前事务未提交，Rollback尝试 | 未提交仅当驱动/Writer明确保证；否则分类未知 | 不自动 | 不生成 confirmed receipt |
-| Commit成功后、通知Consumer前崩溃 | 当前批已提交 | 数据确定已提交，但进程外部未获通知 | 不安全重跑；无自动恢复承诺 | 消费式 API存在不可消除 crash gap；需要持久 outbox/同库原子策略才能审计完整 |
-| Sink写入失败（Commit已成功） | 当前批已提交 | 数据确认，receipt交付失败 | 不自动 | Run失败且 audit incomplete；不得 Complete=true。只能用事先设计的同库原子receipt机制消除此窗口 |
-| Receipt已 durable，调用者未收到 ack | 当前批已提交（若写入序在commit后） | sink有receipt；调用者认知缺失 | 不自动重放 | 用唯一批次键/序号可识别重复通知，但这不是数据 exactly-once |
-| CommitUnknown | 可能已提交也可能未提交 | 未知 | 禁止自动 retry | 发 unknown 事件若可行；无证据时不能称完整审计/成功 |
-| Consumer取消/背压 | 已提交前缀存在；当前批取决于时点 | stop前的确认前缀确定 | 不自动 | 同步阻塞限制吞吐；ctx必须传播，退出等待必须测试；不丢历史 |
-| 持久盘满/权限拒绝 | 若先commit则当前已提交；若预写intent策略则可能未开始 | 取决写入顺序 | 不自动 | 必须规定容量/预留和失败状态；不得把文件错误吞掉后继续 |
-| 进程异常终止 | 可能有已提交但未通知批次 | 无外部原子证据则未知 | 不安全 | 只允许描述已持久事件；不要承诺恢复、checkpoint或exactly-once |
+本节的旧外部 callback 场景已由A3 outbox候选替代。完整20项故障矩阵、注入点、数据库状态、审计状态、重试规则及验证方法见 [`issue13-architecture-decision-record.md`](issue13-architecture-decision-record.md#design-level-failure-injection-plan-not-executed)。这些全部是设计计划，**未执行**。
 
-避免二次脱敏依赖不重试/旧计划源快照绑定/目标当前值不再匹配 full dry-run；不得新增基于估算的“自动跳过已完成批次”。
+关键不变量：同一目标事务中的业务更新与 `COMMITTED` outbox event原子提交；commit前故障不得留下业务行；底层Commit调用尝试后错误一律保守UNKNOWN且不重试；缺失终结seal/外部anchor只能标记不完整，不能推断完整成功。A3依赖同数据库事务、durability设置和受支持平台尚待实现与验证，不是当前产品行为。
 
 ## 12. 兼容、安全与事务验收
 
@@ -227,24 +217,22 @@ sequenceDiagram
 
 ## 15. 最终架构裁决
 
-**DESIGN BLOCKED。** 这不是否定严格内存目标，而是现证据不足以把候选 D 认定为完整可验收方案。独立架构审查发现并确认了目录扫描 O(H) 与资源/审计语义遗漏；这些已在当前文档修正。独立 Security Review 未完成（go-reviewer任务因provider Insufficient Balance失败，不能算通过）。
-
-推荐 D 仍是可讨论方向：维持旧 `m1a-v1 Apply` 全量回执兼容语义，另立版本化streaming API。它可将**新API的进程heap receipt保留**降至与K无关，但前提是sink同步/队列有界；旧API仍O(K)，故不能让全局Apply AC PASS。若要求完整durable audit，普通Commit后sink存在崩溃窗口；同库outbox、事务内receipt或明确允许审计不完整三者的选择尚未决，不能以“合同变更授权”替代这个安全/事务决策。审批目录O(H)也必须在新工作流预算里受控，且L、表/列/metadata/driver/runtime范围需由AC owner定义。Issue owner须先决定原AC作用范围及审计保证、资源界定义；之后再进行独立Security Review和契约提案。本文不是实施授权，也不声称原始AC已PASS。
+**本次ADR是候选设计，不是Owner批准或实现证明。** Current verdict remains `DESIGN BLOCKED` until fresh independent Architecture/Security reviews on the final current head assess the A3/outbox and trust-anchor proposal. Issue Owner must decide AC scope and audit level; all ADR rows are pending. The legacy API still has Θ(K) memory. New streaming receipt retention may be independent of K, but only if the approval directory, scopes/metadata and row payload have enforceable bounds and the claim is scoped to application working set. A3 removes the per-batch commit→receipt gap only when target rows and outbox share a proven durable transaction. External terminal anchoring remains separate; missing anchor means incomplete, not successful. This document authorizes no production implementation and does not claim Issue #13 AC passes.
 
 最终问题答复：
 1. 当前 Apply 内存复杂度：`O(K + B·C·L + T + C·(sampleLimit+1) + D + H + filenameBytes + runtime/cache)`；K在稠密可写数据时Θ(N/B)，另有审批目录O(H)扫描等规模项。
 2. 否，不止 Receipt：Plan/evidence随scope/table/sample上限增长，preflight需数据库元数据，Apply页/副本随B·C·L，CLI摘要随表数，Verify issues随列数，runtime/native cache不受B×W严格限定。明确没有发现按每个数据行累计的持久映射或Validate全行集合。
 3. 是；当前具体的`[]BatchReceipt`返回表示需要K个非零尺寸slice元素，其backing array随K线性增长；不能通过缩小元素常数消除这一表示下界。
 4. 不改变冻结公共API、不改变结果语义时，没有真正解决所有调用方的方案。内部可增加仅服务新路径的stream实现，但原API仍Θ(K)，不等于完成全局AC。
-5. 候选推荐 D（新流式API + 有界sink），但仅作为待决方向；durable sink是否足以审计，取决于尚未确定的原子性/崩溃协议。
-6. 复用现有审批、dry-run、单批事务；仅Commit成功后才产生 confirmed事件；CommitUnknown永不自动重试并明确 unknown；Sink失败后停止，不宣称完整。跨库审计原子性未解决，必须先设计/批准同库事务outbox或明确“不保证完整审计”。
+5. 候选 D 保留m1a全量回执并新增streaming surface；新路径候选采用同一目标事务内的outbox，而非任意Sink。仍须Owner批准且独立Security复核。
+6. 候选协议在同一目标数据库单批事务中同时提交业务更新与COMMITTED outbox event；仅Commit返回成功或同一权威DB恢复后可证明该event存在时确认，CommitUnknown不重试。外部Seal/Anchor未持久确认前Run不可称完整审计；DB和Anchor之间不声称原子。A3、durability及Anchor依赖Owner审批与实现验证。
 7. 按当前共享接口演进规则，需契约修订审查；若新增public DTO/Workflow方法，应升级APIRevision（精确新revision由提案决定），旧m1a保留。
-8. 当前不能判定#13原始内存AC PASS。即使限定新API，新路径的有界heap receipts只解决其中一项；审批目录、资源范围、audit崩溃窗口及其他1M重复/CLI/platform/allocation证据仍待定。
-9. 基础版本化契约提案、Runner/DB流式实现、CLI与持久sink集成至少3个顺序工作包；若同库outbox跨数据库模块需第4包。估算，不代表授权。
+8. 当前不能判定#13原始内存AC PASS。A3候选若真实同库事务可解决每批数据/receipt裂缝，但批准范围、目录/metadata/row-byte界、Durability和外部Run Seal、以及其他规模/CLI/platform/allocation证据未通过实现验证。
+9. 估计至少4个顺序工作包：契约/审批共存提案；DB outbox迁移+事务能力；Runner/CLI streaming集成；独立anchor/seal/verifier与平台验收。估算，不代表授权。
 10. 未获授权前，绝不能改 `pkg/contracts/**`、APIRevision、`internal/runner/execute.go`事务/回执语义、`internal/db/write.go` commit策略、`internal/runner/parallel.go` Worker Pool、`cmd/maskriver`授权路径、`internal/history`持久审计、release/tag/BatchSize默认值。
 
 ### 独立评审状态
 
 独立架构审查记录：`reviewer`在`ee3b445daba30d03bfcdedb8e7d8807a2b945793`审阅文档与来源代码，发现2项P1 readiness/遗漏O(H)及3项P2；作者修订。对`ea89ecc8d45cf0e2f32a02da3f9f350b89b2f585`的follow-up确认P0=0/P1=0，提出4项P2（K需按表求和、预算公式加O(H)、移除独立信息论表述、区分Commit尝试前后错误）。当前版本采纳这些修正。对`97d781ebf8a32cc644d5a3658b2fe0cf497ea2b8`的独立架构复核确认P0=0/P1=0，提出2项P2：经核实候选heap公式实际已包含`A(H,filenameBytes)`，该项与文档矛盾、不采纳；首轮review P2数量误记有效并已纠正。其报告：`/home/haoyue/.pi/agent/sessions/--home-haoyue-Project-maskriver--/subagent-artifacts/97ddb842-806b-409c-a272-80d0580bbc2e_reviewer_output.md`。
 
-独立Security Review：go-reviewer在初次尝试时因provider `Insufficient Balance`失败（无结论）；随后独立`reviewer`只读审阅`97d781ebf8a32cc644d5a3658b2fe0cf497ea2b8`，结果 **P0=0、P1=4、P2=1，BLOCK候选D生产实现**。P1：① Commit成功到durable sink确认之间崩溃/取消/ENOSPC窗口及ack语义；②审计完整性/篡改验证缺乏run envelope、终结seal及信任锚；③任意同步sink可忽略ctx或无限阻塞，队列有界不代表取消有界；④持久sink路径alias/symlink/no-clobber/权限/短写/fsync/磁盘预算边界未定义。P2：全局APIRevision bump会使旧Plan.ValidateShape拒绝旧revision并改变Plan.ID/审批绑定，本文现已记录兼容约束，契约提案必须设计双版本共存。Security报告：`/home/haoyue/.pi/agent/sessions/--home-haoyue-Project-maskriver--/subagent-artifacts/ff88ff9e-4c4e-4e8e-9a98-cf06cd9c6c8a_reviewer_output.md`。审查范围为设计文档与相关contracts/runner/db/history/CLI/test源码；无代码运行、无外部Issue/PR核验。以上报告审阅Head均为`97d781...`，不是本次后续Head的审查。P1尚未解决，故保持DESIGN BLOCKED，PR不得合并。不得将PR70 review冒充本设计review。
+此前Security Review在`97d781ebf8a32cc644d5a3658b2fe0cf497ea2b8`的P0=0/P1=4/P2=1结论及原始证据关联见 [`docs/reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md`](../reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md)。其中P1针对旧的提交后外部Sink候选；本次A3/outbox修改是新设计，不得据此宣布原P1已关闭。当前PR最终head的Architecture/Security Review仍须重新执行，逐项评估outbox、seal/trust anchor、Consumer边界和目标DB路径安全。所有此前go-reviewer余额失败均无审查效力。
