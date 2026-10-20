@@ -363,7 +363,10 @@ func verifyOutboxTableShape(ctx context.Context, q rowQueryer, table struct {
 			return dbError(err)
 		}
 		if hidden != 0 {
-			continue
+			// A generated or hidden column is never part of the migration shape.
+			// Reject it instead of skipping it, otherwise a table could be altered
+			// while still matching the expected visible columns.
+			return contracts.ErrUnsupported
 		}
 		got = append(got, outboxColumn{name: name, typ: strings.ToUpper(typ), notNull: notNull, pk: pk})
 	}

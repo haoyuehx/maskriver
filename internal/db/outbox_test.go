@@ -972,6 +972,26 @@ func TestOutboxShapeTamperRejected(t *testing.T) {
 	}
 }
 
+func TestOutboxGeneratedColumnTamperRejected(t *testing.T) {
+	opts, path := outboxTestOptions(t)
+	installOutbox(t, opts)
+	conn, err := sql.Open("sqlite", "file:"+path+"?mode=rw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(`ALTER TABLE maskriver_outbox_run ADD COLUMN extra TEXT GENERATED ALWAYS AS (upper(protocol)) VIRTUAL`); err != nil {
+		_ = conn.Close()
+		t.Skipf("SQLite build does not support generated columns: %v", err)
+	}
+	_ = conn.Close()
+	if _, err := OpenOutbox(context.Background(), opts); !errors.Is(err, contracts.ErrUnsupported) {
+		t.Fatalf("generated column accepted: %v", err)
+	}
+	if err := InstallOutboxSchema(context.Background(), opts); !errors.Is(err, contracts.ErrUnsupported) {
+		t.Fatalf("idempotent install accepted generated column: %v", err)
+	}
+}
+
 func TestOutboxReservedTables(t *testing.T) {
 	for _, name := range OutboxTables() {
 		if !IsOutboxTable(name) {
