@@ -2,6 +2,8 @@ package contracts
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"time"
 )
@@ -50,8 +52,9 @@ func (s RunState) Valid() bool {
 }
 
 // BatchOutcome is the per-batch classification. The distinction between a
-// confirmed commit, an unknown commit, a known pre-commit failure and a missing
-// local receipt is part of the contract and must not be collapsed.
+// confirmed commit, an unknown commit, an attempted-but-failed commit, a known
+// pre-commit failure and a missing local receipt is part of the contract and
+// must not be collapsed.
 type BatchOutcome uint8
 
 const (
@@ -62,7 +65,12 @@ const (
 	// BatchCommitUnknown means the underlying Commit was attempted and its
 	// outcome is ambiguous. It must never be retried automatically.
 	BatchCommitUnknown
-	// BatchFailedBeforeCommit means a known failure before the commit attempt.
+	// BatchCommitFailed means Commit was attempted and returned a known failure,
+	// so the transaction did not commit. It is distinct from a failure before
+	// any commit attempt.
+	BatchCommitFailed
+	// BatchFailedBeforeCommit means a known failure occurred before the commit
+	// attempt (validation, update, rollback).
 	BatchFailedBeforeCommit
 	// BatchAuditIncomplete means data may be committed but the local receipt
 	// state is not confirmed (for example a post-commit sink failure). It can
@@ -73,28 +81,30 @@ const (
 // Valid reports whether o is a defined outcome other than the zero value.
 func (o BatchOutcome) Valid() bool {
 	switch o {
-	case BatchCommitted, BatchCommitUnknown, BatchFailedBeforeCommit, BatchAuditIncomplete:
+	case BatchCommitted, BatchCommitUnknown, BatchCommitFailed, BatchFailedBeforeCommit, BatchAuditIncomplete:
 		return true
 	default:
 		return false
 	}
 }
 
-// CommitClassification classifies a WriteTx.Commit result for the streaming
-// path. Implementations must return ErrCommitUnknown only when the outcome is
-// genuinely ambiguous; every other non-nil error is a known failure.
+// CommitClassification classifies the result of a Commit that was actually
+// attempted. It never encodes "not attempted": callers must pass attempt state
+// separately to ClassifyBatch, because an error value alone cannot prove that
+// no commit was tried.
 type CommitClassification uint8
 
 const (
-	CommitNotAttempted CommitClassification = iota
-	CommitSucceeded
+	CommitSucceeded CommitClassification = iota + 1
 	CommitOutcomeUnknown
 	CommitFailed
 )
 
-// ClassifyCommit maps a Commit error to the streaming classification. It does
-// not inspect driver text, so it cannot invent a confirmed or unknown outcome.
-func ClassifyCommit(err error) CommitClassification {
+// ClassifyCommitResult maps the error returned by an attempted Commit to the
+// streaming classification. It does not inspect driver text, so it cannot
+// invent a confirmed or unknown outcome. Callers that never attempted Commit
+// must not call this function.
+func ClassifyCommitResult(err error) CommitClassification {
 	switch {
 	case err == nil:
 		return CommitSucceeded
@@ -105,12 +115,16 @@ func ClassifyCommit(err error) CommitClassification {
 	}
 }
 
-// ClassifyBatch combines the commit classification with the local receipt
-// delivery result. A committed batch whose receipt is not confirmed is
-// BatchAuditIncomplete, never BatchCommitted; an unknown commit stays unknown
-// even if receipt delivery also failed.
-func ClassifyBatch(commit CommitClassification, receiptErr error) BatchOutcome {
-	switch commit {
+// ClassifyBatch combines whether Commit was attempted, the commit error and the
+// local receipt delivery result. A batch that never attempted Commit is
+// BatchFailedBeforeCommit; an attempted known failure is BatchCommitFailed; an
+// unknown commit stays unknown even if receipt delivery also failed; a
+// committed batch whose receipt is not confirmed is BatchAuditIncomplete.
+func ClassifyBatch(attempted bool, commitErr, receiptErr error) BatchOutcome {
+	if !attempted {
+		return BatchFailedBeforeCommit
+	}
+	switch ClassifyCommitResult(commitErr) {
 	case CommitSucceeded:
 		if receiptErr != nil {
 			return BatchAuditIncomplete
@@ -119,7 +133,7 @@ func ClassifyBatch(commit CommitClassification, receiptErr error) BatchOutcome {
 	case CommitOutcomeUnknown:
 		return BatchCommitUnknown
 	case CommitFailed:
-		return BatchFailedBeforeCommit
+		return BatchCommitFailed
 	default:
 		return BatchOutcomeUnknown
 	}
@@ -138,6 +152,11 @@ const (
 	// or the store could not be verified.
 	AuditStateIncomplete
 )
+
+// Valid reports whether a is a defined audit state other than the zero value.
+func (a AuditState) Valid() bool {
+	return a == AuditStateConsistent || a == AuditStateIncomplete
+}
 
 // StreamingBatchReceipt is one versioned receipt delivered through a bounded
 // page or an internal sink. It carries identifiers, counts and classification
@@ -270,6 +289,7 @@ type ResourceBudget struct {
 	MaxHistoryEntries   int
 	MaxHistoryNameBytes int64
 	MaxReceiptPage      int
+	MaxIssueCounts      int
 	MaxQueue            int
 	MaxProcessBytes     int64
 	MaxDiskBytes        int64
@@ -280,7 +300,7 @@ type ResourceBudget struct {
 func (b ResourceBudget) Validate() error {
 	if b.MaxBatchSize <= 0 || b.MaxWorkers <= 0 || b.MaxRowBytes <= 0 ||
 		b.MaxColumns <= 0 || b.MaxTables <= 0 || b.MaxHistoryEntries <= 0 ||
-		b.MaxHistoryNameBytes <= 0 || b.MaxReceiptPage <= 0 ||
+		b.MaxHistoryNameBytes <= 0 || b.MaxReceiptPage <= 0 || b.MaxIssueCounts <= 0 ||
 		b.MaxQueue < 0 || b.MaxProcessBytes <= 0 || b.MaxDiskBytes <= 0 {
 		return ErrInvalid
 	}
@@ -336,7 +356,7 @@ func (r StreamingApplyRequest) Validate(now time.Time) error {
 	if err := r.Budget.Validate(); err != nil {
 		return err
 	}
-	if err := r.Plan.ValidateShape(); err != nil {
+	if err := ValidatePlanIdentity(r.Plan); err != nil {
 		return err
 	}
 	if err := r.Budget.ValidatePlan(r.Plan); err != nil {
@@ -366,39 +386,92 @@ type StreamingApplySummary struct {
 	RunID            string
 	State            RunState
 	Audit            AuditState
+	BatchesTotal     int64
 	BatchesCommitted int64
 	BatchesUnknown   int64
 	BatchesFailed    int64
 	RowsCommitted    int64
 	ReceiptPageSize  int
-	Issues           []Issue
+	// IssueCounts is deliberately an aggregate, not a per-row or per-column
+	// issue list: the summary must stay bounded. Counts are grouped by
+	// status/code and capped by the caller's budget.
+	IssueCounts []IssueCount
 }
 
-// Validate rejects contradictory summaries. In particular a complete run must
-// have consistent local receipts and no unknown or failed batches, so a missing
-// receipt or ambiguous commit can never be reported as success.
-func (s StreamingApplySummary) Validate() error {
+// IssueCount is one category-level issue aggregate. It carries no column
+// reference, sample, message or key, so aggregation cannot leak identifiers or
+// grow with the number of affected columns.
+type IssueCount struct {
+	Status Status
+	Code   IssueCode
+	Count  int64
+}
+
+// Validate rejects contradictory or unbounded summaries. In particular a
+// complete run must have consistent local receipts, no unknown/failed batches,
+// and observed batch outcomes that account for every attempted batch. A run
+// whose audit state is incomplete can never claim a consistent audit, and an
+// unknown commit can never be audit-consistent. Issue aggregation must fit the
+// budget's category cap.
+func (s StreamingApplySummary) Validate(budget ResourceBudget) error {
+	if err := budget.Validate(); err != nil {
+		return err
+	}
 	if s.Protocol != StreamingProtocolRevision || s.PlanID == "" || !ValidRunID(s.RunID) || !s.State.Valid() {
 		return ErrInvalid
 	}
-	if s.BatchesCommitted < 0 || s.BatchesUnknown < 0 || s.BatchesFailed < 0 || s.RowsCommitted < 0 || s.ReceiptPageSize <= 0 {
+	if s.BatchesTotal < 0 || s.BatchesCommitted < 0 || s.BatchesUnknown < 0 || s.BatchesFailed < 0 ||
+		s.RowsCommitted < 0 || s.ReceiptPageSize <= 0 || s.ReceiptPageSize > budget.MaxReceiptPage {
 		return ErrInvalid
 	}
-	if s.State == RunStateComplete && s.Audit != AuditStateConsistent {
+	if s.State == RunStateRunning {
+		if s.Audit != AuditStateUnknown && !s.Audit.Valid() {
+			return ErrInvalid
+		}
+	} else if !s.Audit.Valid() {
+		return ErrInvalid
+	}
+	if len(s.IssueCounts) > budget.MaxIssueCounts {
+		return ErrInvalid
+	}
+	for _, count := range s.IssueCounts {
+		if count.Code == "" || count.Count < 0 || !issueStatusValid(count.Status) {
+			return ErrInvalid
+		}
+	}
+	if s.BatchesCommitted+s.BatchesUnknown+s.BatchesFailed > s.BatchesTotal {
 		return ErrIncomplete
 	}
-	if s.State == RunStateComplete && (s.BatchesUnknown != 0 || s.BatchesFailed != 0) {
-		return ErrIncomplete
+	switch s.State {
+	case RunStateComplete:
+		if s.Audit != AuditStateConsistent || s.BatchesUnknown != 0 || s.BatchesFailed != 0 {
+			return ErrIncomplete
+		}
+		if s.BatchesCommitted != s.BatchesTotal {
+			return ErrIncomplete
+		}
+	case RunStateCommitUnknown:
+		if s.BatchesUnknown == 0 || s.Audit == AuditStateConsistent {
+			return ErrIncomplete
+		}
+	case RunStateAuditIncomplete:
+		if s.Audit == AuditStateConsistent {
+			return ErrIncomplete
+		}
 	}
 	if s.Audit == AuditStateConsistent && s.BatchesUnknown != 0 {
 		return ErrIncomplete
 	}
-	for _, issue := range s.Issues {
-		if issue.Code == "" {
-			return ErrInvalid
-		}
-	}
 	return nil
+}
+
+func issueStatusValid(status Status) bool {
+	switch status {
+	case Pass, Fail, Warning, Error:
+		return true
+	default:
+		return false
+	}
 }
 
 // ValidateReceiptPage checks page bounds and sequence continuity. expectedNext
@@ -443,15 +516,27 @@ func ValidRunID(id string) bool {
 }
 
 // ValidateStreamingApproval proves that approval is bound to exactly this plan
-// under the streaming protocol. It is a binding check only; the caller must have
-// already verified the record's signature, reviewer, revocation state and clock
-// through the history store. A legacy approval without a streaming binding is
-// rejected, so an m1a-v1 authorization is never silently upgraded.
+// identity under the streaming protocol. It verifies the unchanged m1a plan-ID
+// formula over the digests, the single strategy/key tuple and the ordered
+// table/column scopes.
+//
+// Two limits are deliberate and must not be overstated:
+//   - Signature verification, reviewer identity, revocation storage and clock
+//     skew remain the history store's responsibility. This function is not an
+//     authenticity check.
+//   - The signed record does not carry per-column Scope or NormalizationVersion
+//     strings, so those are bound only through the canonical Plan content. The
+//     caller must compare the Plan against the canonical plan produced by Main
+//     (the runner plan-binding check at WP3). Passing this validator is not a
+//     full content attestation of the plan.
+//
+// A legacy approval without a streaming binding is rejected, so an m1a-v1
+// authorization is never silently upgraded.
 func ValidateStreamingApproval(plan Plan, approval StreamingApproval, now time.Time) error {
 	if approval.BindingRevision != ApprovalBindingRevision {
 		return ErrUnsupported
 	}
-	if err := plan.ValidateShape(); err != nil {
+	if err := ValidatePlanIdentity(plan); err != nil {
 		return err
 	}
 	if approval.PlanID != plan.ID ||
@@ -489,6 +574,22 @@ func ValidateStreamingApproval(plan Plan, approval StreamingApproval, now time.T
 			}
 			index++
 		}
+	}
+	return nil
+}
+
+// ValidatePlanIdentity re-derives the unchanged m1a plan-ID formula
+// sha256(Revision + SourceSnapshotID + TargetID + SchemaDigest + ConfigDigest).
+// It catches a plan whose identity fields were edited without recomputing ID.
+// It does not bind fields outside that formula (for example per-column Scope and
+// NormalizationVersion); those require the canonical plan-content check.
+func ValidatePlanIdentity(plan Plan) error {
+	if err := plan.ValidateShape(); err != nil {
+		return err
+	}
+	sum := sha256.Sum256([]byte(plan.Revision + plan.SourceSnapshotID + plan.TargetID + plan.SchemaDigest + plan.ConfigDigest))
+	if hex.EncodeToString(sum[:]) != plan.ID {
+		return ErrConflict
 	}
 	return nil
 }

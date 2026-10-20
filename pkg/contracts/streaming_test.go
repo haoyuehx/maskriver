@@ -75,6 +75,7 @@ func streamingTestBudget() ResourceBudget {
 		MaxHistoryEntries:   10_000,
 		MaxHistoryNameBytes: 4 << 20,
 		MaxReceiptPage:      100,
+		MaxIssueCounts:      16,
 		MaxQueue:            0,
 		MaxProcessBytes:     1 << 30,
 		MaxDiskBytes:        1 << 30,
@@ -278,17 +279,19 @@ func TestStreamingReceiptPage(t *testing.T) {
 }
 
 func TestStreamingSummaryRejectsFalseComplete(t *testing.T) {
+	budget := streamingTestBudget()
 	valid := StreamingApplySummary{
 		Protocol:         StreamingProtocolRevision,
 		PlanID:           streamingGoldenPlanID,
 		RunID:            "0123456789abcdef0123456789abcdef",
 		State:            RunStateComplete,
 		Audit:            AuditStateConsistent,
+		BatchesTotal:     10,
 		BatchesCommitted: 10,
 		RowsCommitted:    100,
 		ReceiptPageSize:  50,
 	}
-	if err := valid.Validate(); err != nil {
+	if err := valid.Validate(budget); err != nil {
 		t.Fatalf("valid summary rejected: %v", err)
 	}
 
@@ -300,55 +303,102 @@ func TestStreamingSummaryRejectsFalseComplete(t *testing.T) {
 		{"complete with incomplete audit", func(s *StreamingApplySummary) { s.Audit = AuditStateIncomplete }, ErrIncomplete},
 		{"complete with unknown batch", func(s *StreamingApplySummary) { s.BatchesUnknown = 1 }, ErrIncomplete},
 		{"complete with failed batch", func(s *StreamingApplySummary) { s.BatchesFailed = 1 }, ErrIncomplete},
+		{"complete with unaccounted batches", func(s *StreamingApplySummary) { s.BatchesTotal = 11 }, ErrIncomplete},
 		{"consistent audit with unknown batch", func(s *StreamingApplySummary) { s.BatchesUnknown = 1 }, ErrIncomplete},
+		{"audit incomplete state with consistent audit", func(s *StreamingApplySummary) {
+			s.State = RunStateAuditIncomplete
+			s.Audit = AuditStateConsistent
+		}, ErrIncomplete},
+		{"commit unknown state without unknown batch", func(s *StreamingApplySummary) {
+			s.State = RunStateCommitUnknown
+			s.Audit = AuditStateIncomplete
+		}, ErrIncomplete},
+		{"commit unknown state with consistent audit", func(s *StreamingApplySummary) {
+			s.State = RunStateCommitUnknown
+			s.BatchesUnknown = 1
+			s.Audit = AuditStateConsistent
+		}, ErrIncomplete},
+		{"undefined audit state", func(s *StreamingApplySummary) { s.Audit = AuditStateUnknown }, ErrInvalid},
+		{"outcomes exceed total", func(s *StreamingApplySummary) { s.BatchesTotal = 1 }, ErrIncomplete},
 		{"unknown run state", func(s *StreamingApplySummary) { s.State = RunStateUnknown }, ErrInvalid},
 		{"wrong protocol", func(s *StreamingApplySummary) { s.Protocol = "m9" }, ErrInvalid},
 		{"bad run id", func(s *StreamingApplySummary) { s.RunID = "x" }, ErrInvalid},
 		{"negative rows", func(s *StreamingApplySummary) { s.RowsCommitted = -1 }, ErrInvalid},
+		{"negative total", func(s *StreamingApplySummary) { s.BatchesTotal = -1 }, ErrInvalid},
 		{"zero page size", func(s *StreamingApplySummary) { s.ReceiptPageSize = 0 }, ErrInvalid},
-		{"issue without code", func(s *StreamingApplySummary) { s.Issues = []Issue{{}} }, ErrInvalid},
+		{"page above budget", func(s *StreamingApplySummary) { s.ReceiptPageSize = budget.MaxReceiptPage + 1 }, ErrInvalid},
+		{"issue count over budget", func(s *StreamingApplySummary) {
+			s.IssueCounts = make([]IssueCount, budget.MaxIssueCounts+1)
+			for i := range s.IssueCounts {
+				s.IssueCounts[i] = IssueCount{Status: Warning, Code: PartialCoverage, Count: 1}
+			}
+		}, ErrInvalid},
+		{"issue without code", func(s *StreamingApplySummary) { s.IssueCounts = []IssueCount{{Status: Warning}} }, ErrInvalid},
+		{"issue with zero status", func(s *StreamingApplySummary) { s.IssueCounts = []IssueCount{{Code: PartialCoverage, Count: 1}} }, ErrInvalid},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			summary := valid
 			tt.edit(&summary)
-			if err := summary.Validate(); !errors.Is(err, tt.want) {
+			if err := summary.Validate(budget); !errors.Is(err, tt.want) {
 				t.Fatalf("err=%v want %v", err, tt.want)
 			}
 		})
+	}
+
+	running := valid
+	running.State = RunStateRunning
+	running.Audit = AuditStateUnknown
+	if err := running.Validate(budget); err != nil {
+		t.Fatalf("running summary rejected: %v", err)
+	}
+	cancelled := valid
+	cancelled.State = RunStateIncomplete
+	cancelled.BatchesTotal = 12
+	cancelled.BatchesCommitted = 10
+	if err := cancelled.Validate(budget); err != nil {
+		t.Fatalf("incomplete summary rejected: %v", err)
 	}
 }
 
 func TestClassifyBatch(t *testing.T) {
 	cases := []struct {
-		commit  CommitClassification
-		receipt error
-		want    BatchOutcome
+		name      string
+		attempted bool
+		commitErr error
+		receipt   error
+		want      BatchOutcome
 	}{
-		{CommitSucceeded, nil, BatchCommitted},
-		{CommitSucceeded, ErrClosed, BatchAuditIncomplete},
-		{CommitOutcomeUnknown, nil, BatchCommitUnknown},
-		{CommitOutcomeUnknown, ErrClosed, BatchCommitUnknown},
-		{CommitFailed, nil, BatchFailedBeforeCommit},
-		{CommitFailed, ErrClosed, BatchFailedBeforeCommit},
-		{CommitNotAttempted, nil, BatchOutcomeUnknown},
+		{"never attempted", false, nil, nil, BatchFailedBeforeCommit},
+		{"never attempted with error", false, ErrDatabase, ErrClosed, BatchFailedBeforeCommit},
+		{"confirmed", true, nil, nil, BatchCommitted},
+		{"confirmed without receipt", true, nil, ErrClosed, BatchAuditIncomplete},
+		{"unknown", true, ErrCommitUnknown, nil, BatchCommitUnknown},
+		{"unknown without receipt", true, ErrCommitUnknown, ErrClosed, BatchCommitUnknown},
+		{"attempted known failure", true, ErrConflict, nil, BatchCommitFailed},
+		{"attempted known failure without receipt", true, ErrConflict, ErrClosed, BatchCommitFailed},
 	}
 	for _, tt := range cases {
-		if got := ClassifyBatch(tt.commit, tt.receipt); got != tt.want {
-			t.Fatalf("ClassifyBatch(%v,%v)=%v want %v", tt.commit, tt.receipt, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClassifyBatch(tt.attempted, tt.commitErr, tt.receipt); got != tt.want {
+				t.Fatalf("ClassifyBatch(%v,%v,%v)=%v want %v", tt.attempted, tt.commitErr, tt.receipt, got, tt.want)
+			}
+		})
 	}
-	if got := ClassifyCommit(nil); got != CommitSucceeded {
+	if got := ClassifyCommitResult(nil); got != CommitSucceeded {
 		t.Fatalf("nil commit=%v", got)
 	}
-	if got := ClassifyCommit(ErrCommitUnknown); got != CommitOutcomeUnknown {
+	if got := ClassifyCommitResult(ErrCommitUnknown); got != CommitOutcomeUnknown {
 		t.Fatalf("unknown commit=%v", got)
 	}
-	if got := ClassifyCommit(ErrDatabase); got != CommitFailed {
+	if got := ClassifyCommitResult(ErrDatabase); got != CommitFailed {
 		t.Fatalf("failed commit=%v", got)
 	}
-	if got := ClassifyCommit(fmt.Errorf("commit: %w", ErrCommitUnknown)); got != CommitOutcomeUnknown {
+	if got := ClassifyCommitResult(fmt.Errorf("commit: %w", ErrCommitUnknown)); got != CommitOutcomeUnknown {
 		t.Fatalf("wrapped unknown commit=%v", got)
+	}
+	if CommitSucceeded == CommitClassification(0) {
+		t.Fatal("zero commit classification must not mean success")
 	}
 }
 
@@ -359,6 +409,7 @@ func TestStreamingTypesCarryNoValues(t *testing.T) {
 		RunID:            "0123456789abcdef0123456789abcdef",
 		State:            RunStateIncomplete,
 		Audit:            AuditStateIncomplete,
+		BatchesTotal:     1,
 		BatchesCommitted: 1,
 		ReceiptPageSize:  10,
 	}
@@ -390,6 +441,7 @@ func TestStreamingBudgetRequiresExplicitValues(t *testing.T) {
 		func(b *ResourceBudget) { b.MaxHistoryEntries = 0 },
 		func(b *ResourceBudget) { b.MaxHistoryNameBytes = 0 },
 		func(b *ResourceBudget) { b.MaxReceiptPage = 0 },
+		func(b *ResourceBudget) { b.MaxIssueCounts = 0 },
 		func(b *ResourceBudget) { b.MaxProcessBytes = 0 },
 		func(b *ResourceBudget) { b.MaxDiskBytes = 0 },
 	}
@@ -459,6 +511,25 @@ func TestLegacyPlanIDFormulaUnchanged(t *testing.T) {
 	}
 	if err := plan.ValidateShape(); err != nil {
 		t.Fatalf("legacy plan rejected: %v", err)
+	}
+	if err := ValidatePlanIdentity(plan); err != nil {
+		t.Fatalf("legacy identity rejected: %v", err)
+	}
+}
+
+func TestPlanIdentityTamperRejected(t *testing.T) {
+	plan := streamingTestPlan()
+	plan.SchemaDigest = strings.Repeat("d", 64)
+	if err := ValidatePlanIdentity(plan); !errors.Is(err, ErrConflict) {
+		t.Fatalf("tampered digest with stale ID accepted: %v", err)
+	}
+	if err := ValidateStreamingApproval(plan, streamingTestApproval(plan), streamingTestNow()); !errors.Is(err, ErrConflict) {
+		t.Fatalf("approval validated against tampered identity: %v", err)
+	}
+	// Limitation is explicit: per-column Scope/NormalizationVersion are not part
+	// of the m1a plan-ID formula and require the canonical plan-content check.
+	if err := plan.ValidateShape(); err != nil {
+		t.Fatalf("shape check must still pass: %v", err)
 	}
 }
 
