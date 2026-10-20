@@ -59,6 +59,9 @@ func TestCLIStreamingScaleEvidence(t *testing.T) {
 			rowsList = append(rowsList, value)
 		}
 	}
+	if len(rowsList) > 8 {
+		t.Fatalf("too many distinct row counts: %d (limit 8)", len(rowsList))
+	}
 	repeats := 5
 	if raw := os.Getenv("MASKRIVER_WP3F_CLI_REPEATS"); raw != "" {
 		value, err := strconv.Atoi(raw)
@@ -68,12 +71,13 @@ func TestCLIStreamingScaleEvidence(t *testing.T) {
 		repeats = value
 	}
 	cells := []struct{ workers, batch int }{{1, 64}, {4, 64}, {4, 256}}
-	totalSamples := 0
+	var totalSamples int64
 	for _, rows := range rowsList {
-		totalSamples += rows * len(cells) * minInt(repeats, 3)
-	}
-	if totalSamples > maxScaleTotalRows {
-		t.Fatalf("requested matrix too large: %d sample-rows (limit %d)", totalSamples, maxScaleTotalRows)
+		// Use the same effective repeat count as the execution loop below.
+		totalSamples += int64(rows) * int64(len(cells)) * int64(effectiveRepeats(rows, repeats))
+		if totalSamples > maxScaleTotalRows {
+			t.Fatalf("requested matrix too large: %d sample-rows (limit %d)", totalSamples, maxScaleTotalRows)
+		}
 	}
 	file, err := os.Create(filepath.Join(outDir, "cli-streaming-scale.csv"))
 	if err != nil {
@@ -94,12 +98,7 @@ func TestCLIStreamingScaleEvidence(t *testing.T) {
 		defer f.cleanup()
 		budget := f.budgetFile(t, outDir)
 		for _, cell := range cells {
-			reps := repeats
-			if rows >= 1000000 {
-				reps = minInt(reps, 3)
-			} else if rows >= 100000 {
-				reps = minInt(reps, 3)
-			}
+			reps := effectiveRepeats(rows, repeats)
 			for repeat := 0; repeat < reps; repeat++ {
 				record := f.runSample(t, scaleSample{rows: rows, workers: cell.workers, batch: cell.batch, repeat: repeat}, budget)
 				if err := writer.Write(record); err != nil {
@@ -109,6 +108,14 @@ func TestCLIStreamingScaleEvidence(t *testing.T) {
 			}
 		}
 	}
+}
+
+// effectiveRepeats is the repeats value the execution loop uses for rows.
+func effectiveRepeats(rows, repeats int) int {
+	if rows >= 100000 {
+		return minInt(repeats, 3)
+	}
+	return repeats
 }
 
 func minInt(a, b int) int {
