@@ -37,6 +37,7 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 | SQLite 连接与真实集成 | SQLite 真实驱动执行 Reader/Writer、只读、类型、复合键分页和安全拒绝测试；以 PR #21 最终 CI 为证据 | 部分实现（#5 组件） | #5 / PR #21 |
 | MySQL 连接与真实集成 | TestMySQLAdapter 在一次性 MySQL 8.0.46 实例真实通过；包含 nine CN 策略的 typed SQL 写入/读回；其他版本与整套 CLI 流程未验收 | 部分实现（适配器实测） | #10 / PR #30 |
 | MariaDB / PostgreSQL / SQL Server / Oracle | 需独立适配与独立验证 | 未实现 | 后续评估 |
+| SQLite 流式回执 Outbox（WP2，DB 层能力） | `internal/db` 显式 opt-in：预置版本化 outbox schema、同库同事务业务 UPDATE + receipt INSERT、有界 keyset 分页读取、CommitUnknown 保守分类、Linux 本地 SQLite（journal=DELETE，会话 synchronous=FULL）；未接入 Runner/CLI，未验证断电 durability/MySQL/Windows streaming | 部分实现（DB 组件，待独立评审） | #13 / WP2 |
 | 参数化更新、批次事务、复合键 keyset 分页 | #5 提供按真实复合主键游标、参数绑定、乐观受影响行数检查与回滚；跨方言独立验证持续进行 | 部分实现（#5 组件） | #5 / PR #21；MySQL 适配器见 #10 / PR #30 |
 | 无主键 apply 拒绝、敏感主键明确未处理 | 数据库 Writer 已对无主键及试图改主键的计划拒绝；CLI 端到端拒绝路径已由 `TestE2EApprovalDoesNotBypassExistingGates` 覆盖，MySQL CLI 未实现 | 部分实现（组件 + SQLite CLI 拒绝） | #5 / #9 |
 

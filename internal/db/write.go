@@ -23,56 +23,68 @@ type writeTx struct {
 
 var _ contracts.WriteTx = (*writeTx)(nil)
 
-func (w *writer) Begin(ctx context.Context, plan contracts.TablePlan) (contracts.WriteTx, error) {
-	if err := w.check(ctx); err != nil {
-		return nil, err
-	}
+// prepareWrite validates a table plan against the live schema and returns the
+// column state a writeTx needs. It performs no transaction work, so both the
+// legacy Begin path and the explicit streaming outbox path share exactly one
+// validation implementation.
+func (w *writer) prepareWrite(ctx context.Context, plan contracts.TablePlan) (keyTypes []contracts.Type, changed map[string]contracts.Type, ordered []string, err error) {
 	schema, err := w.describe(ctx, plan.Table)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	if len(schema.PrimaryKey) == 0 {
-		return nil, contracts.ErrUnsupported
+		return nil, nil, nil, contracts.ErrUnsupported
 	}
 	if len(plan.PrimaryKey) != len(schema.PrimaryKey) || len(plan.Columns) == 0 {
-		return nil, contracts.ErrInvalid
+		return nil, nil, nil, contracts.ErrInvalid
 	}
 	byName := map[string]contracts.Type{}
 	for _, c := range schema.Columns {
 		byName[c.Ref.Column] = c.Type
 	}
-	keyTypes := make([]contracts.Type, len(plan.PrimaryKey))
+	keyTypes = make([]contracts.Type, len(plan.PrimaryKey))
 	for i, key := range plan.PrimaryKey {
 		if key != schema.PrimaryKey[i] {
-			return nil, contracts.ErrInvalid
+			return nil, nil, nil, contracts.ErrInvalid
 		}
 		typ, ok := byName[key]
 		if !ok || typ.Nullable {
-			return nil, contracts.ErrUnsupported
+			return nil, nil, nil, contracts.ErrUnsupported
 		}
 		keyTypes[i] = typ
 	}
-	changed := map[string]contracts.Type{}
-	ordered := make([]string, 0, len(plan.Columns))
+	changed = map[string]contracts.Type{}
+	ordered = make([]string, 0, len(plan.Columns))
 	for _, col := range plan.Columns {
 		if col.Column.TableRef != plan.Table || col.Column.Column == "" {
-			return nil, contracts.ErrInvalid
+			return nil, nil, nil, contracts.ErrInvalid
 		}
 		name := col.Column.Column
 		typ, ok := byName[name]
 		if !ok || col.Type != typ {
-			return nil, contracts.ErrInvalid
+			return nil, nil, nil, contracts.ErrInvalid
 		}
 		for _, key := range plan.PrimaryKey {
 			if name == key {
-				return nil, contracts.ErrUnsafe
+				return nil, nil, nil, contracts.ErrUnsafe
 			}
 		}
 		if _, exists := changed[name]; exists {
-			return nil, contracts.ErrInvalid
+			return nil, nil, nil, contracts.ErrInvalid
 		}
 		changed[name] = typ
 		ordered = append(ordered, name)
+	}
+	return keyTypes, changed, ordered, nil
+}
+
+func (w *writer) Begin(ctx context.Context, plan contracts.TablePlan) (contracts.WriteTx, error) {
+	if err := w.check(ctx); err != nil {
+		return nil, err
+	}
+	keyTypes, changed, ordered, err := w.prepareWrite(ctx, plan)
+	if err != nil {
+		return nil, err
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
