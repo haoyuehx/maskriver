@@ -137,14 +137,14 @@ sequenceDiagram
 
 - 保持现有门禁顺序：合法 Plan、`ExplicitApply=true`、CLI审批声明、对同 Plan/源快照/目标/策略/scopes 的签名决策校验、静态 preflight、完整 dry-run，以上都成功才打开 Writer。[代码/测试]
 - Receipt 消费不是审批；不能新增基于 sink 的写入授权，也不能让消费者错误降级安全闸门。
-- Commit 成功返回是当前唯一已确认批次证据；Commit error 统一可能 unknown，不能据错误文本猜定失败。Unknown批次不得自动 retry、rollback声称成功、发 confirmed receipt 或声明全局 rollback。[代码/测试]
+- Commit 成功返回是当前唯一已确认批次证据；**底层 SQL Commit 调用尝试后**产生的错误可能是 unknown，不能据错误文本猜定失败；Commit调用前的校验/cancellation拒绝是确定前置失败。Unknown批次不得自动 retry、rollback声称成功、发 confirmed receipt 或声明全局 rollback。[代码/测试]
 - 流式协议需区分 ConfirmedReceipt、CommitOutcomeUnknown、SinkFailure/Incomplete；事件序列与摘要不得把 Unknown 合并为 0 行成功。
 - 新设计不宣称恢复、幂等重放或 exactly-once。若未来有 reconciliation/checkpoint，必须独立授权为 #14/后续范围，设计源快照/plan/目标状态绑定、重复脱敏风险与审批有效期，不能从本次审计 Sink 推出。
 
 ## 8. API、CLI、能力边界
 
 - `m1a-v1` 不得原地改变 `ApplyReport.Committed` 类型或删除其全量语义；否则调用者可静默丢回执，是破坏性契约变更。
-- 备选：新 APIRevision（例如 `m1b-v1`，名称仅示意）定义新的 `StreamingApply`/sink/summary DTO；兼容旧 `m1a-v1`。共享契约变更要先提交提案、跨模块评审和明确授权，本轮没有此授权。
+- 备选：单纯把全局 `APIRevision` 从m1a改成新值并不自动保持兼容：`Plan.ValidateShape`只接受当前revision，且revision参与Plan.ID/审批绑定，旧Plan可能被拒绝或重算出不同审批ID。契约提案必须明确双版本共存/旧Plan及审批验证策略；优先评估单独版本化streaming接口/DTO而非破坏性替换常量。新增共享surface仍须契约评审与明确授权，本轮没有授权。
 - CLI是旧 API消费者；要满足流式内存目标必须经显式迁移到新路径，并把详细回执写入用户选择且权限受控的 sink，或要求同步消费者。不能只把 `applySummary` 改为打印计数、丢弃逐批回执。
 - 只有新 streaming 端到端路径在有界 sink 队列下可以主张“应用 heap 的批次维度不随 K 增长”；旧 API仍 O(K)，故若原 AC针对 MaskRiver 全部 Apply API，则全局 AC仍不通过。应由 Issue owner正式判定原AC的作用域，不得通过文案规避。
 - 对外审计完整性与严格内存上界可以同时成立（流式写入 durable sink），但磁盘 O(K)，且跨数据库提交/审计原子性尚未设计证明。仅调用回调并不自动获得持久审计。
@@ -245,4 +245,6 @@ sequenceDiagram
 
 ### 独立评审状态
 
-独立架构首轮审查记录：`reviewer`在`ee3b445daba30d03bfcdedb8e7d8807a2b945793`审阅文档与来源代码，发现P1 readiness/遗漏O(H)及四项P2；作者在后续HEAD修正。对`ea89ecc8d45cf0e2f32a02da3f9f350b89b2f585`的独立follow-up确认P0=0/P1=0，提出四项P2（K需按表求和、预算公式加O(H)、移除独立信息论表述、区分Commit尝试前后错误）；这些修正正在当前版本落实。follow-up报告在`/home/haoyue/.pi/agent/sessions/--home-haoyue-Project-maskriver--/subagent-artifacts/4890d6ce-6a15-4957-8c43-44c114555639_reviewer_output.md`（本机审查证据路径，不是仓库文件）。当前修改后的最终Head尚需一次独立架构复核。Security Review尝试在首版因go-reviewer provider `Insufficient Balance`失败，没有结果；不得记录为PASS。Security Review仍未完成，PR不可合并。审查记录必须区分每个实际SHA与范围；设计作者不作为独立评审者，P0/P1需修正并由另一个独立上下文复核；不得将PR70 review冒充本设计review。
+独立架构审查记录：`reviewer`在`ee3b445daba30d03bfcdedb8e7d8807a2b945793`审阅文档与来源代码，发现2项P1 readiness/遗漏O(H)及3项P2；作者修订。对`ea89ecc8d45cf0e2f32a02da3f9f350b89b2f585`的follow-up确认P0=0/P1=0，提出4项P2（K需按表求和、预算公式加O(H)、移除独立信息论表述、区分Commit尝试前后错误）。当前版本采纳这些修正。对`97d781ebf8a32cc644d5a3658b2fe0cf497ea2b8`的独立架构复核确认P0=0/P1=0，提出2项P2：经核实候选heap公式实际已包含`A(H,filenameBytes)`，该项与文档矛盾、不采纳；首轮review P2数量误记有效并已纠正。其报告：`/home/haoyue/.pi/agent/sessions/--home-haoyue-Project-maskriver--/subagent-artifacts/97ddb842-806b-409c-a272-80d0580bbc2e_reviewer_output.md`。
+
+独立Security Review：go-reviewer在初次尝试时因provider `Insufficient Balance`失败（无结论）；随后独立`reviewer`只读审阅`97d781ebf8a32cc644d5a3658b2fe0cf497ea2b8`，结果 **P0=0、P1=4、P2=1，BLOCK候选D生产实现**。P1：① Commit成功到durable sink确认之间崩溃/取消/ENOSPC窗口及ack语义；②审计完整性/篡改验证缺乏run envelope、终结seal及信任锚；③任意同步sink可忽略ctx或无限阻塞，队列有界不代表取消有界；④持久sink路径alias/symlink/no-clobber/权限/短写/fsync/磁盘预算边界未定义。P2：全局APIRevision bump会使旧Plan.ValidateShape拒绝旧revision并改变Plan.ID/审批绑定，本文现已记录兼容约束，契约提案必须设计双版本共存。Security报告：`/home/haoyue/.pi/agent/sessions/--home-haoyue-Project-maskriver--/subagent-artifacts/ff88ff9e-4c4e-4e8e-9a98-cf06cd9c6c8a_reviewer_output.md`。审查范围为设计文档与相关contracts/runner/db/history/CLI/test源码；无代码运行、无外部Issue/PR核验。以上报告审阅Head均为`97d781...`，不是本次后续Head的审查。P1尚未解决，故保持DESIGN BLOCKED，PR不得合并。不得将PR70 review冒充本设计review。
