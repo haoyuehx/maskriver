@@ -1,0 +1,2 @@
+rows,workers,batch_size,repeat,apply_ms,rows_per_s,batches,heap_alloc_bytes,heap_sys_bytes,total_alloc_bytes,num_gc,peak_goroutines,peak_rss_kb
+1000000,4,256,0,47325,21130.2,3907,1529640,11501568,7805318824,3605,5,-1
