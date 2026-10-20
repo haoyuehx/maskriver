@@ -1,6 +1,6 @@
 # Issue #13：严格内存上界与批次回执架构评审
 
-**状态：架构调查完成；生产实现未授权。裁决：DESIGN READY — CONTRACT CHANGE REQUIRED（有条件，见 §15）。**
+**状态：架构调查已形成候选方案；生产实现未授权。裁决：DESIGN BLOCKED（AC范围、审计原子性及资源界契约尚未决；独立Security Review未完成）。**
 
 - 仓库基线：`9d6e03627c15fa31df051b16370f79e895e96bcc`（main，与 origin/main 一致；调查时工作树干净）。
 - Issue #13：OPEN；PR #70：MERGED，head `b82bb6d65fce0d4ec7ca61787d7ac19435b15bdb`，merge `9d6e03627c15fa31df051b16370f79e895e96bcc`。
@@ -38,25 +38,27 @@ CLI mask --apply --approved
 - `ApplyReport` 由 `Engine.Apply` 初始化，`applyRun` 通过指针持有并 append；返回后由调用者持有。CLI 的 `applySummary` 逐项读取并临时按表聚合。CLI 当前没有将详细 receipts 持久化：history Store 仅保存签名审批决定；审批数据不是 Apply 审计记录。[代码：`cmd/maskriver/main.go:applySummary`、`internal/history/record.go`]
 - Validate 不接受 ApplyReport/Receipt；它独立扫描 source/target 和固定 Plan。它每侧保留一个最多 256 行的 keyset 页面并聚合有限类别/列的 Issues，不需要完整 receipts。[代码：`internal/verify/verify.go`；测试计划与安全测试]
 - Writer/事务关闭后，`Engine.Close` 关闭 source/target SQL handles，但 Go 返回值仍由调用者引用；关闭 Engine 不会释放 `ApplyReport.Committed`。Runner 不保留历史 receipts 的额外全局副本。[代码]
-- 审批存储记录随计划 scope 数量增长，单个 Record 的 Scope 列表为 O(计划列数)，与数据行/批次数无直接关系；历史文件持久化审批，不是批次审计。Store 的单记录读上限 1 MiB，不等价于整个历史目录磁盘有界。[代码：`internal/history`]
+- 审批存储记录随计划 scope 数量增长，单个 Record 的 Scope 列表为 O(计划列数)，与数据行/批次数无直接关系；历史文件持久化审批，不是批次审计。Apply 的 approval Lookup 调用 `requireUnambiguous`，其 `os.ReadDir` 将目录全部 entry/name 一次性保留并扫描，故内存另有 O(H + 所有文件名字节) 项，H 为审批目录 entry 数；即使当前 plan 固定，历史目录累积也可能扩大该次 Apply 内存。不能删减歧义检查来规避，未来严格界需在不弱化安全的前提下以有界索引/存储或强制目录上限解决。Store 的单记录读上限 1 MiB 不等价于整个历史目录磁盘或 ReadDir 内存有界。[代码：`internal/history/store.go:Lookup/load/requireUnambiguous`]
 
 ## 3. 完整内存生命周期与复杂度
 
-符号：`N`=行数，`B`=Apply 批次行数，`W`=mask workers，`C`=计划列数，`T`=计划表数，`D`=数据库中所有表元数据规模，`L`=最大单值/单行投影字节数，`K=Σtable ceil(writable_rows/B)`=成功批次数。复杂度须把字符串/byte payload 纳入；只按对象个数计算不是字节上界。
+符号：`N`=行数，`B`=Apply请求的分页/批次上限，`W`=mask workers，`C`=计划列数，`T`=计划表数，`D`=数据库中所有表元数据规模，`H`=审批目录entry数，`L`=最大单值/单行投影字节数，`K`=本次成功Commit且过滤后至少有一行可写的页面数。分页在过滤全NULL行之前进行，因此一般 `K ≤ ceil(N/B)`，全NULL页不产receipt，混合NULL会使 `K` 不等于 `ceil(writable_rows/B)`；仅在稠密可写数据的最坏情形有 `K=Θ(N/B)`。失败/取消会只留下成功前缀。复杂度须把字符串/byte payload纳入；只按对象个数计算不是字节上界。
 
 | 子系统/生命周期 | 当前保留对象 | 规模关系与说明 |
 |---|---|---|
 | Worker 临时工作集 | `maskBatch` 的 result、jobs channel、最多 W goroutine；worker 仅改结果槽 | [代码] 每次最多 1000 输入、W≤16；O(B·L + W·L)，确定性索引输出。不是全 Apply 上界的充分证明。 |
-| Reader/Writer 分页 | Apply source/target Page、`changes`、按列 originals/rows/masked、WriteBatch 的 pending；SQL statement args | [代码/推导] 单批 O(B·C·L) 多份短时副本，行 payload 不限时没有固定字节上界；Page 上限由 batch≤1000。Preview/dryRun 页上限 128；Reader 返回关闭游标后的 materialized page。 |
-| Plan/元数据 | gather 的全部 scope evidence/sample、schema map、Plan Tables/Columns；Apply preflight 的所有计划表 schema；incoming-FK 检查对 source/target 调 `Tables` | [代码/推导] O(T+C+S·sampleLimit+ schema metadata D)；`sampleLimit≤10000`，但 scope 数/T/D 当前没有 API 级硬上限。Plan 不是随 N 单调增长的 row collection，但可随数据库表数增长。 |
+| Reader/Writer 分页 | Apply source/target Page、`changes`、按列 originals/rows/masked、WriteBatch 的 pending；SQL statement args | [代码/推导] 单批 O(B·C·L) 多份短时副本，行 payload 不限时没有固定字节上界；请求页≤B≤1000，但 Reader 为 lookahead 分配 B+1 条并在截断后仍保留 backing array 中的额外元素。Preview/dryRun 返回页≤128、底层最多129；Reader 返回关闭游标后的 materialized page。 |
+| Plan/元数据 | gather 的全部 scope evidence/sample、schema map、Plan Tables/Columns；Apply preflight 的所有计划表 schema；incoming-FK 检查对 source/target 调 `Tables` | [代码/推导] O(T+C+S·(sampleLimit+1)+ schema metadata D)；样本返回≤sampleLimit，但底层最多保留 sampleLimit+1 lookahead value；`sampleLimit≤10000`，scope数/T/D当前没有API级硬上限。Plan不是随N单调增长的row collection，但可随数据库表数增长。 |
 | 去重/映射/索引 | detector 在样本上 distinct/map；mask 策略纯函数 | [代码] Detector 的临时集合由 bounded sample 驱动；Apply 未调用 mapping store，未见按每行累计的内存映射/索引。未来引入持久映射不得计作“免费”。 |
-| 审批/历史 | 一个审批 Record 与 scopes；history 目录文件 | [代码] 单次内存对象随 scope 数；磁盘文件数/总目录随审批操作增长。它不含 receipt。 |
-| Commit Receipts | `ApplyReport.Committed` slice | [代码/推导] Θ(K)；固定 B 时 K≈N/B，因此与 N 线性增长；切片扩容可能使容量大于长度。Phase 5 测得 0.019 / 0.133 / 1.102 MiB（10k / 100k / 1M，B=64），是样本而非渐近证明。按 amd64 结构体推导，每项 BatchReceipt 含 3 个 string header 的 TableRef（48B）及两个 int64（16B），约 64B/receipt，不含共享字符串存储。 |
-| Validate | 每侧一个 page、当前 key、比较状态、Issue 聚合 | [代码] 行数维度 O(pageSize·L)，不保存所有行；Issue 上限与不同状态/代码/列位置数有关，可随 C 增长，不随 N 每行增加。 |
+| 审批/历史 | 一个审批 Record 与 scopes；history 目录文件 | [代码] Record内存随scope数；审批目录ReadDir带来O(H+文件名字节)额外内存，磁盘文件数随审批操作增长。它不含receipt。 |
+| Commit Receipts | `ApplyReport.Committed` slice | [代码/推导] Θ(K)；最坏情况下固定B时K=Θ(N/B)，但NULL-only页可不产生receipt且失败只保留成功前缀；切片扩容可能使容量大于长度。Phase 5稠密 fixture测得0.019 / 0.133 / 1.102 MiB（10k / 100k / 1M，B=64），是样本而非渐近证明。按 amd64 结构体推导，每项 BatchReceipt 含 3 个 string header 的 TableRef（48B）及两个 int64（16B），约 64B/receipt，不含共享字符串存储。 |
+| Validate | 每侧一个 page、当前 key、比较状态、Issue 聚合 | [代码] 返回行数≤256/side，但Reader lookahead backing array最多257行；不保存所有行；Issue上限与不同状态/代码/列位置数有关，可随C增长，不随N每行增加。 |
 | CLI 输出 | `applySummary` positions/batches/rows 每表临时数组，逐 receipt 聚合；fmt 写 io.Writer | [代码/推导] 临时 O(T+K) CPU 时间、O(T) 数组；stdout/stderr 是 OS 流，不由 CLI 主动整体缓存。嵌入 API 的调用者提供任意缓冲 Writer 则由调用者决定额外内存。 |
 | Go runtime/GC | heap arenas、栈、数据库驱动/SQLite native heap/cache、GC 尚未回收或保留的页 | [推导] 不是由 B×W 单独限定。RSS 包含 runtime/native/cache；采样无法证明瞬时峰值或严格渐近界。 |
 
-因此，当前整体至少为 **O(K + B·C·L + T + C·sampleLimit + D + runtime/cache)**，其中关键 Θ(K)=Θ(N/B) 是 `ApplyReport` 返回契约的直接下界。严格字节界还需定义 L、表/列数上限、数据库 native cache、Go runtime 保留等纳入范围。即便将 Receipt Slice 预分配、压缩字段、复用内存，Θ(K) 不变。
+Phase-5 sampler不是产品路径，但每100ms将资源记录 append进`rows`，stop时又复制全slice；其测量进程内存为O(run duration / 100ms)，并会污染更长运行的内存曲线。[代码：`internal/runner/phase5_scale_test.go:newPhase5Sampler/record/stop`]
+
+因此，当前一次 Apply 整体至少为 **O(K + B·C·L + T + C·(sampleLimit+1) + D + H + filenameBytes + runtime/cache)**；K项在稠密可写场景Θ(N/B)，审批目录entry扫描还可能随历史操作数增长。Phase5 sampler另为测试仪器O(duration/interval)，不得归入产品工作集或复用为长跑有界测量器。严格字节界还需定义L、表/列/metadata/approval-dir上限、数据库native cache、Go runtime保留等纳入范围。即便将 Receipt Slice 预分配、压缩字段、复用内存，Θ(K) 不变。
 
 ## 4. 原始严格 AC 的可满足性
 
@@ -149,7 +151,7 @@ sequenceDiagram
 
 ## 9. 资源预算与复杂度验收定义
 
-当前可证明的结构上界是对象数量上界，而不是字节固定值：Apply页≤B≤1000、workers≤16、Verify页≤256/side、sample≤10000/scope；Row.Value payload、scope/table count、schema/D容量、SQLite cache、Go runtime均未纳入固定上限。[代码]
+当前可证明的结构上界是返回逻辑长度，而非完整backing存储或固定字节值：Apply页≤B≤1000但Reader最多保留B+1 lookahead；workers≤16；Verify页≤256/side但最多保留257；sample≤10000/scope但最多保留10001；审批目录`ReadDir`为O(H)；Row.Value payload、scope/table count、schema/D容量、SQLite cache、Go runtime均未纳入固定上限。[代码]
 
 候选新 API 目标（设计假设）：
 
@@ -225,19 +227,19 @@ sequenceDiagram
 
 ## 15. 最终架构裁决
 
-**DESIGN READY — CONTRACT CHANGE REQUIRED（有条件）。**
+**DESIGN BLOCKED。** 这不是否定严格内存目标，而是现证据不足以把候选 D 认定为完整可验收方案。独立架构审查发现并确认了目录扫描 O(H) 与资源/审计语义遗漏；这些已在当前文档修正。独立 Security Review 未完成（go-reviewer任务因provider Insufficient Balance失败，不能算通过）。
 
-推荐 D：维持旧 `m1a-v1 Apply` 全量回执兼容语义，另立版本化 streaming apply API；它使用同步或小容量有界sink，返回有界摘要，并由明确配置的 durable receipt sink保存逐批记录。CLI只有在新接口/契约获批后才迁移。旧API明确继续 O(K)，不能宣称满足全局严格AC。新路径要声称**内存** AC，需提供不累计receipt、固定背压队列、全流程+代码不变量证据；要声称**审计完整**，还必须解决Commit已成功到sink持久化之间的崩溃窗口。该原子性方案尚未证明，故任何生产实现前必须先完成契约决策/原子审计子设计。本文不是授权，也不声称原始AC已PASS。
+推荐 D 仍是可讨论方向：维持旧 `m1a-v1 Apply` 全量回执兼容语义，另立版本化streaming API。它可将**新API的进程heap receipt保留**降至与K无关，但前提是sink同步/队列有界；旧API仍O(K)，故不能让全局Apply AC PASS。若要求完整durable audit，普通Commit后sink存在崩溃窗口；同库outbox、事务内receipt或明确允许审计不完整三者的选择尚未决，不能以“合同变更授权”替代这个安全/事务决策。审批目录O(H)也必须在新工作流预算里受控，且L、表/列/metadata/driver/runtime范围需由AC owner定义。Issue owner须先决定原AC作用范围及审计保证、资源界定义；之后再进行独立Security Review和契约提案。本文不是实施授权，也不声称原始AC已PASS。
 
 最终问题答复：
-1. 当前 Apply 内存复杂度：`O(K + B·C·L + T + C·sampleLimit + D + runtime/cache)`；完整 receipts造成 Θ(K)，其它元数据/页也各自有规模项。
+1. 当前 Apply 内存复杂度：`O(K + B·C·L + T + C·(sampleLimit+1) + D + H + filenameBytes + runtime/cache)`；K在稠密可写数据时Θ(N/B)，另有审批目录O(H)扫描等规模项。
 2. 否，不止 Receipt：Plan/evidence随scope/table/sample上限增长，preflight需数据库元数据，Apply页/副本随B·C·L，CLI摘要随表数，Verify issues随列数，runtime/native cache不受B×W严格限定。明确没有发现按每个数据行累计的持久映射或Validate全行集合。
 3. 是；全量回执列表使现有ApplyReport和总批次数无关内存存在信息论/对象大小冲突。
 4. 不改变冻结公共API、不改变结果语义时，没有真正解决所有调用方的方案。内部可增加仅服务新路径的stream实现，但原API仍Θ(K)，不等于完成全局AC。
-5. 推荐 D（新流式API + 有界sink；完整审计时需要durable sink），而非A/B/C单独。
+5. 候选推荐 D（新流式API + 有界sink），但仅作为待决方向；durable sink是否足以审计，取决于尚未确定的原子性/崩溃协议。
 6. 复用现有审批、dry-run、单批事务；仅Commit成功后才产生 confirmed事件；CommitUnknown永不自动重试并明确 unknown；Sink失败后停止，不宣称完整。跨库审计原子性未解决，必须先设计/批准同库事务outbox或明确“不保证完整审计”。
 7. 按当前共享接口演进规则，需契约修订审查；若新增public DTO/Workflow方法，应升级APIRevision（精确新revision由提案决定），旧m1a保留。
-8. 不能让当前#13原始全局AC立即PASS。经Issue owner明确限定AC适用新API并解决耐久审计语义后，新路径可能PASS内存项；旧Apply仍不满足。其他1M重复/CLI/platform/allocation等证据也需补。
+8. 当前不能判定#13原始内存AC PASS。即使限定新API，新路径的有界heap receipts只解决其中一项；审批目录、资源范围、audit崩溃窗口及其他1M重复/CLI/platform/allocation证据仍待定。
 9. 基础版本化契约提案、Runner/DB流式实现、CLI与持久sink集成至少3个顺序工作包；若同库outbox跨数据库模块需第4包。估算，不代表授权。
 10. 未获授权前，绝不能改 `pkg/contracts/**`、APIRevision、`internal/runner/execute.go`事务/回执语义、`internal/db/write.go` commit策略、`internal/runner/parallel.go` Worker Pool、`cmd/maskriver`授权路径、`internal/history`持久审计、release/tag/BatchSize默认值。
 
