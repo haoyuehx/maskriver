@@ -97,9 +97,10 @@ A docs/reviews/issue13-pr71-security-review-2026-10-20-head-717b17a.md     17
   each touch only Markdown files; `git diff --check` PASS; the `*.go pkg .github go.mod go.sum cmd internal`
   path filter returns 0 files.
 - **New patch-id:** `07b1db621582bdbe5e57b41c37d0459628c6d8e9`.
-- **Self-reference:** this document cannot audit its own final addendum commit; that delta is Markdown-only
-  and is covered by per-commit path verification and the independent exact-head review recorded in the
-  review history.
+- **Self-reference / coverage limit:** this document cannot audit its own final addendum commit. That delta
+  is Markdown-only and covered by per-commit path verification. An independent exact-head review of the
+  head containing this addendum is **not claimed here**; its result, if completed, is recorded in the
+  review history at that exact SHA.
 
 ### Dispositions of independent findings on the owner-decision round
 

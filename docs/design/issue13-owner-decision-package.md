@@ -131,7 +131,7 @@ S3 只能作为兼容性资源护栏，不能作为 AC 通过依据。
 
 | 维度 | A1 Best-effort | A2 Durable Reconciliation | A3 Same-transaction Outbox |
 |---|---|---|---|
-| 每个成功 Commit 对应 durable receipt | 否 | 可最终判定，但存在中间态 | 是（同库同事务） |
+| 每个成功 Commit 对应同事务 receipt（durability 需另行验证） | 否 | 可最终判定，但存在中间态 | 是（同库同事务；不等于断电 durability） |
 | CommitUnknown | 已提交但可能无回执 | 可靠记录 attempt，事后按权威库判定 | 数据与 outbox 同成败；仍可能 UNKNOWN |
 | 崩溃后可验证内容 | 仅已落盘部分 | attempt + 权威库状态 | 已提交批次的回执与数据一致 |
 | 必须保持 UNKNOWN 的内容 | 未知批次 | 权威库不可用/证据不一致时 | 同左 |
@@ -244,10 +244,12 @@ P3 是最小"既诚实又有完整 receipt"的路径；P4 应作为独立后续�
 | WP | 内容 | 授权前置 | 代码所有者 | 修改范围 | 安全门禁 | QA 要求 | 验收证据 | 独立 PR |
 |---|---|---|---|---|---|---|---|---|
 | WP1 | 契约与兼容性提案：双 API DTO、audit policy binding、Plan/Approval 共存、summary/错误状态、CommitUnknown、APIRevision 决定 | ADR-01/02/09 批准 + 明确 contracts 授权 | Main / Architect | `pkg/contracts/**`、`docs/contracts.md` | 不改变 m1a 语义；旧审批继续有效 | 契约测试、旧 Plan 回归、shape 校验 | 契约评审记录、兼容矩阵 | 是 |
-| WP2 | DB 事务与审计能力（**初始仅 SQLite**）：预置 schema/migration、同事务 outbox、capability/durability 探针、故障注入 | ADR-03/04/07 批准 + db 授权 | go-db | `internal/db/**`、迁移脚本 | G1–G3、G6–G9；无运行时 DDL | 真实 SQLite 事务、ENOSPC、崩溃、CommitUnknown | 故障矩阵结果 | 是 |
+| WP2 | DB 事务与审计能力（**初始仅 SQLite**）：预置 schema/migration、同事务 outbox、capability/durability 探针、故障注入 | ADR-03/04/07 批准 + db 授权 | go-db | `internal/db/**`、迁移脚本 | G1–G9（**含 G4–G5 平台/路径**）、G6；无运行时 DDL；未测平台/路径 fail closed | 真实 SQLite 事务、路径替换/符号链接、ENOSPC、崩溃、CommitUnknown | 故障矩阵结果（含平台/路径） | 是 |
 | WP2b | MySQL outbox 扩展：独立验证同库/InnoDB/primary-only/durability 后才纳入 | ADR-07 的 MySQL 部分单独批准 + WP2 完成 | go-db | 同一 db 模块的 MySQL 适配 | G12；未测组合 fail closed | 真实 MySQL 事务与 durability | 跨后端证据 | 是（可独立延期） |
 | WP3 | Runner/CLI 流式集成：Q=0 同步写入、有界工作集、审批目录 chunk 扫描、显式 CLI 选择、资源上界验证、跨 worker 正确性 | ADR-08 数值批准 + ADR-10 模块授权 + WP1/WP2 完成 | Main / go-mask / go-verify | `internal/runner/**`、`cmd/maskriver/**`、`internal/history/**` | 保留 `--apply`、审批、preflight、dry-run；无自动回退 | race/fuzz/泄漏/取消、CLI 子进程规模矩阵、跨 worker 摘要一致 | 有界性证明 + 实测分布 + SKIP 清单 | 是 |
-| WP4 | 额外审计安全能力：独立 Anchor、Seal、Verifier、平台 durability、审计攻击测试 | ADR-05/11 批准 + 新基础设施授权 | Security / Main | 新服务 + verifier + 平台测试 | G4–G5、G10–G12 | 篡改/删除/回滚/Anchor 宕机测试 | 攻击矩阵、密钥托管审查 | 是（可独立延期） |
+| WP4 | 额外审计安全能力（**仅 Anchor/Seal 相关**）：独立 Anchor、Seal、Verifier、攻击/故障测试 | ADR-05/11 批准 + 新基础设施授权 | Security / Main | 新服务 + verifier + Anchor 故障测试 | G10–G12；Anchor 不可用时 AUDIT_INCOMPLETE | 篡改/删除/回滚/Anchor 宕机测试 | 攻击矩阵、密钥托管审查 | 是（可独立延期） |
+
+**平台/路径前置：** G4–G5（Windows/Linux 文件身份、符号链接/硬链接/TOCTOU）属于 **WP2 必需门禁**，不是可延期项；未验证的平台/路径必须 fail closed，因而 WP2 交付时只能声明已验证组合。WP4 只承担 Anchor/Seal 专属门禁（G10–G12）。
 
 **WP4 是否必须先于 WP3？** 不必须。WP3 的 A3 路径不依赖外部 Anchor；若 Owner 不要求篡改证据，WP4 可
 独立延期。但若 Owner 要求“完整审计含篡改检测”，则 WP4 的 Seal/Anchor 验证必须在宣称该保证前完成——
