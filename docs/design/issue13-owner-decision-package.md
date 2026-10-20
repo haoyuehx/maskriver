@@ -28,8 +28,9 @@ cache、Go runtime 也未纳入固定上界。**所以严格 AC 未通过，不�
 
 **当前真正的功能阻断是什么？**
 不是 worker pool（PR #36 已交付有界、确定性、可取消的页内并发）。阻断点是**返回路径**：
-(1) 完整 receipt 切片 Θ(K)；(2) 缺少一个同时满足"有界内存"和"完整审计"的交付接口；
-(3) 若要求崩溃后不丢审计，提交数据与持久审计必须原子，这在当前实现中不存在。
+(1) 完整 receipt 切片 Θ(K)；(2) 缺少一个有界内存的流式交付接口。
+**崩溃一致性与篡改检测不是原始内存 AC 的组成部分**：若 Owner 额外要求“提交数据与持久回执同成败”，
+才需要 A3 outbox；若还要求“事后可检测篡改”，才需要 Anchor/Seal。这三层必须分别决策。
 
 **为什么提出新流式 API？**
 新 API 可以在每批提交时同步写出一条回执（Q=0，不累积），只返回小摘要 + 可分页读取的审计句柄，
@@ -85,7 +86,7 @@ SQLite/MySQL 同事务 outbox 是否真实成立、journal/synchronous 与断电
 | 审批历史扫描 O(H) 的固定 chunk 枚举与 H/F 上限 | 是（否则 N 无关仍不成立） | 是 | 否 | 属实现细节，但数值上限需批准 |
 | 资源预算（Lrow/B/W/C/T/H 数值） | 是（否则无法宣称字节上界） | 是 | 数值可在实施前批准 | 当前只有结构上界与 PROPOSED 数值 |
 | 新旧 API / Plan / Approval 兼容策略 | 是（否则无法在不破坏 m1a 的前提下交付新路径） | 是 | 否 | 见 ADR-09 |
-| 持久化 receipt 的错误与崩溃语义（CommitUnknown 等） | 是 | 是 | 否 | 不引入恢复/重放 |
+| 持久化 receipt 的错误与崩溃语义（CommitUnknown 等） | **否**（原始 AC 只要求内存增长有界；仅当 Owner 额外选择 A3/崩溃一致 receipt 时才成为前置） | 是（条件性） | 是 | 不引入恢复/重放；延期即撤回“提交与回执同成败”声明 |
 
 ### B3 — 可能是超出原始 #13 的新产品能力
 
@@ -243,13 +244,18 @@ P3 是最小"既诚实又有完整 receipt"的路径；P4 应作为独立后续�
 | WP | 内容 | 授权前置 | 代码所有者 | 修改范围 | 安全门禁 | QA 要求 | 验收证据 | 独立 PR |
 |---|---|---|---|---|---|---|---|---|
 | WP1 | 契约与兼容性提案：双 API DTO、audit policy binding、Plan/Approval 共存、summary/错误状态、CommitUnknown、APIRevision 决定 | ADR-01/02/09 批准 + 明确 contracts 授权 | Main / Architect | `pkg/contracts/**`、`docs/contracts.md` | 不改变 m1a 语义；旧审批继续有效 | 契约测试、旧 Plan 回归、shape 校验 | 契约评审记录、兼容矩阵 | 是 |
-| WP2 | DB 事务与审计能力：预置 schema/migration、SQLite/MySQL 同事务 outbox、capability/durability 探针、故障注入 | ADR-03/04/07 批准 + db 授权 | go-db | `internal/db/**`、迁移脚本 | G1–G3、G6–G9；无运行时 DDL | 真实 SQLite/MySQL 事务、ENOSPC、崩溃、CommitUnknown | 故障矩阵结果、跨后端证据 | 是 |
+| WP2 | DB 事务与审计能力（**初始仅 SQLite**）：预置 schema/migration、同事务 outbox、capability/durability 探针、故障注入 | ADR-03/04/07 批准 + db 授权 | go-db | `internal/db/**`、迁移脚本 | G1–G3、G6–G9；无运行时 DDL | 真实 SQLite 事务、ENOSPC、崩溃、CommitUnknown | 故障矩阵结果 | 是 |
+| WP2b | MySQL outbox 扩展：独立验证同库/InnoDB/primary-only/durability 后才纳入 | ADR-07 的 MySQL 部分单独批准 + WP2 完成 | go-db | 同一 db 模块的 MySQL 适配 | G12；未测组合 fail closed | 真实 MySQL 事务与 durability | 跨后端证据 | 是（可独立延期） |
 | WP3 | Runner/CLI 流式集成：Q=0 同步写入、有界工作集、审批目录 chunk 扫描、显式 CLI 选择、资源上界验证、跨 worker 正确性 | ADR-08 数值批准 + ADR-10 模块授权 + WP1/WP2 完成 | Main / go-mask / go-verify | `internal/runner/**`、`cmd/maskriver/**`、`internal/history/**` | 保留 `--apply`、审批、preflight、dry-run；无自动回退 | race/fuzz/泄漏/取消、CLI 子进程规模矩阵、跨 worker 摘要一致 | 有界性证明 + 实测分布 + SKIP 清单 | 是 |
 | WP4 | 额外审计安全能力：独立 Anchor、Seal、Verifier、平台 durability、审计攻击测试 | ADR-05/11 批准 + 新基础设施授权 | Security / Main | 新服务 + verifier + 平台测试 | G4–G5、G10–G12 | 篡改/删除/回滚/Anchor 宕机测试 | 攻击矩阵、密钥托管审查 | 是（可独立延期） |
 
 **WP4 是否必须先于 WP3？** 不必须。WP3 的 A3 路径不依赖外部 Anchor；若 Owner 不要求篡改证据，WP4 可
-独立延期。但若 Owner 要求"完整审计含篡改检测"，则 WP4 的 Seal/Anchor 验证必须在宣称该保证前完成——
-此时 WP3 可先交付"receipt 完整"，但**不得**对外声明"审计防篡改"。
+独立延期。但若 Owner 要求“完整审计含篡改检测”，则 WP4 的 Seal/Anchor 验证必须在宣称该保证前完成——
+此时 WP3 可先交付“同事务 receipt 一致性”，但**不得**对外声明“审计防篡改”。
+
+**术语边界：** 本包中“receipt 完整/完整审计”仅指**同事务 receipt 一致性**（业务写入与该批 receipt 同成败），
+不包含主动篡改检测、不包含长期保留、也不证明 durability。只有 WP4 完成且通过独立审查后，才可声称
+“登记后、catalog 内、可信 Runner/Anchor 边界”的篡改证据；否则必须使用“本地一致性”表述。
 
 **当前所有 WP 均为 `NOT AUTHORIZED`。**
 
@@ -276,6 +282,6 @@ ADR-04/05/06/07/08 可在上述确定后批准；不应提前要求 Owner 批准
 - 生产修改权限：**无**。
 - ADR-01..ADR-11：全部 `PENDING OWNER DECISION`。
 
-**本包裁决：`OWNER DECISION PACKAGE READY`** —— 决策材料、原始 AC 溯源、完整 diff 审查与独立复核
-（见 `docs/reviews/issue13-pr71-full-diff-review.md` 及本轮复核报告）已完成；但 Owner 尚未批准任何
-ADR，故**不是** `READY FOR AUTHORIZED IMPLEMENTATION`。
+**本包裁决：`OWNER DECISION PACKAGE READY`** —— 决策材料、原始 AC 溯源、完整 diff 审查（已审计至
+`332cb80fdb2dfccd718ee793bd87087e1c3e0af6`，见 `docs/reviews/issue13-pr71-full-diff-review.md`）与独立
+复核已完成；但 Owner 尚未批准任何 ADR，故**不是** `READY FOR AUTHORIZED IMPLEMENTATION`。
