@@ -24,7 +24,11 @@ The following is a **previous confirmed run**, not a prediction of the final PR 
 
 The one-worker configuration was fastest in this run. The earlier [run 38266042530](https://github.com/haoyuehx/maskriver/actions/runs/38266042530) showed the same ordering. **Do not imply that more goroutines improve performance or that these short samples prove a speedup**.
 
-The bench workflow archives `raw.txt`, `environment.txt`, `results.csv`, `results.json` and an SVG chart. An extended workflow also records per-process `/usr/bin/time -v` CPU seconds and peak RSS and machine-readable summaries; these numbers include Go test process startup/compilation/caching and are **not equivalent to steady-state mask-only RSS/CPU**. Do not claim full DB throughput until measured using actual database CLI workload sizes and distributions.
+The bench workflow archives `raw.txt`, `environment.txt`, `results.csv`, `results.json` and an SVG chart. An extended workflow also records per-process `/usr/bin/time -v` CPU seconds and peak RSS and machine-readable summaries; these numbers include Go test process startup/compilation/caching and are **not equivalent to steady-state mask-only RSS/CPU**.
+
+## Phase-5 real SQLite Runner scale evidence (2026-10-19)
+
+[The reproducible phase-5 report](perf/issue13-phase5-20261019-final/summary.md) records 42 real-SQLite Runner trials at 10k/100k/1M synthetic rows, workers 1/2/4/8/16 where repetitions were budgeted, fixed BatchSize 64, per-stage timings, rows/s, sampled process resources, SQL pool closure, receipt counts, source immutability and independent Validate/aggregate checks. It is **Runner API coverage, not CLI scale E2E**, and its sequential/instrumented measurements do not establish a production speedup. The 1M cases were single samples. Receipt slice capacity grows with total batches, so these runs do not prove the strict batch×workers memory bound. No production optimization or default change was justified. Issue #13 remains open.
 
 ## Verification commands
 
@@ -41,9 +45,9 @@ The benchmark CI also runs bounded fuzz targets for CN identity/card/USCC checks
 
 ## Remaining Issue #13 acceptance
 
-- Full end-to-end **SQLite and MySQL** throughput/latency comparisons at fixed multiple row counts and distributions; this PR measures only a 128-value in-memory HMAC task.
-- CPU/RSS **under sustained whole-database workload** and memory scaling versus batch size and worker count.
-- Non-author review, connection-leak instrumentation beyond local transform goroutines, and the blocked M1 #9/#11 safety acceptance.
+- Full-scale **SQLite CLI** comparisons remain unmeasured: phase 5 exercises the Runner API and existing CLI tests are not a 10k–1M performance matrix. The project has no MySQL CLI; MySQL adapter component tests are not MySQL user-workflow benchmarks.
+- Statistically repeated 1M trials, uninstrumented workload comparison, native Windows/macOS runtime performance, additional sustained lock/WAL/cancellation metrics, and evidence that total memory is strictly bounded by batch × workers (receipt capacity currently grows with batch count).
+- Final-head independent QA/Security review and closure of every remaining original Issue #13 acceptance item.
 - Any observed improvement must be justified by measured results instead of presumed parallel speedup.
 
 Accordingly, the bounded worker implementation can merge independently without claiming all of Issue #13 is accepted or closing the issue prematurely.

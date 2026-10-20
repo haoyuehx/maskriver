@@ -1,0 +1,234 @@
+{
+  "batch_size": 64,
+  "cases": [
+    {
+      "rows": 10000,
+      "workers": 1,
+      "repetition": 1
+    },
+    {
+      "rows": 10000,
+      "workers": 1,
+      "repetition": 2
+    },
+    {
+      "rows": 10000,
+      "workers": 1,
+      "repetition": 3
+    },
+    {
+      "rows": 10000,
+      "workers": 1,
+      "repetition": 4
+    },
+    {
+      "rows": 10000,
+      "workers": 1,
+      "repetition": 5
+    },
+    {
+      "rows": 10000,
+      "workers": 2,
+      "repetition": 1
+    },
+    {
+      "rows": 10000,
+      "workers": 2,
+      "repetition": 2
+    },
+    {
+      "rows": 10000,
+      "workers": 2,
+      "repetition": 3
+    },
+    {
+      "rows": 10000,
+      "workers": 2,
+      "repetition": 4
+    },
+    {
+      "rows": 10000,
+      "workers": 2,
+      "repetition": 5
+    },
+    {
+      "rows": 10000,
+      "workers": 4,
+      "repetition": 1
+    },
+    {
+      "rows": 10000,
+      "workers": 4,
+      "repetition": 2
+    },
+    {
+      "rows": 10000,
+      "workers": 4,
+      "repetition": 3
+    },
+    {
+      "rows": 10000,
+      "workers": 4,
+      "repetition": 4
+    },
+    {
+      "rows": 10000,
+      "workers": 4,
+      "repetition": 5
+    },
+    {
+      "rows": 10000,
+      "workers": 8,
+      "repetition": 1
+    },
+    {
+      "rows": 10000,
+      "workers": 8,
+      "repetition": 2
+    },
+    {
+      "rows": 10000,
+      "workers": 8,
+      "repetition": 3
+    },
+    {
+      "rows": 10000,
+      "workers": 8,
+      "repetition": 4
+    },
+    {
+      "rows": 10000,
+      "workers": 8,
+      "repetition": 5
+    },
+    {
+      "rows": 10000,
+      "workers": 16,
+      "repetition": 1
+    },
+    {
+      "rows": 10000,
+      "workers": 16,
+      "repetition": 2
+    },
+    {
+      "rows": 10000,
+      "workers": 16,
+      "repetition": 3
+    },
+    {
+      "rows": 10000,
+      "workers": 16,
+      "repetition": 4
+    },
+    {
+      "rows": 10000,
+      "workers": 16,
+      "repetition": 5
+    },
+    {
+      "rows": 100000,
+      "workers": 1,
+      "repetition": 1
+    },
+    {
+      "rows": 100000,
+      "workers": 1,
+      "repetition": 2
+    },
+    {
+      "rows": 100000,
+      "workers": 1,
+      "repetition": 3
+    },
+    {
+      "rows": 100000,
+      "workers": 2,
+      "repetition": 1
+    },
+    {
+      "rows": 100000,
+      "workers": 2,
+      "repetition": 2
+    },
+    {
+      "rows": 100000,
+      "workers": 2,
+      "repetition": 3
+    },
+    {
+      "rows": 100000,
+      "workers": 4,
+      "repetition": 1
+    },
+    {
+      "rows": 100000,
+      "workers": 4,
+      "repetition": 2
+    },
+    {
+      "rows": 100000,
+      "workers": 4,
+      "repetition": 3
+    },
+    {
+      "rows": 100000,
+      "workers": 8,
+      "repetition": 1
+    },
+    {
+      "rows": 100000,
+      "workers": 8,
+      "repetition": 2
+    },
+    {
+      "rows": 100000,
+      "workers": 8,
+      "repetition": 3
+    },
+    {
+      "rows": 100000,
+      "workers": 16,
+      "repetition": 1
+    },
+    {
+      "rows": 100000,
+      "workers": 16,
+      "repetition": 2
+    },
+    {
+      "rows": 100000,
+      "workers": 16,
+      "repetition": 3
+    },
+    {
+      "rows": 1000000,
+      "workers": 1,
+      "repetition": 1
+    },
+    {
+      "rows": 1000000,
+      "workers": 4,
+      "repetition": 1
+    }
+  ],
+  "completed": 42,
+  "field_distributions": {
+    "email_high_cardinality": {
+      "detection": "real runner DISTINCT non-NULL sample; cap 10000, minimum 20, ratio 0.90",
+      "distinct_cap": 9500,
+      "generator": "h%07d@example.invalid, index modulo 9500",
+      "null_ratio": 0,
+      "value_length_bytes": 24
+    },
+    "email_repeated_null": {
+      "detection": "real runner DISTINCT non-NULL sample; cap 10000, minimum 20, ratio 0.90",
+      "generator": "NULL when zero-based row index mod 20 is 0; otherwise r%03d@example.invalid, index modulo 100",
+      "non_null_distinct": 95,
+      "null_ratio_formula": "exactly 5% for target row counts divisible by 20",
+      "value_length_bytes": 20
+    },
+    "notes": "Both fields are present in every run and use only synthetic reserved .invalid values. duplicate rate depends on row count and is calculated from actual fixture aggregates."
+  },
+  "schema_version": 1
+}

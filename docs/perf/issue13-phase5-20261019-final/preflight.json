@@ -1,0 +1,9 @@
+{
+  "available_disk_bytes": 160813273088,
+  "available_memory_kb": 9406084,
+  "conservative_estimated_peak_working_set_bytes": 2147483648,
+  "minimum_disk_bytes": 5368709120,
+  "minimum_available_memory_kb": 4194304,
+  "passed": true,
+  "source": "Linux statfs available blocks and /proc/meminfo"
+}
