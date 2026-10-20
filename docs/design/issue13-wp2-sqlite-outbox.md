@@ -141,6 +141,7 @@ Disk usage still grows with the number of batches: **bounded memory is not bound
 | Process exit immediately after commit | `TestOutboxCrashAfterCommit` | PASS — data + receipt survive |
 | Receipt row-count mismatch | `TestOutboxReceiptRowCountMismatchRollsBack` | PASS — `ErrConflict`, rollback |
 | Reserved outbox table as business target | `TestOutboxRejectsReservedBusinessTable` | PASS — `ErrUnsafe` |
+| Second active batch / close with active batch / use after commit | `TestOutboxSingleActiveBatch`, `TestOutboxCloseRollsBackActiveBatch`, `TestOutboxTxUseAfterCommit` | PASS |
 | Altered table shape with valid marker | `TestOutboxShapeTamperRejected` | PASS — `ErrUnsupported` |
 | Process kill *during* commit | — | **UNVERIFIED** (no deterministic seam without a hostile fixture) |
 | ENOSPC injected exactly at receipt INSERT | — | **UNVERIFIED** (full-disk was exercised at UPDATE; receipt-time ENOSPC is not deterministically producible) |

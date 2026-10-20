@@ -1007,3 +1007,101 @@ func TestOutboxReservedTables(t *testing.T) {
 		t.Fatalf("tables=%v", OutboxTables())
 	}
 }
+
+func TestOutboxSingleActiveBatch(t *testing.T) {
+	opts, _ := outboxTestOptions(t)
+	installOutbox(t, opts)
+	o := openOutbox(t, opts)
+	plan := outboxPlan(t, o, "people", "email")
+	tx, err := o.BeginBatch(context.Background(), outboxTestRunID, plan, outboxReceipt(0, 1, "batch-000"))
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if _, err := o.BeginBatch(context.Background(), outboxTestRunID, plan, outboxReceipt(1, 1, "batch-001")); !errors.Is(err, contracts.ErrUnsafe) {
+		t.Fatalf("second active batch err=%v", err)
+	}
+	if _, err := tx.Update(context.Background(), []contracts.RowChange{emailChange(t, 1, "fixture-01@example.invalid", "masked-01@example.invalid")}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if err := tx.Commit(context.Background()); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if _, err := o.BeginBatch(context.Background(), outboxTestRunID, plan, outboxReceipt(1, 0, "batch-001")); err != nil {
+		t.Fatalf("begin after commit: %v", err)
+	}
+}
+
+func TestOutboxCloseRollsBackActiveBatch(t *testing.T) {
+	opts, path := outboxTestOptions(t)
+	installOutbox(t, opts)
+	o, err := OpenOutbox(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if err := o.InitializeRun(context.Background(), OutboxRun{
+		RunID: outboxTestRunID, PlanID: strings.Repeat("a", 64),
+		ApprovalBinding: contracts.ApprovalBindingRevision,
+		TargetDigest:    strings.Repeat("b", 64), ScopeDigest: strings.Repeat("c", 64),
+		Protocol: contracts.StreamingProtocolRevision,
+	}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	plan := outboxPlan(t, o, "people", "email")
+	tx, err := o.BeginBatch(context.Background(), outboxTestRunID, plan, outboxReceipt(0, 1, "batch-000"))
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if _, err := tx.Update(context.Background(), []contracts.RowChange{emailChange(t, 1, "fixture-01@example.invalid", "masked-01@example.invalid")}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if err := o.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if got := queryString(t, path, `SELECT email FROM people WHERE id=1`); got != "fixture-01@example.invalid" {
+		t.Fatalf("close committed data: %q", got)
+	}
+	if got := queryCount(t, path, `SELECT COUNT(*) FROM maskriver_outbox_batch`); got != 0 {
+		t.Fatalf("close left receipt: %d", got)
+	}
+}
+
+func TestOutboxTxUseAfterCommit(t *testing.T) {
+	opts, _ := outboxTestOptions(t)
+	installOutbox(t, opts)
+	o := openOutbox(t, opts)
+	plan := outboxPlan(t, o, "people", "email")
+	tx, err := o.BeginBatch(context.Background(), outboxTestRunID, plan, outboxReceipt(0, 1, "batch-000"))
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if _, err := tx.Update(context.Background(), []contracts.RowChange{emailChange(t, 1, "fixture-01@example.invalid", "masked-01@example.invalid")}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if err := tx.Commit(context.Background()); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if _, err := tx.Update(context.Background(), []contracts.RowChange{emailChange(t, 2, "fixture-02@example.invalid", "masked-02@example.invalid")}); !errors.Is(err, contracts.ErrClosed) {
+		t.Fatalf("update after commit err=%v", err)
+	}
+	if err := tx.Commit(context.Background()); !errors.Is(err, contracts.ErrClosed) {
+		t.Fatalf("double commit err=%v", err)
+	}
+	if err := tx.Rollback(context.Background()); err != nil {
+		t.Fatalf("rollback after commit err=%v", err)
+	}
+}
+
+func TestOutboxPageZeroAndOversized(t *testing.T) {
+	opts, _ := outboxTestOptions(t)
+	installOutbox(t, opts)
+	o := openOutbox(t, opts)
+	if _, err := o.Page(context.Background(), outboxTestRunID, 0, 0); !errors.Is(err, contracts.ErrInvalid) {
+		t.Fatalf("zero page err=%v", err)
+	}
+	if _, err := o.Page(context.Background(), outboxTestRunID, 0, o.maxPage+1); !errors.Is(err, contracts.ErrInvalid) {
+		t.Fatalf("oversized page err=%v", err)
+	}
+	if _, err := o.Page(context.Background(), "ffffffffffffffffffffffffffffffff", 0, 1); !errors.Is(err, contracts.ErrNotFound) {
+		t.Fatalf("unknown run err=%v", err)
+	}
+}
