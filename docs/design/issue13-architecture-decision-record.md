@@ -2,9 +2,11 @@
 
 **Status:** DESIGN READY — PENDING OWNER APPROVAL. All owner decisions below remain `PENDING OWNER DECISION`. This is readiness for Owner decision only, not authorization to change production behavior or frozen contracts.
 
-**Current PR context at drafting:** PR #71, branch `design/issue13-bounded-receipts-20261020`. Baseline `main=9d6e03627c15fa31df051b16370f79e895e96bcc`. Independent Architecture and Security reviews examined head `45f754d47e753ef4798050feb6a961b90bfa4687`, found P0=0/P1=0, and their findings/limits are recorded in `docs/reviews/`. This revision removes stale status-review wording identified by Architecture; the status remains pending Owner approval, not implementation authorization.
+**Owner entry point:** [`issue13-owner-decision-package.md`](issue13-owner-decision-package.md) condenses ADR-01..ADR-11 into priority groups, S1/S2/S3 and A1/A2/A3 comparisons, the minimum safe implementation paths, implementation gates and proposed work packages. It records no approval.
 
-**Repository facts at `45f754d`:** PR #70 is merged; Issue #13 is OPEN; #14 is not authorized; `pkg/contracts.APIRevision=m1a-v1` is frozen; `v0.1.0-dev` is unchanged. Main observed Ubuntu/Windows checks pending and isolated MySQL adapter check passed at drafting. These documentation checks do not validate this later head or any outbox implementation.
+**Current PR context at drafting:** PR #71, branch `design/issue13-bounded-receipts-20261020`. Baseline `main=9d6e03627c15fa31df051b16370f79e895e96bcc`. Main audited the complete base-to-head diff at `ae056534e79be5d644413783a504affbbba64e44` (17 added Markdown files, no code/contract changes) and recorded it in [`docs/reviews/issue13-pr71-full-diff-review.md`](../reviews/issue13-pr71-full-diff-review.md). Independent reviews of earlier heads are recorded in `docs/reviews/`. Later documentation commits require their own exact-head review and CI.
+
+**Repository facts:** PR #70 is merged; Issue #13 is OPEN; #14 is not authorized; `pkg/contracts.APIRevision=m1a-v1` is frozen; `v0.1.0-dev` is unchanged. Documentation CI does not validate any outbox or anchor implementation.
 
 ## Purpose and invariant
 

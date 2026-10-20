@@ -4,6 +4,8 @@
 
 本文件 §5–§15 的早期候选方案曾讨论提交后外部Sink；该模型现由 `docs/design/issue13-architecture-decision-record.md` 中 A3（目标数据库同事务 outbox）替代为推荐候选。ADR是当前方案来源；本文件中与A3冲突的旧 sink 时序/测试表应视为历史分析，不是待实现设计。
 
+**Owner 入口：** [`issue13-owner-decision-package.md`](issue13-owner-decision-package.md) 汇总 S1/S2/S3、A1/A2/A3、Anchor 必要性、实现门禁与工作包，便于一次性决策；不包含任何批准。
+
 - 仓库基线：`9d6e03627c15fa31df051b16370f79e895e96bcc`（main，与 origin/main 一致；调查时工作树干净）。
 - Issue #13：OPEN；PR #70：MERGED，head `b82bb6d65fce0d4ec7ca61787d7ac19435b15bdb`，merge `9d6e03627c15fa31df051b16370f79e895e96bcc`。
 - `pkg/contracts.APIRevision=m1a-v1`；release `v0.1.0-dev` 不变。#14 未授权、未启动。
