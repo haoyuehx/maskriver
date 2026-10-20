@@ -84,6 +84,10 @@ type Config struct {
 	Signer *Signer
 	// Now defaults to time.Now and is the clock used for expiry checks.
 	Now func() time.Time
+	// MaxEntries and MaxNameBytes bound directory enumeration. Zero selects the
+	// conservative package defaults; there is no unbounded encoding.
+	MaxEntries   int
+	MaxNameBytes int
 }
 
 // DecisionStore is the explicit review-decision surface for Main to inject. It
@@ -108,6 +112,9 @@ type Store struct {
 	// rename is a test seam for an interrupted commit; it is os.Rename in
 	// production and is never nil.
 	rename func(string, string) error
+	// maxEntries and maxNameBytes bound bounded directory enumeration.
+	maxEntries   int
+	maxNameBytes int
 }
 
 // ApproveRequest asks to persist one decision. Every bound field comes from Plan,
@@ -138,8 +145,12 @@ func Open(cfg Config) (*Store, error) {
 	if len(cfg.Trust.keys) == 0 {
 		return nil, unsafeError(errNoTrustedKey)
 	}
+	if cfg.MaxEntries < 0 || cfg.MaxNameBytes < 0 {
+		return nil, contracts.ErrInvalid
+	}
 	store := &Store{
 		dir: cfg.Dir, trust: cfg.Trust, now: cfg.Now, rename: os.Rename,
+		maxEntries: cfg.MaxEntries, maxNameBytes: cfg.MaxNameBytes,
 	}
 	if store.now == nil {
 		store.now = time.Now
@@ -339,28 +350,21 @@ func (s *Store) verify(raw []byte) (Record, error) {
 // record applies" depend on the file name an attacker chose. Files that do not
 // declare a plan id can never be loaded as a record and are ignored.
 func (s *Store) requireUnambiguous(planID string) error {
-	entries, err := os.ReadDir(s.dir)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return unsafeError(errRead)
-	}
 	canonical := planID + recordSuffix
-	for _, entry := range entries {
+	return s.eachEntry(context.Background(), func(entry fs.DirEntry) error {
 		if entry.IsDir() || entry.Name() == canonical ||
 			!strings.HasSuffix(entry.Name(), recordSuffix) {
-			continue
+			return nil
 		}
 		raw, err := readCapped(filepath.Join(s.dir, entry.Name()))
 		if err != nil {
-			continue
+			return nil
 		}
 		if claimed, ok := claimedPlanID(raw); ok && claimed == planID {
 			return conflictError(errAmbiguous)
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // write persists one record: stage a complete file in the same directory, fsync
