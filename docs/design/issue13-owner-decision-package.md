@@ -282,6 +282,4 @@ ADR-04/05/06/07/08 可在上述确定后批准；不应提前要求 Owner 批准
 - 生产修改权限：**无**。
 - ADR-01..ADR-11：全部 `PENDING OWNER DECISION`。
 
-**本包裁决：`OWNER DECISION PACKAGE READY`** —— 决策材料、原始 AC 溯源、完整 diff 审查（已审计至
-`332cb80fdb2dfccd718ee793bd87087e1c3e0af6`，见 `docs/reviews/issue13-pr71-full-diff-review.md`）与独立
-复核已完成；但 Owner 尚未批准任何 ADR，故**不是** `READY FOR AUTHORIZED IMPLEMENTATION`。
+**本包裁决：`OWNER DECISION PACKAGE READY`** —— 决策材料、原始 AC 溯源、完整 diff 审查（见 `docs/reviews/issue13-pr71-full-diff-review.md` 及其附录）与独立复核已完成；但 Owner 尚未批准任何 ADR，故**不是** `READY FOR AUTHORIZED IMPLEMENTATION`。

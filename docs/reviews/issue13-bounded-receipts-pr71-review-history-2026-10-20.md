@@ -93,3 +93,29 @@ The design-document review-pending wording was removed before `717b17a`; indepen
 - Independent Architecture Review: **P0=0/P1=0/P2=1**, stale present-tense sentence in this review-history file. Formal report [`issue13-pr71-architecture-review-2026-10-20-head-717b17a.md`](issue13-pr71-architecture-review-2026-10-20-head-717b17a.md); artifact `a608db0d-55d2-4321-8f8b-bad2043e4b8f_reviewer_output.md` (run ID `a608db0d-55d2-4321-8f8b-bad2043e4b8f`).
 - Independent Security Review: **P0=0/P1=0/P2=1**, same stale history wording; target path/durability remains an implementation gate, not a P1. Formal report [`issue13-pr71-security-review-2026-10-20-head-717b17a.md`](issue13-pr71-security-review-2026-10-20-head-717b17a.md); artifact `aa0db902-7044-481d-bd0e-55c68ee0e9e1_go-reviewer_output.md` (run ID `aa0db902-7044-481d-bd0e-55c68ee0e9e1`).
 - Architecture confirmed supplied HEAD/clean worktree; Security received SHA from Main. Both lacked full base diff; no tests or database/anchor probes were run.
+
+## Owner-decision round — full diff audit and package reviews
+
+- **Main full-diff audit (not an independent verdict):** complete `git diff 9d6e036..332cb80` inspected;
+  19 added Markdown files, no code/contract/CI/release changes, no binaries/symlinks, `git diff --check`
+  PASS, no credential patterns. Recorded in [`issue13-pr71-full-diff-review.md`](issue13-pr71-full-diff-review.md).
+- **H1 independent full-diff review** at `332cb80fdb2dfccd718ee793bd87087e1c3e0af6`: read the supplied
+  complete diff artifact, confirmed docs-only scope and honest AC/status claims. **P0=0/P1=0/P2=2**:
+  (a) ADR-03 bundled an “independent witness” into A3 while the owner package separated them;
+  (b) the package claimed a full-diff review without naming the audited head. Artifact
+  `7be3c905-82fd-4976-bf1d-412e32c8528a_reviewer_output.md` (run ID `7be3c905-82fd-4976-bf1d-412e32c8528a`).
+- **H2 independent Architecture review** of the owner package at `332cb80`: **P0=0/P1=0/P2=2**:
+  B2 treated durable receipt/crash semantics as core AC even though the original AC is a memory bound;
+  WP2 bundled SQLite and MySQL despite the ADR-07 staged recommendation. Artifact
+  `fe29b4da-56f6-4c5f-ad31-caeb4acbb793_reviewer_output.md` (run ID `fe29b4da-56f6-4c5f-ad31-caeb4acbb793`).
+- **H2 independent Security review** of the owner package at `332cb80`: **P0=0/P1=0/P2=1**: “receipt
+  complete / full audit” wording could be read as tamper-evident or long-term retention although A3 is
+  same-transaction consistency only. Artifact `531a9bb1-0f5e-404f-9d4e-d0b8c5807fb2_go-reviewer_output.md`
+  (run ID `531a9bb1-0f5e-404f-9d4e-d0b8c5807fb2`).
+- **Dispositions (all P2, documentation):** ADR-03/§A3 now scope A3 to same-transaction receipt atomicity
+  and move anchor/seal to ADR-05; the package names the audited head and the audit gained an addendum;
+  B2 marks durable-receipt semantics as conditional, not core; WP2 is SQLite-initial with a separately
+  gated WP2b for MySQL; terminology now limits “receipt complete” to same-transaction consistency.
+- All three reviewers were read-only and ran no tests or DB/anchor probes. Their exact-head re-review of
+  the corrected head is required before any merge recommendation; none of these reviews authorizes
+  implementation or Issue #13 acceptance.
