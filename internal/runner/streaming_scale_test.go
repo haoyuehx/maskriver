@@ -157,7 +157,7 @@ func peakRSSKB() int64 {
 	for _, line := range strings.Split(string(raw), "\n") {
 		if strings.HasPrefix(line, "VmHWM:") {
 			fields := strings.Fields(line)
-			if len(fields) == 2 {
+			if len(fields) >= 2 {
 				value, err := strconv.ParseInt(fields[1], 10, 64)
 				if err == nil {
 					return value

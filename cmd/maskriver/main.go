@@ -81,6 +81,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var apply, strict, streaming bool
 	var budgetFile, runID string
 	var receiptPage int
+	var operationTimeout time.Duration
 	var strategy, keyID string
 	var scopes scopeFlag
 	flags.StringVar(&source, "source", "", "existing absolute SQLite source-snapshot path")
@@ -111,6 +112,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		flags.StringVar(&budgetFile, "budget-file", "", "explicit ResourceBudget JSON (required with --streaming)")
 		flags.StringVar(&runID, "run-id", "", "32-hex run identity (generated when omitted)")
 		flags.IntVar(&receiptPage, "receipt-page-size", 0, "receipt page bound (required with --streaming)")
+		flags.DurationVar(&operationTimeout, "timeout", 2*time.Minute, "operation deadline (1s..24h)")
 	}
 	if command == "validate" {
 		flags.BoolVar(&strict, "strict", true, "refuse any incomplete or warning coverage")
@@ -222,7 +224,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return fail(stderr, 2)
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	if command == "mask" && (operationTimeout < time.Second || operationTimeout > 24*time.Hour) {
+		return fail(stderr, 2)
+	}
+	if command != "mask" {
+		operationTimeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
 	defer cancel()
 	engine, err := runner.Open(ctx, cfg, key)
 	if err != nil {

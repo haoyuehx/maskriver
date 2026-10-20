@@ -65,10 +65,10 @@ func (f *fakeStreamingVerifier) VerifyStreaming(_ context.Context, _ contracts.P
 }
 
 var testBudget = contracts.ResourceBudget{
-	MaxBatchSize: 1000, MaxWorkers: 16, MaxRowBytes: 1 << 20, MaxColumns: 100,
+	MaxBatchSize: 256, MaxWorkers: 16, MaxRowBytes: 1 << 20, MaxColumns: 100,
 	MaxTables: 10, MaxHistoryEntries: 1000, MaxHistoryNameBytes: 4096,
 	MaxReceiptPage: 64, MaxIssueCounts: 16, MaxQueue: 0,
-	MaxProcessBytes: 1 << 30, MaxDiskBytes: 1 << 30,
+	MaxProcessBytes: 2 << 30, MaxDiskBytes: 8 << 30,
 }
 
 // requireLinuxStreaming skips when the SQLite outbox is explicitly unsupported.
