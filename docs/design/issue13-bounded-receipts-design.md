@@ -224,7 +224,7 @@ sequenceDiagram
 
 ## 15. 最终架构裁决
 
-**本次ADR是候选设计，不是Owner批准或实现证明。** 在`e1faa582ca5fa2d07478f081418c968101049f97`上，独立Architecture与Security Review均为P0=0/P1=0/P2=1。Architecture P2为failure table混淆Runner执行状态与Verifier单一结果；Security P2为durability/目标路径门禁尚未可执行或验证。本修订把两类状态分栏、使用精确结果token；新head尚未复核，因此暂保持 `DESIGN BLOCKED — FINAL-HEAD REVIEW PENDING`。若最终head独立评审仍P0/P1=0，可更正为 `DESIGN READY — PENDING OWNER APPROVAL`；durability/path与存储支持仍是后续实现门禁。Issue Owner须决定AC范围与审计保证；全部ADR行仍待决。Legacy API仍Θ(K)。新streaming receipts只有在历史目录/metadata/row payload有硬界且Owner接受AC范围后才可能与K无关。A3及SQLite/MySQL durability尚未实现/验证；外部anchor不与DB事务原子。本文件不授权生产实现，也不声称Issue #13 AC通过。
+**本次ADR是候选设计，不是Owner批准或实现证明。** `e1faa58`与`49434f3`的独立Architecture/Security review均P0=0/P1=0。Architecture在`49434f3`发现failure table仍混淆活动Commit attempt与停止后Verifier结果；本修订只把未决Commit分类为停止/恢复读回后的`UNKNOWN`，运行中的结果不适用。Security P2为durability/目标路径门禁尚不可执行或未验证。当前新head尚未复审，故状态仍 `DESIGN BLOCKED — FINAL-HEAD REVIEW PENDING`；若最终head确认P0/P1=0，可转为 `DESIGN READY — PENDING OWNER APPROVAL`，但durability/path与存储支持仍是实现门禁。Issue Owner须决定AC范围与审计保证；全部ADR行仍待决。Legacy API仍Θ(K)。新streaming receipts只有在历史目录/metadata/row payload有硬界且Owner接受AC范围后才可能与K无关。A3及SQLite/MySQL durability尚未实现/验证；外部anchor不与DB事务原子。本文件不授权生产实现，也不声称Issue #13 AC通过。
 
 最终问题答复：
 1. 当前 Apply 内存复杂度：`O(K + B·C·L + T + C·(sampleLimit+1) + D + H + filenameBytes + runtime/cache)`；K在稠密可写数据时Θ(N/B)，另有审批目录O(H)扫描等规模项。
@@ -240,6 +240,6 @@ sequenceDiagram
 
 ### 独立评审状态与当前裁决
 
-历史与当前审查的实际SHA、严重度、限制、四项Security P1逐条处置及原始证据关系保存在 [`docs/reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md`](../reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md)。`e1faa582ca5fa2d07478f081418c968101049f97`上的独立Architecture与Security Review均P0=0/P1=0/P2=1：前者指出failure table需区分Runner state和Verifier outcome；后者将durability/path capability保留为实现门禁。精确报告与限制位于 `docs/reviews/`；两者都未执行测试、也未宣称实现或AC验收。
+历史与当前审查的实际SHA、严重度、限制、四项Security P1逐条处置及原始证据关系保存在 [`docs/reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md`](../reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md)。`49434f3d33cf55f97970e544517d1f08b656f5bb`上的独立Architecture/Security Review均P0=0/P1=0/P2=1：Architecture指出活动Commit attempt应只在停止后评估Verifier；Security将durability/path capability保留为实现门禁。精确报告与限制位于`docs/reviews/`；两者均未执行测试，亦不宣称实现或AC验收。
 
-本次文档草案已按Architecture P2重构状态表，并记录e1两项独立复核及provider失败的原始关系。但此后改动尚未接受新head复核，故状态仍 `DESIGN BLOCKED — FINAL-HEAD REVIEW PENDING`。只有最终head独立评审P0/P1=0，才可更正为 `DESIGN READY — PENDING OWNER APPROVAL`。所有Owner选项仍待决，当前产品实现风险未因设计文字而关闭。
+本次草案已按Architecture P2修正状态表；新head尚未复审，故当前状态仍 `DESIGN BLOCKED — FINAL-HEAD REVIEW PENDING`。只有最终head独立评审P0/P1=0，才可转为 `DESIGN READY — PENDING OWNER APPROVAL`。所有Owner选项仍待决，产品实现风险未因设计文字而关闭。

@@ -2,9 +2,9 @@
 
 **Status:** PROPOSED; all owner decisions below remain `PENDING OWNER DECISION`. This ADR is not authorization to change production behavior or frozen contracts.
 
-**Current PR context at drafting:** PR #71, branch `design/issue13-bounded-receipts-20261020`. Baseline `main=9d6e03627c15fa31df051b16370f79e895e96bcc`. Independent Architecture and Security reviews examined head `e1faa582ca5fa2d07478f081418c968101049f97`; their findings/limits are recorded in `docs/reviews/`. This revision separates runner execution states from verifier outcomes to correct the Architecture P2 and must itself be reviewed at its new exact SHA.
+**Current PR context at drafting:** PR #71, branch `design/issue13-bounded-receipts-20261020`. Baseline `main=9d6e03627c15fa31df051b16370f79e895e96bcc`. Independent Architecture and Security reviews examined head `49434f3d33cf55f97970e544517d1f08b656f5bb`; their findings/limits are recorded in `docs/reviews/`. This revision clarifies that unresolved CommitAttempt is classified UNKNOWN only after stop/readback and must itself be reviewed at its new exact SHA.
 
-**Repository facts at `e1faa58`:** PR #70 is merged; Issue #13 is OPEN; #14 is not authorized; `pkg/contracts.APIRevision=m1a-v1` is frozen; `v0.1.0-dev` is unchanged. Main verified Ubuntu, Windows and isolated MySQL CI pass on PR #71 head `e1faa582ca5fa2d07478f081418c968101049f97`; these documentation checks do not validate a later head or any outbox implementation.
+**Repository facts at `49434f3`:** PR #70 is merged; Issue #13 is OPEN; #14 is not authorized; `pkg/contracts.APIRevision=m1a-v1` is frozen; `v0.1.0-dev` is unchanged. Main verified Ubuntu/Windows/isolated MySQL CI pass on predecessor `e1faa582ca5fa2d07478f081418c968101049f97`; checks for `49434f3` were pending at drafting. These documentation checks do not validate a later head or any outbox implementation.
 
 ## Purpose and invariant
 
@@ -131,7 +131,7 @@ Runner execution states and verifier outcomes are separate columns. Verifier out
 | Before first `BatchPrepare` after run enrollment | No current-batch data | Registered run/envelope; no batch event | `FAILED_BEFORE_COMMIT` | `INCOMPLETE_VALID` | Stop; no retry in same run |
 | `BatchPrepare` write fails/ENOSPC | No data tx started | Registered run/envelope; no prepare event | `FAILED_BEFORE_COMMIT` | `INCOMPLETE_VALID` | Fail closed before first update; do not fallback to memory |
 | After anchored `BatchPrepare`, before data Commit; rollback known | No batch data | Prepare event is locally and externally anchored | `FAILED_BEFORE_COMMIT` | `INCOMPLETE_VALID` | Stop; never reapply automatically |
-| Underlying Commit attempt in progress | Possibly none or all batch rows | Outcome not yet resolved | `COMMIT_ATTEMPTED` | `UNKNOWN` if queried before authoritative resolution | Stop; no retry |
+| Commit attempt interrupted; outcome still unresolved after recovery | Possibly none or all batch rows | Authoritative recovery did not resolve transaction | `COMMIT_ATTEMPTED` (last observed state) | `UNKNOWN` after stop/readback | Stop; no retry |
 | Commit returns nil; live process awaiting anchor acknowledgment | Batch data and `BatchCommitted` outbox event committed in one tx | Local receipt durability depends on configured sync policy; anchor ack not yet known | `COMMIT_CONFIRMED` | `N/A` while the run is live; do not publish complete | Do not begin another batch until anchor durably acknowledges and caller context remains active |
 | Commit returns `ErrCommitUnknown` | Under A3, data and local receipt are both committed or both absent | Anchor has the prepare event only; an ambiguous Commit is never attested as committed | `COMMIT_UNKNOWN` | `UNKNOWN` | Stop; no data retry |
 | Crash after Commit success, before per-batch anchor acknowledgment | Business data and local outbox receipt may persist atomically | Independent catalog shows no commit acknowledgment; local event is unanchored | `AUDIT_INCOMPLETE` | `UNKNOWN` | Never rerun Apply or reconstruct attestation from DB contents |
