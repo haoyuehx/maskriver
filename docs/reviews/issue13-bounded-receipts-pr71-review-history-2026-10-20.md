@@ -129,7 +129,7 @@ The design-document review-pending wording was removed before `717b17a`; indepen
 | Security (H2) | `7a95a7c` | P0=0/P1=0/P2=0 | Terminology, A3/anchor separation, gates and invariants verified; no new finding. Artifact `2fb2c4c5-2f1b-4072-bc6f-5bac34482baa_go-reviewer_output.md`. |
 | Full diff (H1) | `4e35f3d` | P0=0/P1=0/P2=0 | Docs-only diff confirmed; both prior P2 fixes present; no overclaim. Artifact `71c87c6e-694d-4c39-99c9-f41fcedbf9f2_reviewer_output.md`. |
 | Security (H2) | `4e35f3d` | P0=0/P1=0/P2=0 | Same-transaction wording, anchor scope, WP2 gates and write invariants confirmed. Artifact `f853c9ee-dcc3-478f-86cb-3c5225bb4125_go-reviewer_output.md`. |
-| Architecture (H2) | `4e35f3d` | see next entry after completion | Convergence check of WP2/WP4 gate placement. |
+| Architecture (H2) | `4e35f3d` | P0=0/P1=0/P2=1 | WP4 still listed MySQL gate G12. Fixed after this record: G12 moved to WP2b, WP4 keeps G10–G11. Artifact `e83021ef-38d0-4490-9bc4-a60ebf1bb8fd_reviewer_output.md`. |
 
 All reviews were read-only; none ran tests, database/outbox/anchor/crash probes, or CI. They verify documentation
 consistency only, not runtime behaviour, durability, or Issue #13 acceptance. This history section is itself a
