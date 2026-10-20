@@ -23,6 +23,12 @@ import (
 	"time"
 )
 
+const (
+	maxScaleRows      = 5_000_000
+	maxScaleRepeats   = 10
+	maxScaleTotalRows = 40_000_000
+)
+
 type scaleSample struct {
 	rows    int
 	workers int
@@ -36,8 +42,8 @@ func TestCLIStreamingScaleEvidence(t *testing.T) {
 		t.Skip("set MASKRIVER_WP3F_CLI_SCALE=1 to run CLI scale evidence")
 	}
 	outDir := os.Getenv("MASKRIVER_WP3F_SCALE_DIR")
-	if outDir == "" {
-		t.Fatal("MASKRIVER_WP3F_SCALE_DIR is required")
+	if outDir == "" || !filepath.IsAbs(outDir) || filepath.Clean(outDir) == "/" {
+		t.Fatal("MASKRIVER_WP3F_SCALE_DIR must be an explicit absolute non-root directory")
 	}
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -47,8 +53,8 @@ func TestCLIStreamingScaleEvidence(t *testing.T) {
 		rowsList = nil
 		for _, part := range strings.Split(raw, ",") {
 			value, err := strconv.Atoi(strings.TrimSpace(part))
-			if err != nil || value <= 0 {
-				t.Fatalf("invalid rows list %q", raw)
+			if err != nil || value <= 0 || value > maxScaleRows {
+				t.Fatalf("invalid rows list %q (1..%d)", raw, maxScaleRows)
 			}
 			rowsList = append(rowsList, value)
 		}
@@ -56,12 +62,19 @@ func TestCLIStreamingScaleEvidence(t *testing.T) {
 	repeats := 5
 	if raw := os.Getenv("MASKRIVER_WP3F_CLI_REPEATS"); raw != "" {
 		value, err := strconv.Atoi(raw)
-		if err != nil || value <= 0 {
-			t.Fatalf("invalid repeats %q", raw)
+		if err != nil || value <= 0 || value > maxScaleRepeats {
+			t.Fatalf("invalid repeats %q (1..%d)", raw, maxScaleRepeats)
 		}
 		repeats = value
 	}
 	cells := []struct{ workers, batch int }{{1, 64}, {4, 64}, {4, 256}}
+	totalSamples := 0
+	for _, rows := range rowsList {
+		totalSamples += rows * len(cells) * minInt(repeats, 3)
+	}
+	if totalSamples > maxScaleTotalRows {
+		t.Fatalf("requested matrix too large: %d sample-rows (limit %d)", totalSamples, maxScaleTotalRows)
+	}
 	file, err := os.Create(filepath.Join(outDir, "cli-streaming-scale.csv"))
 	if err != nil {
 		t.Fatal(err)
