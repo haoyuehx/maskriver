@@ -137,7 +137,7 @@ sequenceDiagram
   R-->>C: bounded summary + audit status; never silent fallback
 ```
 
-业务数据与该批outbox记录仅在同一目标DB事务域时具有原子性；外部anchor在写前登记Run并逐批见证，但不与DB声称原子。若Commit后anchor ack缺失，则停止后续批次并保持AUDIT_INCOMPLETE/UNKNOWN；重启后不得凭可变DB重建可信attestation。仅在已登记、每批都锚定且终结seal确认时判定完整；保证仅覆盖登记后的已知run及可信Runner/anchor边界。无任意Consumer callback、无进程内累计receipt队列。完整状态机和failure matrix以ADR为准。
+业务数据与该批outbox记录仅在同一目标DB事务域时具有原子性；外部anchor在写前登记Run并逐批见证，但不与DB声称原子。若Commit后anchor ack缺失，Runner状态为`AUDIT_INCOMPLETE`并停止后续批次；执行停止后若本地存在未锚定事件，Verifier结果为`UNKNOWN`。重启后不得凭可变DB重建可信attestation。仅在已登记、每批都锚定且终结seal确认时判定完整；保证仅覆盖登记后的已知run及可信Runner/anchor边界。无任意Consumer callback、无进程内累计receipt队列。完整状态机和failure matrix以ADR为准。
 
 ## 7. 审批与提交未知安全模型
 
@@ -224,7 +224,7 @@ sequenceDiagram
 
 ## 15. 最终架构裁决
 
-**本次ADR是候选设计，不是Owner批准或实现证明。** `46b2cf1`独立Architecture Review发现P1=1（COMPLETE_VALID未要求seal outcome必须COMPLETE），Security Review在缩窄且明确的ADR-11威胁边界下P1=0；两份精确报告位于 `docs/reviews/`。本修订增加严格 outcome precedence等修正，但尚未复核，故保持 `DESIGN BLOCKED — FINAL-HEAD REVIEW PENDING`。Issue Owner须决定AC范围与审计保证；全部ADR行仍待决。Legacy API仍Θ(K)。新streaming receipts只有在历史目录/metadata/row payload有硬界且Owner接受AC范围后才可能与K无关。A3及SQLite/MySQL durability尚未实现/验证；外部anchor不与DB事务原子。本文件不授权生产实现，也不声称Issue #13 AC通过。
+**本次ADR是候选设计，不是Owner批准或实现证明。** 在`e1faa582ca5fa2d07478f081418c968101049f97`上，独立Architecture与Security Review均为P0=0/P1=0/P2=1。Architecture P2为failure table混淆Runner执行状态与Verifier单一结果；Security P2为durability/目标路径门禁尚未可执行或验证。本修订把两类状态分栏、使用精确结果token；新head尚未复核，因此暂保持 `DESIGN BLOCKED — FINAL-HEAD REVIEW PENDING`。若最终head独立评审仍P0/P1=0，可更正为 `DESIGN READY — PENDING OWNER APPROVAL`；durability/path与存储支持仍是后续实现门禁。Issue Owner须决定AC范围与审计保证；全部ADR行仍待决。Legacy API仍Θ(K)。新streaming receipts只有在历史目录/metadata/row payload有硬界且Owner接受AC范围后才可能与K无关。A3及SQLite/MySQL durability尚未实现/验证；外部anchor不与DB事务原子。本文件不授权生产实现，也不声称Issue #13 AC通过。
 
 最终问题答复：
 1. 当前 Apply 内存复杂度：`O(K + B·C·L + T + C·(sampleLimit+1) + D + H + filenameBytes + runtime/cache)`；K在稠密可写数据时Θ(N/B)，另有审批目录O(H)扫描等规模项。
@@ -240,6 +240,6 @@ sequenceDiagram
 
 ### 独立评审状态与当前裁决
 
-历史与当前审查的实际SHA、严重度、限制、四项Security P1逐条处置及原始证据关系保存在 [`docs/reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md`](../reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md)。在 `46b2cf1127905eeeda6d3b2c4a953e85d6980f87` 上，独立Architecture Review结果P0=0/P1=1/P2=4（COMPLETE_VALID可接收INCOMPLETE seal）；独立Security Review结果P0=0/P1=0/P2=3。二者均为设计review，不是实现或AC验收。
+历史与当前审查的实际SHA、严重度、限制、四项Security P1逐条处置及原始证据关系保存在 [`docs/reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md`](../reviews/issue13-bounded-receipts-pr71-review-history-2026-10-20.md)。`e1faa582ca5fa2d07478f081418c968101049f97`上的独立Architecture与Security Review均P0=0/P1=0/P2=1：前者指出failure table需区分Runner state和Verifier outcome；后者将durability/path capability保留为实现门禁。精确报告与限制位于 `docs/reviews/`；两者都未执行测试、也未宣称实现或AC验收。
 
-本次文档草案已按Architecture P1/P2更新完成seal outcome严格分类、缺失事件分类优先级、每批Prepare位置、batch event role唯一性、ADR-11授权前提和review history状态。但这些修改尚未在新head接受独立复核；因此当前状态仍 `DESIGN BLOCKED — FINAL-HEAD REVIEW PENDING`。只有新head独立评审P0/P1=0，才可把文档状态改为 `DESIGN READY — PENDING OWNER APPROVAL`。所有Owner选项仍待决，当前产品P1实现风险未因设计文字而关闭。
+本次文档草案已按Architecture P2重构状态表，并记录e1两项独立复核及provider失败的原始关系。但此后改动尚未接受新head复核，故状态仍 `DESIGN BLOCKED — FINAL-HEAD REVIEW PENDING`。只有最终head独立评审P0/P1=0，才可更正为 `DESIGN READY — PENDING OWNER APPROVAL`。所有Owner选项仍待决，当前产品实现风险未因设计文字而关闭。
