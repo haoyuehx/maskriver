@@ -143,7 +143,7 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 | 功能 | 状态 | 目标 |
 |---|---|---|
 | 中国 PII 检测与格式约束脱敏 | 部分实现（检测 + 有界替换 + SQL 集成测试） | 检测见 #6/PR #20，九种策略见 PR #29，真实 SQLite/MySQL 8.0.46 组件级读/写/回读与只读快照测试见 PR #30；用户 CLI 工作流与独立安全评审仍属 #9/#11 |
-| SQLite 同事务流式 Apply + M2 审批 + CLI | 已实现（Linux SQLite DB 层/Runner/CLI；WP3-F 增加预算执行与真实 CLI 规模证据；ADR-08 仍未批准，MaxRowBytes 为分配后检查，生产默认关闭） | 显式 `--streaming --apply` + 独立 `--streaming` Ed25519 审批 + canonical plan 绑定 + WP2 outbox 同事务回执 + 有界分页 + 独立 Validate；证据见 [WP3 设计与证据](design/issue13-wp3-streaming-apply.md)、[规模数据](perf/issue13-wp3-a4a2e41/summary.md)。G5/G7/G9 残余风险、MySQL/Windows streaming、1M 单次样本仍未验证 |
+| SQLite 同事务流式 Apply + M2 审批 + CLI | 已实现并验收（Linux amd64 SQLite；DB 层物化前字节预检、Runner dry-run/apply/validate 统一受 MaxRowBytes 约束；ADR-08 已按 delegated technical direction 批准，生产默认仍显式 opt-in） | 显式 `--streaming --apply` + 独立 `--streaming` Ed25519 审批 + canonical plan 绑定 + WP2 outbox 同事务回执 + 有界分页 + 独立 Validate；证据见 [WP3 设计与证据](design/issue13-wp3-streaming-apply.md)、[规模数据](perf/issue13-wp3-a4a2e41/summary.md)。G5/G7/G9 残余风险、MySQL/Windows streaming、1M 单次样本仍未验证 |
 | 有界流式并发、背压、取消 | 部分实现（PR #36） | SQLite：每页有界 1–16 Worker、固定队列、顺序输出、取消与故障注入回归；SQL 读写仍顺序执行；多表 + 多 Worker 的 CLI 证据与 DB 性能评估未交付 |
 | 故障恢复、版本化 checkpoint、幂等重放 | 计划中 | M2；先解决事务提交与映射一致性 |
 | precision/recall 与吞吐/内存基准、可视化 | 部分实现（有实测合成值） | #6 的 74 条检测合成评估；PR #36 的 128 条 HMAC 合成批次 3 次重复基准；#13 phase 5 在 Linux 对真实 SQLite Runner 执行 10k/100k/1M 合成矩阵（42 次、BatchSize=64），含分阶段耗时、rows/s、采样 RSS/CPU/连接、收据容量与正确性核验，证据见 [phase-5 报告](perf/issue13-phase5-20261019-final/summary.md)。仅 1M 为单次，矩阵非 CLI、无 MySQL CLI、非未插桩生产吞吐；结果不证明严格的 batch×workers 内存上界，也未支持并行优化或关闭 #13。详见 [性能证据](performance.md) |
