@@ -60,7 +60,7 @@ remain unverified are not upgraded.
 | Repetition and raw data | PASS | CSV + environment.json; medians generated from raw rows |
 | RSS/Heap observation | PASS (with limits) | CLI VmHWM ~24/38/39.5 MiB; child heap unavailable; DB test measures process allocation |
 | Method and limitations | PASS | environment.json + summary.md; no p95 claim from 3 samples |
-| Performance delta disclosed | PASS | apply wall time +63–73% at 10k, +6–17% at 100k, +10–28% at 1M versus WP3-F (throughput 38–42%, 6–14%, 9–22% lower); attributed to the length preflight, replacement check and per-page transaction cost |
+| Performance delta disclosed | PASS | apply wall time +62.5–72.9% at 10k, +6.2–16.8% at 100k, +9.8–27.9% at 1M versus WP3-F (throughput −38.5–−42.2%, −5.8–−14.4%, −8.9–−21.8%); attributed to the length preflight, replacement check and per-page transaction cost |
 
 ## Configuration and documentation
 
