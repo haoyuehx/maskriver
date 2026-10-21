@@ -20,9 +20,9 @@ import (
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
 
-// runInitRecovery installs the existing outbox schema when needed and then the
-// additive recovery schema. Both calls are idempotent for an exact version and
-// shape; anything else fails closed.
+// runInitRecovery installs the additive recovery schema on a database that
+// already has the outbox v1 schema. It never creates the outbox itself; an
+// exact version/shape is a no-op and anything else fails closed.
 func runInitRecovery(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("init-recovery", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)

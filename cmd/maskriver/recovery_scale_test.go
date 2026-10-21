@@ -216,6 +216,10 @@ func copyFileForScale(t *testing.T, source, target string) {
 
 func (f *scaleFixture) initRecoveryForScale(t *testing.T, target string) {
 	t.Helper()
+	// Recovery is additive to an existing outbox v1 schema.
+	if code, out := runCLIProcess(t, "init-outbox", "--target", target); code != 0 {
+		t.Fatalf("init-outbox failed: %s", out)
+	}
 	if code, out := runCLIProcess(t, "init-recovery", "--target", target); code != 0 {
 		t.Fatalf("init-recovery failed: %s", out)
 	}

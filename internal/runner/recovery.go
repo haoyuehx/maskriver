@@ -491,13 +491,13 @@ func recoveryReportFrom(req StreamingRecoveryRequest, m db.RecoveryManifest) Rec
 
 // recoveryResumeEligible is the single eligibility rule shared by status and
 // the resume report. validation_failed is terminal for resume.
-func businessCompleteValid(last db.RecoveryProgress, tables int) bool {
-	return !last.BusinessComplete || last.TableOrdinal == tables
-}
-
 func recoveryResumeEligible(state db.RecoveryState) bool {
 	return state != db.RecoveryStateConflict && state != db.RecoveryStateAborted &&
 		state != db.RecoveryStateValidationFailed
+}
+
+func businessCompleteValid(last db.RecoveryProgress, tables int) bool {
+	return !last.BusinessComplete || last.TableOrdinal == tables
 }
 
 // verifyRecoveryProgress re-derives the committed range from the authoritative
