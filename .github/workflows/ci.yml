@@ -65,3 +65,16 @@ jobs:
         run: |
           echo 'This job runs TestMySQLFixture and TestMySQLAdapter against the same isolated MySQL 8.0.46 socket.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Successful tests verify the current MySQL adapter contract cases, not the full CLI workflow or untested MySQL versions.' >> "$GITHUB_STEP_SUMMARY"
+
+  release-package:
+    name: Deterministic release package
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build twice, compare bytes and verify packaging
+        run: scripts/test-release.sh
