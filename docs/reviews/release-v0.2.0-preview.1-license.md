@@ -26,3 +26,12 @@ builds are byte-identical; `verify-release.sh` passes.
 - MPL offer is pointer-only under §3.2 -> accepted.
 - Custom SBOM format -> documented as `maskriver-sbom-v1`, not a standards claim.
 - Attribution now includes the Go patent grant row.
+
+## Second-context recheck
+
+The licence/supply-chain review was performed at the reviewed candidate and
+its P1 (Go toolchain licence) was fixed and rechecked independently. Final
+package contents, link set, NOTICE/SBOM binding, MPL source offer, checksums and
+reproducibility remain PASS. No P0/P1.
+
+**Recheck verdict: PASS.**

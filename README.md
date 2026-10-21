@@ -7,7 +7,7 @@ An independently developed Go data masking and sensitive-data governance project
 
 MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具，面向企业开发、测试与数据共享场景：自动发现敏感数据，提供安全、确定性的脱敏策略，数据库适配器支持 SQLite 与 MySQL（当前 CLI 仅 SQLite），并提供数据完整性校验。
 
-> **`v0.2.0-preview.1` 是本次发布的公开 Pre-release 目标版本：[`v0.2.0-preview.1`](https://github.com/haoyuehx/maskriver/releases/tag/v0.2.0-preview.1)（linux/amd64；实际发布状态与资产以 Release 页为准）。** 该版本在 M1 SQLite 多表工作流之上增加了有界 Streaming Apply、事务 Outbox、资源预算、Checkpoint、只读 `status` 与显式 `--resume` 的本地事务幂等恢复。**这不是稳定版，也不代表生产就绪**：仅面向授权、隔离、可弃置的本地 SQLite 副本；恢复仅支持 Linux amd64、rollback journal、`synchronous=FULL` 和确定性策略白名单。MySQL CLI/Recovery、Windows/macOS Streaming/Recovery、WAL Recovery、跨存储 Mapping 原子性、通用 exactly-once、真实断电持久性、生产级检测准确率和法律意义上的匿名化均未验证。旧的 `v0.1.0-dev` 仍保留，但其发行说明中的能力边界不因新版本而扩大。
+> **`v0.2.0-preview.1` 是本次发布的公开 Pre-release 目标版本：`v0.2.0-preview.1`（linux/amd64；发布后见 [Release 页](https://github.com/haoyuehx/maskriver/releases/tag/v0.2.0-preview.1)，实际发布状态与资产以该页为准）。** 该版本在 M1 SQLite 多表工作流之上增加了有界 Streaming Apply、事务 Outbox、资源预算、Checkpoint、只读 `status` 与显式 `--resume` 的本地事务幂等恢复。**这不是稳定版，也不代表生产就绪**：仅面向授权、隔离、可弃置的本地 SQLite 副本；恢复仅支持 Linux amd64、rollback journal、`synchronous=FULL` 和确定性策略白名单。MySQL CLI/Recovery、Windows/macOS Streaming/Recovery、WAL Recovery、跨存储 Mapping 原子性、通用 exactly-once、真实断电持久性、生产级检测准确率和法律意义上的匿名化均未验证。旧的 `v0.1.0-dev` 仍保留，但其发行说明中的能力边界不因新版本而扩大。
 
 ## 快速开始
 

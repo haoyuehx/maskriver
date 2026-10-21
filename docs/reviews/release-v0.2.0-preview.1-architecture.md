@@ -35,3 +35,15 @@ reproducibility, checksums and binary provenance verified.
 - P2-3: final tag-bound build/verify is a documented release step.
 - P2-4: documentation states only linux/amd64 is built and tested; other Linux
   architectures are not refused and not supported.
+
+## Second-context recheck
+
+A fresh independent recheck at `43f411c`/`82d8948` confirmed the prior P1
+documentation fixes were substantively present (publication wording, candidate
+archive binding, deferred final SHA) and that the hot-journal/busy-timeout code
+delta does not change the recovery state machine or transaction atomicity. The
+remaining recheck finding was a record-only issue: this review file still said
+CHANGES REQUIRED while the acceptance table said PASS. This section and the
+updated acceptance table record the closure; no code P0/P1 remains.
+
+**Recheck verdict: PASS** (record-only corrections applied).

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/haoyuehx/maskriver/internal/db"
 	"github.com/haoyuehx/maskriver/internal/testhooks"
 )
 
@@ -339,6 +340,12 @@ func TestE2ERecoveryCLIRefusals(t *testing.T) {
 	}
 	if f.targetDigest(t) != before {
 		t.Fatal("revoked resume changed the target")
+	}
+}
+
+func TestStatusExitCodeHotJournal(t *testing.T) {
+	if got := statusExitCode(db.ErrHotJournal); got != 3 {
+		t.Fatalf("hot-journal status exit=%d, want 3", got)
 	}
 }
 

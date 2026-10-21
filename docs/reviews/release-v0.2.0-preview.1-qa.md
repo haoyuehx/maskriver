@@ -30,3 +30,15 @@
 
 After the fixes, the smoke passed 5/5 consecutive runs. A second-context QA
 recheck is recorded in the release acceptance comment.
+
+## Second-context recheck
+
+A fresh targeted QA recheck at `208fd23`/`82d8948` passed: release package
+build, five smoke runs, deterministic hot-journal status/resume, concurrent
+`status` during a live apply (status rc=0, no CommitUnknown), strict validate,
+and idempotent second resume. The earlier P1 (smoke nondeterminism from a
+transient reader lock) and the hot-journal false-positive status were both
+fixed. The committed regression tests for the hot-journal reader/recovery and
+status exit code were added and pass.
+
+**Recheck verdict: PASS.**

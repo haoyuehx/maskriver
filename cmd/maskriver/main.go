@@ -249,7 +249,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
 	defer cancel()
-	engine, err := runner.Open(ctx, cfg, key)
+	var engine *runner.Engine
+	if command == "mask" && apply {
+		engine, err = runner.OpenForApply(ctx, cfg, key)
+	} else {
+		engine, err = runner.Open(ctx, cfg, key)
+	}
 	if err != nil {
 		return fail(stderr, 1)
 	}

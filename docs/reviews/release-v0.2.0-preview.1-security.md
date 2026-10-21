@@ -29,3 +29,16 @@ SBOM/licence texts match the link set; archive is deterministic and
    candidate package texts were manually verified byte-identical.
 7. Untagged candidate provenance -> final artifact must be rebuilt from the
    release tag; checksums are GitHub/TLS-trusted, not signed.
+
+## Second-context recheck
+
+A fresh security recheck verified the busy-timeout and hot-journal changes:
+read-only `status` never writes and only reports `hot_journal` after a failed
+read-only open with a journal present; explicit apply/resume performs one
+SQLite crash recovery, still requires `--apply` and a valid approval for any
+business write; commit-unknown and transaction atomicity are unchanged; release
+docs no longer claim an unpublished release. The recheck's P1 was missing
+regression coverage; committed DB/CLI tests were added and pass, and the
+acceptance wording was corrected.
+
+**Recheck verdict: PASS.**

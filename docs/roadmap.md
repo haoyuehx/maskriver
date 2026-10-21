@@ -11,7 +11,7 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 | M1-B · 四个核心组件 | 已合并 | #5/#10 数据库、#6 检测、#7/#12 脱敏、#8 验证；有真实 SQLite/MySQL 适配器与 CN 策略 SQL 组件集成、fake Reader 验证器回归。**不等于端到端 CLI** |
 | M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **已关闭（CLOSED）** | SQLite 多表真实 Scan/Preview/签名审批/新进程 Apply/Validate 已测，AC 已由独立上下文签署，证据见 [Issue #9 验收报告](issue9-acceptance-report.md)；`--strict` 独立严格语义与 MySQL CLI 仍未完成 |
 | M1-D · 独立安全验收 [#11](https://github.com/haoyuehx/maskriver/issues/11) | **已裁定 ACCEPT WITH RESTRICTIONS** | 独立非作者审查已完成：P0=0、P1=0（原 P1 为许可/署名，已由 PR #58 修复并经第二独立上下文复核）；六条 P2 仍开放。**M1 未发布**，可宣称与不可宣称的范围须按裁定执行 |
-| M2 · 增强能力 | **本地 SQLite 预览已交付** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 已关闭（SQLite 有界流式 Apply + Outbox）；[#14](https://github.com/haoyuehx/maskriver/issues/14) 本地 SQLite `m2-recovery-v1` 已实现并验收，并随 `v0.2.0-preview.1` 发布。MySQL/Windows/WAL 恢复、跨库映射与通用 exactly-once 仍不支持 |
+| M2 · 增强能力 | **本地 SQLite 预览已交付** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 已关闭（SQLite 有界流式 Apply + Outbox）；[#14](https://github.com/haoyuehx/maskriver/issues/14) 本地 SQLite `m2-recovery-v1` 已实现并验收，并纳入 `v0.2.0-preview.1` 发布候选。MySQL/Windows/WAL 恢复、跨库映射与通用 exactly-once 仍不支持 |
 
 ## 已交付核心能力（M1-B）
 

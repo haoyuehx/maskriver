@@ -36,6 +36,11 @@ func OpenRecoveryReader(ctx context.Context, opts contracts.DatabaseOptions) (*R
 	}
 	a, err := open(ctx, opts, true, nil)
 	if err != nil {
+		// A live writer's journal must not be mistaken for a hot journal: only
+		// a failed read-only open with a journal present is reported as hot.
+		if journalHot(opts.DSN.Payload()) {
+			return nil, ErrHotJournal
+		}
 		return nil, err
 	}
 	closeOnError := func(err error) (*RecoveryReader, error) {
