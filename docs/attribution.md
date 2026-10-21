@@ -31,6 +31,7 @@ dependencies keep their own licences and their verbatim texts are kept under
 | `github.com/remyoudompheng/bigfft` | BSD-3-Clause | `licenses/bigfft-LICENSE` |
 | `golang.org/x/sys` | BSD-3-Clause | `licenses/x-sys-LICENSE` |
 | Go toolchain / standard library (go1.26.3) | BSD-3-Clause | `licenses/go-toolchain-LICENSE` (copied from `GOROOT/LICENSE` at build time) |
+| Go toolchain / standard library (go1.26.3) | Additional IP Rights Grant (patents) | `licenses/go-toolchain-PATENTS` (copied from `GOROOT/PATENTS` at build time) |
 
 Every module requirement above has its verbatim licence text under `licenses/`,
 including modules that are required but not linked into a default linux/amd64
