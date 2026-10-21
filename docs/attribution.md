@@ -68,8 +68,9 @@ and ships `NOTICE.md`, the complete `licenses/` texts, `SBOM.json`, and
 `MPL-2.0-SOURCE.md` for the MPL-2.0 covered `go-sql-driver/mysql` files.
 `scripts/verify-release.sh` checks that every NOTICE reference resolves, every
 shipped licence text is referenced, and the manifest/checksums match the package.
-Release records are added under [`releases/`](releases/) when an artifact is
-published, including the commit, archive SHA-256 and verification evidence.
+Candidate acceptance records are added under [`releases/`](releases/); the
+published tag, final archive SHA-256 and post-download verification are recorded
+in the GitHub Release acceptance comment.
 
 Binary distribution must include the applicable notices and, for MPL-2.0
 covered files, a way to obtain the corresponding source form. See

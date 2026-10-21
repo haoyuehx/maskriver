@@ -193,6 +193,12 @@ func sqliteDSN(input string, readOnly bool) (string, error) {
 		q.Set("mode", "rw")
 	}
 	q.Set("_pragma", "foreign_keys(1)")
+	// Rollback-journal databases can briefly hold a reserved/exclusive lock while
+	// a writer commits. Without a busy timeout a concurrent read-only status query
+	// would make that commit fail as SQLITE_BUSY (reported as CommitUnknown). The
+	// bounded wait keeps the single-writer model but does not turn a transient
+	// lock into an ambiguous commit.
+	q.Add("_pragma", "busy_timeout(5000)")
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

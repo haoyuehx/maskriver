@@ -10,7 +10,9 @@ package runner
 // counters are updated per batch, and receipts are read back through a bounded
 // ReceiptReader.
 //
-// It does not implement recovery, checkpoint/resume or exactly-once delivery.
+// Recovery/checkpoint/resume is enabled only when the recovery schema exists;
+// the fresh StreamingApply path then records a manifest and progress inside the
+// same transactions. Exactly-once delivery is still not claimed.
 
 import (
 	"context"

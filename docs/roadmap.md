@@ -68,9 +68,9 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 - **支持边界**：Linux amd64 本地 SQLite（rollback journal、`synchronous=FULL`）。MySQL/Windows/WAL 恢复、跨库持久映射的跨存储原子性、通用 exactly-once 与真实断电 durability 不在本轮范围；不支持路径 fail closed。
 - **不改变 #13**：无 recovery schema 时仍是原 outbox v1 事务；`m1a-v1`、`m2-stream-v1`、`m2-approval-binding-v1` 与发布版本保持不变。
 
-## 2026-10-21 发行：v0.2.0-preview.1
+## 2026-10-21 发布候选：v0.2.0-preview.1
 
-`v0.2.0-preview.1` 是面向 Linux amd64、本地 SQLite 的公开 Pre-release，包含 M1 SQLite 工作流与 #13/#14 的 Streaming、Outbox、Checkpoint、Status、Resume 和幂等恢复。发行证据、资产 SHA-256、许可审计与发布后下载复核记录在 [v0.2.0-preview.1 发行记录](releases/v0.2.0-preview.1.md)；协议与限制见 [Issue #14 恢复协议](design/issue14-recovery-protocol.md) 和 [验收报告](issue14-acceptance-report.md)。`v0.1.0-dev` 的历史 Tag/Release/资产保持不变。
+`v0.2.0-preview.1` 是面向 Linux amd64、本地 SQLite 的公开 Pre-release 目标版本，包含 M1 SQLite 工作流与 #13/#14 的 Streaming、Outbox、Checkpoint、Status、Resume 和幂等恢复。候选验收、测试/恢复 Smoke 与许可审计见 [v0.2.0-preview.1 验收记录](releases/v0.2.0-preview.1-acceptance.md)；最终 Tag、资产 SHA-256 与发布后下载复核记录在 GitHub Release 验收评论中。协议与限制见 [Issue #14 恢复协议](design/issue14-recovery-protocol.md) 和 [验收报告](issue14-acceptance-report.md)。`v0.1.0-dev` 的历史 Tag/Release/资产保持不变。
 
 ## 不做的承诺
 

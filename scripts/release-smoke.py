@@ -83,7 +83,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--package", required=True, help="extracted package directory")
     parser.add_argument("--work", required=True, help="empty work directory")
-    parser.add_argument("--rows", type=int, default=200)
+    parser.add_argument("--rows", type=int, default=2000)
     args = parser.parse_args()
 
     binary = os.path.join(args.package, "maskriver")
@@ -152,7 +152,7 @@ def main():
         "--source", source, "--target", target_m2,
         "--strategy", "fake_email", "--key-id", "smoke-key",
         "--min-samples", "1", "--sample-limit", "10000", "--scope", "people.email",
-        "--batch-size", "4",
+        "--batch-size", "1",
     ]
     budget = os.path.join(work, "budget.json")
     with open(budget, "w", encoding="utf-8") as f:
@@ -190,23 +190,24 @@ def main():
     ]
     proc = subprocess.Popen(apply_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     observed = 0
-    deadline = time.time() + 30
+    deadline = time.time() + 60
     while time.time() < deadline:
         try:
             state, _ = recovery_state(target_resume, run_id)
         except sqlite3.Error:
             state = None
-        if state and state[0] and state[0] >= 3:
+        if state and state[0] and state[0] >= 2:
             observed = state[0]
             break
         if proc.poll() is not None:
             break
-        time.sleep(0.02)
-    if proc.poll() is None:
-        proc.send_signal(signal.SIGKILL)
-        proc.wait()
-    if observed < 1:
-        raise SystemExit("FAIL: did not observe a committed checkpoint before interruption")
+        time.sleep(0.005)
+    if proc.poll() is not None:
+        raise SystemExit(f"FAIL: streaming apply finished before interruption (rc={proc.returncode})")
+    proc.send_signal(signal.SIGKILL)
+    returncode = proc.wait()
+    if observed < 1 or returncode != -signal.SIGKILL:
+        raise SystemExit(f"FAIL: interruption not observed (checkpoint={observed} rc={returncode})")
     print(f"observed checkpoint_sequence={observed} before SIGKILL")
 
     status = run(binary, ["status", "--target", target_resume, "--run-id", run_id])
