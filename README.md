@@ -87,5 +87,5 @@ MaskRiver 采用 [MIT](LICENSE)。本项目独立研发：不是任何其他仓�
 不要向仓库、日志或 Agent 会话提交真实个人数据、连接凭证、种子及映射库。
 
 - **审批信任边界**：可信公钥来自部署预置 trust file，`apply` 只加载公钥；同一操作者同时控制 trust file 与审核私钥时本工具无法阻止，这不是 RBAC。`ReviewerID` 是自填标签，不是已认证身份。
-- **`null` 策略端到端拒绝**：Preview 与 Apply 都在打开 Writer 前拒绝“非 NULL → NULL”，因为验证器把该变化判为冲突证据，此类写入永远无法通过严格验证。`internal/db` 写入层本身仍接受该组合，属已接受 P2。
-- **`--strict` 目前是 inert 的**：verify 忽略 `ValidateRequest.Strict`，且所有 Warning 路径已令 `Coverage.Complete=false`；现有测试只证明 flag 解析、转发和退出码敏感性，不证明独立的严格语义门禁。
+- **`null` 策略端到端拒绝**：Preview 与 Apply 都在打开 Writer 前拒绝“非 NULL → NULL”，因为验证器把该变化判为冲突证据，此类写入永远无法通过严格验证。M3-1 起 `internal/db` 写入层也拒绝该组合（`ErrUnsafe`）。
+- **`--strict`（M3-1 起）**：严格验证强制全量无截断扫描（正数 `RowLimit` 被拒绝），并要求源/目标适配器提供并通过对每张计划表的数据库完整性检查（SQLite `quick_check`/数据库级 `foreign_key_check`；MySQL 严格完整性尚未实现并 fail closed）；缺少该能力 fail closed。普通验证保留有界语义。

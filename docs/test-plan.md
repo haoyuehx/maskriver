@@ -164,7 +164,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - 生产级检测准确率：只有 74 条自编样本（38 正、36 负，8 条超出覆盖），姓名 P=0.500/R=0.750；不是独立留出评估。
 - 持久映射、全局唯一性/匿名化、参照完整性：未实现/未验证。
 - macOS CI：仓库 CI 只跑 Ubuntu/Windows；未宣称 macOS 覆盖。
-- `--strict` 独立严格语义、独立 #11 安全验收：未完成。
+- `--strict` 的 MySQL 严格完整性路径：M3-1 未实现，MySQL `IntegrityCheck` 返回 `ErrUnsupported`，因此 strict MySQL 失败关闭；标记 UNVERIFIED，直到 M3-2 的完整实现。
 
 ## 已知残余缺陷（已接受 P2）
 

@@ -503,3 +503,18 @@ func TestApplyReportingGatesStillFireWithValidDecision(t *testing.T) {
 		}
 	})
 }
+
+func TestRecordAuthorizesToleratesSmallFutureIssuedSkew(t *testing.T) {
+	e, _ := acceptanceEngine(t, []string{"a@example.invalid", "b@example.invalid"})
+	plan := mustPlan(t, e)
+	record, _ := (&testApproval{}).Lookup(context.Background(), plan)
+	now := time.Now()
+	record.IssuedAt = now.Add(time.Minute)
+	if !recordAuthorizes(record, plan, now) {
+		t.Fatal("+1 minute future-issued record should be tolerated")
+	}
+	record.IssuedAt = now.Add(6 * time.Minute)
+	if recordAuthorizes(record, plan, now) {
+		t.Fatal("+6 minute future-issued record should be refused")
+	}
+}
