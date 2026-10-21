@@ -294,6 +294,12 @@ done by **recomputation and comparison**:
 - A claimed `rows_processed` greater than the source row count of that table, or
   a final boundary that does not equal the source row count, is `CONFLICT`.
 
+Tables at or before the checkpoint are verified in one bounded pass. Later
+unvisited tables are verified page-by-page immediately before their first write;
+a conflict there is detected before that page is written, but earlier tables may
+already have been continued, so the guarantee is "never overwrite an unverified
+page", not "verify every later table before any write".
+
 Committed batches are therefore skipped, not re-written. A replayed batch would
 have to pass the same prefix verification, which is exactly what proves it must
 not be replayed. Because replacement is a pure function, the final target of an
@@ -317,7 +323,7 @@ States stored in the manifest:
 | `recovery_required` | business work needs re-verification before continuing | yes (verification still mandatory) |
 | `commit_unknown` | a commit attempt's outcome was ambiguous | yes, by reconciling the database; never by retry-on-error |
 | `conflict` | target/checkpoint/receipt disagree or external modification | **no**; requires operator investigation |
-| `validation_failed` | strict Validate failed after business completion | no automatic claim of success; resume may re-run read-only validation only |
+| `validation_failed` | strict Validate failed after business completion | **no**; terminal for resume within this run, requires operator investigation / a new run |
 | `complete` | business + audit + strict validation complete | yes, idempotent read-only re-confirmation |
 | `aborted` | explicitly abandoned | no |
 
@@ -369,24 +375,33 @@ the manifest are over plan/schema/scope/budget metadata, not over row values.
 
 ## 9. Source/target consistency
 
-On resume, in fixed order:
+On resume, in fixed order (matches `StreamingResume`):
 
-1. protocol/schema/version gates;
-2. source snapshot digest re-derived from the file and compared with manifest
-   and plan; the digest is an identity check, not a TOCTOU-proof binding to the
-   reader handle, and the source must remain a quiescent isolated copy (the
-   existing plan-builder caveat applies unchanged);
-3. plan rebuilt from the immutable source and compared to the manifest/approval;
-4. strategy / normalization / key ID / key-check value / approval binding and
-   Ed25519 approval verification, including expiry, future clock and revocation.
-   The KCV is an offline oracle by construction; it is acceptable here because
-   the key is a high-entropy >=32-byte secret and it is the only way to bind key
-   material without storing it;
-5. budget/settings digest, key-check value and outbox capability gates;
-6. target file identity (`device:inode`) and path preflight;
-7. progress-log continuity and receipt cross-check, both bounded;
-8. prefix/suffix target verification as in §5;
-9. only then `state=running` and a new business transaction.
+1. structural protocol/run/budget gates and the protocol-bound approval
+   structure (including expiry/revocation via the history store);
+2. plan rebuilt from the immutable source and the whole-plan static preflight
+   (schema, primary key, scope order, constraints, triggers, incoming refs);
+3. settings digest, plan-content/scope digests and the recomputable-strategy
+   allowlist;
+4. open the outbox and require the exact recovery schema (no DDL);
+5. read the manifest and cross-check the duplicated run identity against
+   `maskriver_outbox_run` (plan, target, plan-content/scope digest, approval
+   binding, streaming protocol);
+6. re-derive the source snapshot digest and compare it with the manifest/plan;
+   the digest is an identity check, not a TOCTOU-proof reader binding, so the
+   source must remain a quiescent isolated copy (the existing plan-builder caveat
+   applies unchanged);
+7. verify strategy / normalization / key ID / key-check value (KCV), target
+   identity (`device:inode`), approval binding and budget/settings binding; the
+   KCV is an offline oracle by construction, acceptable because the key is a
+   high-entropy >=32-byte secret and it is the only way to bind key material
+   without storing it;
+8. verify progress-log continuity and cross-check every batch event against the
+   same-ordinal receipt (id, affected rows, run-scoped batch id), both bounded;
+9. verify the committed prefix/suffix of every table at or before the
+   checkpoint; unvisited later tables are verified page-by-page immediately
+   before each write, never after;
+10. only then `state=running` and a new business transaction.
 
 Static preflight still runs: schema, primary key, scope order, plan identity,
 constraints, triggers, incoming references. The ordinary full dry run (which

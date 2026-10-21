@@ -41,6 +41,9 @@ func TestCLIProcessChild(t *testing.T) {
 	if separator < 0 || separator+1 >= len(os.Args) {
 		os.Exit(2)
 	}
+	if spec := os.Getenv(cliFaultEnv); spec != "" {
+		installChildFault(spec)
+	}
 	os.Exit(run(os.Args[separator+1:], os.Stdout, os.Stderr))
 }
 

@@ -23,6 +23,7 @@ import (
 	"github.com/haoyuehx/maskriver/internal/config"
 	"github.com/haoyuehx/maskriver/internal/db"
 	"github.com/haoyuehx/maskriver/internal/history"
+	"github.com/haoyuehx/maskriver/internal/testhooks"
 	"github.com/haoyuehx/maskriver/internal/verify"
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
@@ -137,6 +138,65 @@ func (e *Engine) StreamingApply(ctx context.Context, req contracts.StreamingAppl
 		Audit: contracts.AuditStateConsistent,
 	}
 	run.summary = &summary
+	// A run is resumable only when the recovery schema was explicitly installed
+	// before it started. Without it this remains exactly the Issue #13 path and
+	// the run is never presented as recoverable.
+	var manifest db.RecoveryManifest
+	if available, aerr := outbox.RecoveryAvailable(ctx); aerr != nil {
+		return summary, aerr
+	} else if available {
+		recovery, rerr := outbox.OpenRecovery(ctx)
+		if rerr != nil {
+			return summary, rerr
+		}
+		identity, ierr := db.TargetIdentity(e.cfg.Target)
+		if ierr != nil {
+			return summary, contracts.ErrUnsupported
+		}
+		settings, serr := recoverySettingsDigest(req.Budget, req.BatchSize)
+		if serr != nil {
+			return summary, serr
+		}
+		manifest, rerr = recoveryManifestFor(req, identity, settings, e.key, time.Now())
+		if rerr != nil {
+			return summary, rerr
+		}
+		if rerr = recovery.CreateManifest(ctx, manifest); rerr != nil {
+			return summary, rerr
+		}
+		run.recovery = recovery
+		run.progress = db.RecoveryProgress{RunID: req.RunID}
+	}
+	if run.recovery != nil {
+		if err := run.continueRecovery(ctx, req.Plan); err != nil {
+			return run.finish(err)
+		}
+		// Business complete: strict validation, then the terminal state. A
+		// failed validation is recorded truthfully and never reported complete.
+		rreq := StreamingRecoveryRequest{
+			Protocol: req.Protocol, Plan: req.Plan, Approval: req.Approval,
+			ExplicitApply: req.ExplicitApply, RunID: req.RunID,
+			BatchSize: req.BatchSize, ReceiptPageSize: req.ReceiptPageSize, Budget: req.Budget,
+		}
+		if err := testhooks.Fire("before_validate"); err != nil {
+			return run.finish(err)
+		}
+		summary, verr := e.recoveryValidate(ctx, rreq, manifest, run.progress)
+		if verr != nil {
+			return summary, verr
+		}
+		if err := testhooks.Fire("after_validate_before_complete"); err != nil {
+			return run.finish(err)
+		}
+		if err := run.recovery.SetManifestState(ctx, req.RunID, run.progress.Sequence,
+			db.RecoveryStateComplete, true, db.ValidationPassed); err != nil {
+			return run.finish(err)
+		}
+		summary.State = contracts.RunStateComplete
+		summary.Audit = contracts.AuditStateConsistent
+		summary.BatchesTotal = summary.BatchesCommitted
+		return summary, nil
+	}
 	for _, table := range req.Plan.Tables {
 		if err := run.applyTable(ctx, table); err != nil {
 			return run.finish(err)
@@ -204,6 +264,15 @@ func (r boundedValidationReader) Page(ctx context.Context, req contracts.PageReq
 
 func (r *streamingRun) finish(cause error) (contracts.StreamingApplySummary, error) {
 	summary := *r.summary
+	if r.recovery != nil {
+		state, validation := recoveryFailureState(cause)
+		if !errors.Is(cause, contracts.ErrCommitUnknown) {
+			cleanup, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			_ = r.recovery.SetManifestState(cleanup, summary.RunID, r.progress.Sequence, state,
+				r.progress.BusinessComplete, validation)
+			cancel()
+		}
+	}
 	if summary.State == contracts.RunStateRunning {
 		switch {
 		case summary.BatchesUnknown > 0:
@@ -299,24 +368,30 @@ func lowerASCII(value string) string {
 // revocation, and the canonical content digest covers the per-column fields
 // Plan.ID does not.
 func (e *Engine) checkStreamingApproval(ctx context.Context, req contracts.StreamingApplyRequest) error {
+	return e.checkStreamingApprovalPlan(ctx, req.Plan, req.Approval)
+}
+
+// checkStreamingApprovalPlan is the plan/approval form shared by StreamingApply
+// and StreamingResume. It never falls back to a legacy record.
+func (e *Engine) checkStreamingApprovalPlan(ctx context.Context, plan contracts.Plan, approval contracts.StreamingApproval) error {
 	if e.streamingApprovals == nil || reflect.ValueOf(e.streamingApprovals).IsNil() {
 		return contracts.ErrUnsafe
 	}
-	if err := contracts.ValidateStreamingApproval(req.Plan, req.Approval, time.Now()); err != nil {
+	if err := contracts.ValidateStreamingApproval(plan, approval, time.Now()); err != nil {
 		return err
 	}
-	digest, err := history.CanonicalPlanDigest(req.Plan)
+	digest, err := history.CanonicalPlanDigest(plan)
 	if err != nil {
 		return err
 	}
-	record, err := e.streamingApprovals.VerifyStreaming(ctx, req.Plan, req.Approval)
+	record, err := e.streamingApprovals.VerifyStreaming(ctx, plan, approval)
 	if err != nil {
 		return approvalRefusal(err)
 	}
 	if record.PlanContentDigest != digest ||
 		record.Protocol != contracts.StreamingProtocolRevision ||
 		record.BindingRevision != contracts.ApprovalBindingRevision ||
-		!reflect.DeepEqual(record.StreamingApproval(), req.Approval) {
+		!reflect.DeepEqual(record.StreamingApproval(), approval) {
 		return contracts.ErrUnsafe
 	}
 	return nil
@@ -341,7 +416,9 @@ func (e *Engine) streamingOutboxOptions(req contracts.StreamingApplyRequest) (db
 type streamingRun struct {
 	engine   *Engine
 	outbox   *db.Outbox
+	recovery *db.Recovery
 	summary  *contracts.StreamingApplySummary
+	progress db.RecoveryProgress
 	batch    int
 	sequence int64
 	budget   contracts.ResourceBudget
