@@ -289,3 +289,77 @@ func TestPageWithinInvalidArguments(t *testing.T) {
 }
 
 func isLinux() bool { return os.PathSeparator == '/' && runtime.GOOS == "linux" }
+
+func TestPageWithinLookaheadValueNotRetained(t *testing.T) {
+	if testing.Short() {
+		t.Skip("memory experiment")
+	}
+	ctx, r, closeFn := boundedReaderFor(t, []string{
+		`CREATE TABLE t(id INTEGER PRIMARY KEY, body BLOB)`,
+	}, `INSERT INTO t(id,body) VALUES(1,x'0102')`)
+	defer closeFn()
+	path := r.dbDSNPath(t)
+	raw, err := sql.Open("sqlite", "file:"+path+"?mode=rw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	big := make([]byte, 8<<20)
+	if _, err := raw.Exec(`INSERT INTO t(id,body) VALUES(2,?)`, big); err != nil {
+		t.Fatal(err)
+	}
+	_ = raw.Close()
+	big = nil
+	stats := func() uint64 {
+		runtime.GC()
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		return m.TotalAlloc
+	}
+	before := stats()
+	page, err := r.PageWithin(ctx, pageReq(1, nil, "id", "body"), (8<<20)+4)
+	delta := stats() - before
+	if err != nil || len(page.Rows) != 1 || page.Done {
+		t.Fatalf("lookahead page: %v %d %v", err, len(page.Rows), page.Done)
+	}
+	if delta > 2<<20 {
+		t.Fatalf("lookahead value retained: %d bytes", delta)
+	}
+	if page.Rows[0]["id"].Payload() != "1" || page.Rows[0]["body"].Payload() != "\x01\x02" {
+		t.Fatal("accepted prefix changed")
+	}
+	t.Logf("lookahead total_alloc_delta=%d", delta)
+}
+
+func TestPageWithinHugeTextPrimaryKey(t *testing.T) {
+	ctx, r, closeFn := boundedReaderFor(t, []string{
+		`CREATE TABLE t(id TEXT PRIMARY KEY NOT NULL, body TEXT)`,
+	}, `INSERT INTO t(id,body) VALUES('k','v')`)
+	defer closeFn()
+	path := r.dbDSNPath(t)
+	raw, err := sql.Open("sqlite", "file:"+path+"?mode=rw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hugeKey := strings.Repeat("k", 2<<20)
+	if _, err := raw.Exec(`INSERT INTO t(id,body) VALUES(?, 'small')`, hugeKey); err != nil {
+		t.Fatal(err)
+	}
+	_ = raw.Close()
+	stats := func() uint64 {
+		runtime.GC()
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		return m.TotalAlloc
+	}
+	before := stats()
+	_, err = r.PageWithin(ctx, contracts.PageRequest{
+		Table: table("t"), Columns: []string{"id", "body"}, KeyColumns: []string{"id"}, Limit: 2,
+	}, 1<<20)
+	delta := stats() - before
+	if !errors.Is(err, contracts.ErrUnsafe) {
+		t.Fatalf("huge key: %v", err)
+	}
+	if delta > 2<<20 {
+		t.Fatalf("huge key materialised in preflight: %d bytes", delta)
+	}
+}

@@ -62,9 +62,10 @@ func (r *reader) PageWithin(ctx context.Context, req contracts.PageRequest, maxR
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Phase 1: keys plus the complete per-row byte cost. Only integers cross the
-	// driver boundary here, never a projected TEXT/BLOB value.
-	preflight := "SELECT " + q.keyList(r) + "," + lengths + " FROM " + q.from
+	// Phase 1: only the complete per-row byte cost. No key and no projected
+	// value crosses the driver boundary here, so a huge TEXT primary key or a
+	// huge field can not be materialised by the preflight itself.
+	preflight := "SELECT " + lengths + " FROM " + q.from
 	if q.where != "" {
 		preflight += " WHERE " + q.where
 	}
@@ -74,25 +75,15 @@ func (r *reader) PageWithin(ctx context.Context, req contracts.PageRequest, maxR
 	if err != nil {
 		return empty, dbError(err)
 	}
-	type candidate struct {
-		key  []contracts.Value
-		size int64
-	}
-	candidates := make([]candidate, 0, req.Limit+1)
+	accepted := 0
 	var scanErr error
 	for rows.Next() {
 		if err := ctx.Err(); err != nil {
 			scanErr = err
 			break
 		}
-		rawKeys := make([]any, len(req.KeyColumns))
-		dest := make([]any, 0, len(rawKeys)+1)
-		for i := range rawKeys {
-			dest = append(dest, &rawKeys[i])
-		}
 		var sizeRaw any
-		dest = append(dest, &sizeRaw)
-		if err := rows.Scan(dest...); err != nil {
+		if err := rows.Scan(&sizeRaw); err != nil {
 			scanErr = err
 			break
 		}
@@ -107,23 +98,7 @@ func (r *reader) PageWithin(ctx context.Context, req contracts.PageRequest, maxR
 			scanErr = contracts.ErrUnsafe
 			break
 		}
-		keys := make([]contracts.Value, len(rawKeys))
-		for i, raw := range rawKeys {
-			v, derr := decode(raw, q.colTypes[req.KeyColumns[i]])
-			if derr != nil {
-				scanErr = derr
-				break
-			}
-			if v.IsNull() {
-				scanErr = contracts.ErrUnsafe
-				break
-			}
-			keys[i] = v
-		}
-		if scanErr != nil {
-			break
-		}
-		candidates = append(candidates, candidate{key: keys, size: size})
+		accepted++
 	}
 	if scanErr == nil {
 		scanErr = rows.Err()
@@ -135,20 +110,19 @@ func (r *reader) PageWithin(ctx context.Context, req contracts.PageRequest, maxR
 	if closeErr != nil {
 		return empty, contracts.ErrDatabase
 	}
-	if len(candidates) == 0 {
+	if accepted == 0 {
 		if err := tx.Commit(); err != nil {
 			return empty, dbError(err)
 		}
 		return contracts.Page{Rows: []contracts.Row{}, Done: true}, nil
 	}
-
-	done := len(candidates) <= req.Limit
+	done := accepted <= req.Limit
 	if !done {
 		// The lookahead row only proves that another page exists. Its bytes were
-		// already checked above; its values are never materialised here.
-		candidates = candidates[:req.Limit]
+		// already checked above; neither its key nor its values are materialised.
+		accepted = req.Limit
 	}
-	if len(candidates) == 0 {
+	if accepted == 0 {
 		return empty, contracts.ErrIncomplete
 	}
 
@@ -156,13 +130,13 @@ func (r *reader) PageWithin(ctx context.Context, req contracts.PageRequest, maxR
 	// Because the snapshot is stable, this is the same ordered prefix phase 1
 	// measured; LIMIT len(candidates) also keeps the driver from materialising
 	// the lookahead row.
-	query := q.sql(len(candidates))
-	valueArgs := append(append([]any{}, q.args...), len(candidates))
+	query := q.sql(accepted)
+	valueArgs := append(append([]any{}, q.args...), accepted)
 	valueRows, err := tx.QueryContext(ctx, query, valueArgs...)
 	if err != nil {
 		return empty, dbError(err)
 	}
-	result := make([]contracts.Row, 0, len(candidates))
+	result := make([]contracts.Row, 0, accepted)
 	for valueRows.Next() {
 		if err := ctx.Err(); err != nil {
 			scanErr = err
@@ -191,7 +165,7 @@ func (r *reader) PageWithin(ctx context.Context, req contracts.PageRequest, maxR
 	if closeErr != nil {
 		return empty, contracts.ErrDatabase
 	}
-	if len(result) != len(candidates) {
+	if len(result) != accepted {
 		return empty, contracts.ErrConflict
 	}
 	if err := tx.Commit(); err != nil {
