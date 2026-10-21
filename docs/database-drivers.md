@@ -17,7 +17,7 @@ MaskRiver 自有源码仍为 MIT，不能把依赖宣称成 MIT。
 BSD-3-Clause 要求保留版权/条件/免责声明，二进制分发也要随带通知，不得借作者名背书。
 MPL-2.0 是文件级义务：修改/分发受覆盖驱动文件须保留 MPL 与可获得源码方式；组合成独立 MIT Larger Work 不改变驱动文件许可。发布链接二进制时提供对应驱动源码版本获取说明和许可。
 直接驱动源码可按固定 module tag 从 https://gitlab.com/cznic/sqlite 与 https://github.com/go-sql-driver/mysql 获取。
-当前未 vendor 或修改依赖源码。传递依赖清单由 `go list -m all` 给出，发行前还需生成完整 third-party notices/SBOM、检查全部传递依赖许可与漏洞；本轮没有冒称完成发行合规或漏洞审计。
+当前未 vendor 或修改依赖源码。传递依赖清单由 `go list -m all` 给出，发行构建现在由 `scripts/build-release.sh` 生成 NOTICE/SBOM；安全漏洞审计仍需另行执行、检查全部传递依赖许可与漏洞；本轮没有冒称完成发行合规或漏洞审计。
 
 ## SQLite 使用约束
 

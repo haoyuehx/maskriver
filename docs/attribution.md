@@ -30,9 +30,12 @@ dependencies keep their own licences and their verbatim texts are kept under
 | `github.com/ncruces/go-strftime` | MIT | `licenses/go-strftime-LICENSE` |
 | `github.com/remyoudompheng/bigfft` | BSD-3-Clause | `licenses/bigfft-LICENSE` |
 | `golang.org/x/sys` | BSD-3-Clause | `licenses/x-sys-LICENSE` |
+| Go toolchain / standard library (go1.26.3) | BSD-3-Clause | `licenses/go-toolchain-LICENSE` (copied from `GOROOT/LICENSE` at build time) |
 
-Every module that MaskRiver compiles or links now has its verbatim licence text
-under `licenses/`: the twelve `go.mod` requirements above, direct and indirect.
+Every module requirement above has its verbatim licence text under `licenses/`,
+including modules that are required but not linked into a default linux/amd64
+build (`go-isatty`, `go-strftime`). The build's actual link set is derived at
+release time, and unmapped linked modules fail the build.
 The texts are copied unmodified from the module cache of the pinned versions;
 none was edited or summarised. `go.sum` also contains modules that are only
 transitive build metadata and contribute no linked code; they are deliberately
@@ -57,12 +60,15 @@ default build and is therefore a release condition, not a curiosity:
 | `modernc.org/memory` | project logo reference (URL) | `licenses/modernc-memory-LICENSE-LOGO` |
 | `golang.org/x/sys` | patent grant | `licenses/x-sys-PATENTS` |
 
-**Repository texts are not a compliant release artifact.** A binary release must
-still be checked as its own deliverable: it needs a NOTICE-style collation of
-every applicable text above, the complete licence texts shipped alongside the
-artifact, and — for the MPL-2.0 covered `go-sql-driver/mysql` files — a stated way
-to obtain the corresponding source form. This repository documents the material;
-it does not package it.
+**Repository texts are not, by themselves, a compliant release artifact.** Since
+`v0.2.0-preview.1`, `scripts/build-release.sh` derives the linked module set from
+`go list -deps` for the exact linux/amd64 target, fails on an unmapped module,
+and ships `NOTICE.md`, the complete `licenses/` texts, `SBOM.json`, and
+`MPL-2.0-SOURCE.md` for the MPL-2.0 covered `go-sql-driver/mysql` files.
+`scripts/verify-release.sh` checks that every NOTICE reference resolves, every
+shipped licence text is referenced, and the manifest/checksums match the package.
+Release records are added under [`releases/`](releases/) when an artifact is
+published, including the commit, archive SHA-256 and verification evidence.
 
 Binary distribution must include the applicable notices and, for MPL-2.0
 covered files, a way to obtain the corresponding source form. See
