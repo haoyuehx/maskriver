@@ -101,8 +101,9 @@ func TestStreamingRowBytesExactAndOver(t *testing.T) {
 	scopes := []config.Scope{{Table: "people", Column: "email"}}
 	engine, plan, target := customStreamingFixture(t, statements, scopes)
 	installOutboxFor(t, engine)
-	// Projected row bytes = len("1") + len("a@example.invalid").
-	exact := int64(len("1") + len("a@example.invalid"))
+	// The projected row includes the masked replacement, whose fixed shape is
+	// 32 hex characters + "@maskriver.local".
+	exact := int64(len("1") + 32 + len("@maskriver.local"))
 
 	over := testBudget
 	over.MaxRowBytes = exact - 1
@@ -132,9 +133,9 @@ func TestStreamingRowBytesMultiColumnTotal(t *testing.T) {
 	scopes := []config.Scope{{Table: "people", Column: "email"}, {Table: "people", Column: "backup"}}
 	engine, plan, target := customStreamingFixture(t, statements, scopes)
 	installOutboxFor(t, engine)
-	each := int64(len("1") + len("a@example.invalid"))
+	each := int64(len("1") + 32 + len("@maskriver.local"))
 	budget := testBudget
-	// Each column fits, the projected row total does not.
+	// Each masked column fits, the projected row total does not.
 	budget.MaxRowBytes = each + 1
 	if _, err := runStreamingBudget(t, engine, plan, budget); !errors.Is(err, contracts.ErrUnsafe) {
 		t.Fatalf("multi-column total err=%v", err)
@@ -145,16 +146,36 @@ func TestStreamingRowBytesMultiColumnTotal(t *testing.T) {
 }
 
 func TestStreamingRowBytesLargeAfterCommittedBatch(t *testing.T) {
-	huge := strings.Repeat("a", 50) + "@example.invalid"
 	statements := []string{
 		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT)`,
 		`INSERT INTO people VALUES (1, 'a@example.invalid')`,
-		fmt.Sprintf(`INSERT INTO people VALUES (2, '%s')`, huge),
+		`INSERT INTO people VALUES (2, 'b@example.invalid')`,
 	}
 	scopes := []config.Scope{{Table: "people", Column: "email"}}
 	engine, plan, target := customStreamingFixture(t, statements, scopes)
 	installOutboxFor(t, engine)
-	engine.cfg.BatchSize = 1
+
+	// Make row 2 oversized only after the bounded dry run has passed, so the
+	// apply loop itself meets the oversized row in its second batch. This is the
+	// concurrent-change shape the partial-completion rule exists for; a static
+	// oversized row is refused even earlier by the dry run.
+	huge := strings.Repeat("a", 50) + "@example.invalid"
+	mutate := func() {
+		raw, err := sql.Open("sqlite", "file:"+target+"?mode=rw")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer raw.Close()
+		if _, err := raw.Exec(`UPDATE people SET email = ? WHERE id = 2`, huge); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wrapped := &mutateAfterCallsReader{
+		Reader: engine.target, bounded: engine.target.(db.BoundedReader),
+		mutate: mutate, mutateAt: 3,
+	}
+	engine.target = wrapped
+
 	budget := testBudget
 	budget.MaxBatchSize = 1
 	budget.MaxRowBytes = 64
@@ -171,12 +192,70 @@ func TestStreamingRowBytesLargeAfterCommittedBatch(t *testing.T) {
 	if summary.BatchesCommitted != 1 || summary.State == contracts.RunStateComplete {
 		t.Fatalf("partial run summary=%+v", summary)
 	}
+	if summary.RowsCommitted != 1 || summary.BatchesUnknown != 0 {
+		t.Fatalf("partial counters=%+v", summary)
+	}
 	rows := readEmailColumn(t, target, "people")
 	if rows[1] == "a@example.invalid" {
 		t.Fatal("first batch was not committed before the failure")
 	}
 	if rows[2] != huge {
 		t.Fatal("over-limit row was written")
+	}
+}
+
+// mutateAfterCallsReader injects a target change at a specific bounded read so
+// a test can exercise a row that becomes oversized after the dry run. It never
+// bypasses the byte-aware page: the mutation is written by a separate SQLite
+// connection and then read back through PageWithin.
+type mutateAfterCallsReader struct {
+	contracts.Reader
+	bounded  db.BoundedReader
+	mutate   func()
+	mutateAt int
+	calls    int
+}
+
+func (m *mutateAfterCallsReader) Quiescent(ctx context.Context) error {
+	return m.Reader.(capabilityReader).Quiescent(ctx)
+}
+
+func (m *mutateAfterCallsReader) HasTriggers(ctx context.Context, ref contracts.TableRef) (bool, error) {
+	return m.Reader.(capabilityReader).HasTriggers(ctx, ref)
+}
+
+func (m *mutateAfterCallsReader) PageWithin(ctx context.Context, req contracts.PageRequest, max int64) (contracts.Page, error) {
+	m.calls++
+	if m.calls == m.mutateAt {
+		m.mutate()
+	}
+	return m.bounded.PageWithin(ctx, req, max)
+}
+
+func TestStreamingRowBytesStaticOversizedRefusedBeforeWrite(t *testing.T) {
+	huge := strings.Repeat("a", 50) + "@example.invalid"
+	statements := []string{
+		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT)`,
+		`INSERT INTO people VALUES (1, 'a@example.invalid')`,
+		fmt.Sprintf(`INSERT INTO people VALUES (2, '%s')`, huge),
+	}
+	scopes := []config.Scope{{Table: "people", Column: "email"}}
+	engine, plan, target := customStreamingFixture(t, statements, scopes)
+	installOutboxFor(t, engine)
+	engine.cfg.BatchSize = 1
+	budget := testBudget
+	budget.MaxBatchSize = 1
+	budget.MaxRowBytes = 64
+	summary, err := runStreamingBudget(t, engine, plan, budget)
+	if !errors.Is(err, contracts.ErrUnsafe) {
+		t.Fatalf("static large row err=%v", err)
+	}
+	if summary.BatchesCommitted != 0 || summary.State == contracts.RunStateComplete {
+		t.Fatalf("pre-write refusal summary=%+v", summary)
+	}
+	rows := readEmailColumn(t, target, "people")
+	if rows[1] != "a@example.invalid" {
+		t.Fatal("a row was written before the dry run refused the plan")
 	}
 }
 
@@ -191,8 +270,8 @@ func TestStreamingRowBytesWorkersAndNullAndUTF8(t *testing.T) {
 	installOutboxFor(t, engine)
 	engine.cfg.Workers = 4
 
-	// NULL contributes nothing.
-	rowBytes := int64(len("2") + len("b@example.invalid"))
+	// NULL contributes nothing; the masked email is 32 hex + the domain.
+	rowBytes := int64(len("2") + 32 + len("@maskriver.local"))
 	over := testBudget
 	over.MaxWorkers = 4
 	over.MaxRowBytes = rowBytes - 1
@@ -299,12 +378,13 @@ func sqliteWriteFile(path string, size int) error {
 	return os.WriteFile(path, make([]byte, size), 0o600)
 }
 
-// TestStreamingRowBytesPostMaterializationEvidence documents the remaining gap:
-// the current Reader API materialises the row before any MaxRowBytes check can
-// run. It is opt-in because it intentionally allocates a multi-megabyte value.
-func TestStreamingRowBytesPostMaterializationEvidence(t *testing.T) {
+// TestStreamingRowBytesPreMaterialisationEvidence proves the bounded reader
+// rejects the oversized field before the Go value is materialised. The legacy
+// Reader.Page contrast is measured in internal/db. It is opt-in because it
+// intentionally creates a multi-megabyte synthetic value.
+func TestStreamingRowBytesPreMaterialisationEvidence(t *testing.T) {
 	if os.Getenv("MASKRIVER_WP3F_LARGE_ROW") != "1" {
-		t.Skip("set MASKRIVER_WP3F_LARGE_ROW=1 to measure the post-materialisation gap")
+		t.Skip("set MASKRIVER_WP3F_LARGE_ROW=1 to measure pre-materialisation rejection")
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "source.db")
@@ -331,20 +411,113 @@ func TestStreamingRowBytesPostMaterializationEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reader.Close()
+	bounded, ok := reader.(db.BoundedReader)
+	if !ok {
+		t.Fatal("reader has no byte-aware page capability")
+	}
 	ref := contracts.TableRef{Database: "maskriver", Schema: "main", Table: "people"}
 	var before, after runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&before)
-	page, err := reader.Page(context.Background(), contracts.PageRequest{
+	_, err = bounded.PageWithin(context.Background(), contracts.PageRequest{
 		Table: ref, Columns: []string{"id", "email"}, KeyColumns: []string{"id"}, Limit: 1,
-	})
+	}, 1<<20)
 	runtime.ReadMemStats(&after)
+	if !errors.Is(err, contracts.ErrUnsafe) {
+		t.Fatalf("oversized bounded page err=%v", err)
+	}
+	delta := int64(after.TotalAlloc) - int64(before.TotalAlloc)
+	if delta > 2<<20 {
+		t.Fatalf("bounded rejection allocated %d bytes", delta)
+	}
+	t.Logf("PageWithin rejected a %d MiB field with total_alloc_delta=%d bytes", len(huge)>>20, delta)
+}
+
+func TestStreamingTargetOversizedRefusedBeforeWrite(t *testing.T) {
+	statements := []string{
+		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT)`,
+		`INSERT INTO people VALUES (1, 'a@example.invalid')`,
+	}
+	scopes := []config.Scope{{Table: "people", Column: "email"}}
+	engine, plan, target := customStreamingFixture(t, statements, scopes)
+	installOutboxFor(t, engine)
+	huge := strings.Repeat("b", 2<<20)
+	raw, err := sql.Open("sqlite", "file:"+target+"?mode=rw")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Rows) != 1 {
-		t.Fatalf("rows=%d", len(page.Rows))
+	if _, err := raw.Exec(`UPDATE people SET email = ? WHERE id = 1`, huge); err != nil {
+		t.Fatal(err)
 	}
-	t.Logf("reader materialised a %d MiB field before any budget check: heap_delta=%d MiB",
-		len(huge)>>20, (int64(after.HeapAlloc)-int64(before.HeapAlloc))>>20)
+	_ = raw.Close()
+	budget := testBudget
+	budget.MaxRowBytes = 1 << 20
+	summary, err := runStreamingBudget(t, engine, plan, budget)
+	if !errors.Is(err, contracts.ErrUnsafe) {
+		t.Fatalf("target oversized err=%v", err)
+	}
+	if summary.BatchesCommitted != 0 {
+		t.Fatalf("wrote before target refusal: %+v", summary)
+	}
+	if got := readEmailColumn(t, target, "people"); got[1] != huge {
+		t.Fatal("target row changed")
+	}
+}
+
+func TestStreamingRequiresBoundedReader(t *testing.T) {
+	statements := []string{
+		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT)`,
+		`INSERT INTO people VALUES (1, 'a@example.invalid')`,
+	}
+	scopes := []config.Scope{{Table: "people", Column: "email"}}
+	engine, plan, _ := customStreamingFixture(t, statements, scopes)
+	installOutboxFor(t, engine)
+	engine.target = &plainCapabilityReader{Reader: engine.target}
+	if _, err := runStreamingBudget(t, engine, plan, testBudget); !errors.Is(err, contracts.ErrUnsupported) {
+		t.Fatalf("unbounded reader fallback: %v", err)
+	}
+}
+
+// plainCapabilityReader keeps the preflight capability seam but deliberately
+// hides the byte-aware page capability, proving the streaming path never falls
+// back to contracts.Reader.Page.
+type plainCapabilityReader struct{ contracts.Reader }
+
+func (p *plainCapabilityReader) Quiescent(ctx context.Context) error {
+	return p.Reader.(capabilityReader).Quiescent(ctx)
+}
+
+func (p *plainCapabilityReader) HasTriggers(ctx context.Context, ref contracts.TableRef) (bool, error) {
+	return p.Reader.(capabilityReader).HasTriggers(ctx, ref)
+}
+
+func TestStreamingValidationUsesRowBudget(t *testing.T) {
+	huge := strings.Repeat("c", 2<<20)
+	statements := []string{
+		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT)`,
+		`INSERT INTO people VALUES (1, 'a@example.invalid')`,
+	}
+	scopes := []config.Scope{{Table: "people", Column: "email"}}
+	engine, plan, target := customStreamingFixture(t, statements, scopes)
+	raw, err := sql.Open("sqlite", "file:"+target+"?mode=rw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`UPDATE people SET email = ? WHERE id = 1`, huge); err != nil {
+		t.Fatal(err)
+	}
+	_ = raw.Close()
+	report, err := engine.validateWithin(context.Background(), contracts.ValidateRequest{Plan: plan, Strict: true}, 1<<20)
+	if err != nil {
+		t.Fatalf("validateWithin: %v", err)
+	}
+	if report.Passed(true) {
+		t.Fatalf("bounded validation passed an oversized row: %+v", report)
+	}
+	// The same data through the legacy Validate still reads the row (and fails
+	// on the mismatch), proving the streaming path did not change legacy
+	// semantics.
+	if _, err := engine.Validate(context.Background(), contracts.ValidateRequest{Plan: plan, Strict: true}); err != nil {
+		t.Fatalf("legacy Validate: %v", err)
+	}
 }

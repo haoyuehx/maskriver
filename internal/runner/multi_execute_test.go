@@ -65,7 +65,7 @@ func TestPreviewVisitsEveryPlannedTable(t *testing.T) {
 	plan := mustPlan(t, engine)
 
 	var changes []contracts.RowChange
-	coverage, err := engine.visit(ctx, plan, 0, func(change contracts.RowChange) error {
+	coverage, err := engine.visit(ctx, plan, 0, 0, func(change contracts.RowChange) error {
 		changes = append(changes, change)
 		return nil
 	})
@@ -125,7 +125,7 @@ func TestPreviewCoversEveryColumnOfOneTable(t *testing.T) {
 	plan := mustPlan(t, engine)
 
 	var changes []contracts.RowChange
-	coverage, err := engine.visit(ctx, plan, 0, func(change contracts.RowChange) error {
+	coverage, err := engine.visit(ctx, plan, 0, 0, func(change contracts.RowChange) error {
 		changes = append(changes, change)
 		return nil
 	})
@@ -224,7 +224,7 @@ func TestPreviewMixedNullColumnsNeverFabricates(t *testing.T) {
 	plan := mustPlan(t, engine)
 
 	var changes []contracts.RowChange
-	coverage, err := engine.visit(ctx, plan, 0, func(change contracts.RowChange) error {
+	coverage, err := engine.visit(ctx, plan, 0, 0, func(change contracts.RowChange) error {
 		changes = append(changes, change)
 		return nil
 	})

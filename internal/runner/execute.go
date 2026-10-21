@@ -36,9 +36,9 @@ func planColumns(table contracts.TablePlan) []string {
 // cancelled visit always reports Complete=false.
 //
 // The callback never receives a secret through logs or a serialized report.
-func (e *Engine) visit(ctx context.Context, plan contracts.Plan, budget int64, each func(contracts.RowChange) error) (contracts.Coverage, error) {
+func (e *Engine) visit(ctx context.Context, plan contracts.Plan, budget, maxRowBytes int64, each func(contracts.RowChange) error) (contracts.Coverage, error) {
 	var coverage contracts.Coverage
-	if ctx == nil || budget < 0 {
+	if ctx == nil || budget < 0 || maxRowBytes < 0 {
 		return coverage, contracts.ErrInvalid
 	}
 	var failure error
@@ -46,7 +46,7 @@ func (e *Engine) visit(ctx context.Context, plan contracts.Plan, budget int64, e
 		if err := ctx.Err(); err != nil {
 			return coverage, err
 		}
-		visited, err := e.visitTable(ctx, table, budget, each)
+		visited, err := e.visitTable(ctx, table, budget, maxRowBytes, each)
 		coverage.Rows += visited
 		switch {
 		case err == nil:
@@ -69,7 +69,7 @@ func (e *Engine) visit(ctx context.Context, plan contracts.Plan, budget int64, e
 // visitTable visits one planned table within its own row budget and emits one
 // RowChange per visited row. It returns ErrIncomplete whenever the table was
 // not visited to its end.
-func (e *Engine) visitTable(ctx context.Context, table contracts.TablePlan, budget int64, each func(contracts.RowChange) error) (int64, error) {
+func (e *Engine) visitTable(ctx context.Context, table contracts.TablePlan, budget, maxRowBytes int64, each func(contracts.RowChange) error) (int64, error) {
 	cols := planColumns(table)
 	var after []contracts.Value
 	var visited int64
@@ -100,11 +100,11 @@ func (e *Engine) visitTable(ctx context.Context, table contracts.TablePlan, budg
 			Table: table.Table, Columns: cols, KeyColumns: table.PrimaryKey,
 			After: after, Limit: size,
 		}
-		left, err := e.source.Page(ctx, request)
+		left, err := pageWithin(ctx, e.source, request, maxRowBytes)
 		if err != nil {
 			return visited, err
 		}
-		right, err := e.target.Page(ctx, request)
+		right, err := pageWithin(ctx, e.target, request, maxRowBytes)
 		if err != nil {
 			return visited, err
 		}
@@ -209,7 +209,7 @@ func (e *Engine) Preview(ctx context.Context, req contracts.PreviewRequest) (con
 		return report, err
 	}
 	// No Writer is opened, even for nonempty preview.
-	coverage, err := e.visit(ctx, req.Plan, int64(req.LimitPerTable), func(contracts.RowChange) error { return nil })
+	coverage, err := e.visit(ctx, req.Plan, int64(req.LimitPerTable), 0, func(contracts.RowChange) error { return nil })
 	report.PlanID = req.Plan.ID
 	report.RowsRead = coverage.Rows
 	report.Coverage = coverage
@@ -475,8 +475,29 @@ func (e *Engine) checkIncomingReferences(ctx context.Context, plan contracts.Pla
 // dryRun proves the target still matches the source over every planned row and
 // column. It reads only and never opens a Writer.
 func (e *Engine) dryRun(ctx context.Context, plan contracts.Plan) error {
-	_, err := e.visit(ctx, plan, 0, func(contracts.RowChange) error { return nil })
+	_, err := e.visit(ctx, plan, 0, 0, func(contracts.RowChange) error { return nil })
 	return err
+}
+
+// dryRunWithin is the streaming dry run. It applies the same row-byte budget as
+// the apply loop, so a dry run can not be the one phase that materialises an
+// oversized field. A reader without the bounded capability refuses the run.
+func (e *Engine) dryRunWithin(ctx context.Context, plan contracts.Plan, maxRowBytes int64) error {
+	_, err := e.visit(ctx, plan, 0, maxRowBytes, func(contracts.RowChange) error { return nil })
+	return err
+}
+
+// pageWithin uses the internal byte-aware reader when a budget is declared and
+// otherwise preserves the frozen Reader.Page semantics for legacy paths.
+func pageWithin(ctx context.Context, reader contracts.Reader, req contracts.PageRequest, maxRowBytes int64) (contracts.Page, error) {
+	if maxRowBytes <= 0 {
+		return reader.Page(ctx, req)
+	}
+	bounded, ok := reader.(db.BoundedReader)
+	if !ok {
+		return contracts.Page{}, contracts.ErrUnsupported
+	}
+	return bounded.PageWithin(ctx, req, maxRowBytes)
 }
 
 // Apply writes every planned table and every planned column of the supplied

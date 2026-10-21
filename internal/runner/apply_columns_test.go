@@ -48,7 +48,7 @@ func mixedNullFixture(t *testing.T) config.Runtime {
 func visitChanges(t *testing.T, e *Engine, plan contracts.Plan) []contracts.RowChange {
 	t.Helper()
 	var changes []contracts.RowChange
-	if _, err := e.visit(context.Background(), plan, 0, func(change contracts.RowChange) error {
+	if _, err := e.visit(context.Background(), plan, 0, 0, func(change contracts.RowChange) error {
 		changes = append(changes, change)
 		return nil
 	}); err != nil {
