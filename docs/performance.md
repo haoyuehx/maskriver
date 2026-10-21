@@ -51,3 +51,15 @@ The benchmark CI also runs bounded fuzz targets for CN identity/card/USCC checks
 - Any observed improvement must be justified by measured results instead of presumed parallel speedup.
 
 Accordingly, the bounded worker implementation can merge independently without claiming all of Issue #13 is accepted or closing the issue prematurely.
+
+## Issue #14 local recovery scale evidence (2026-10-21)
+
+[The recovery scale report](perf/issue14-09612f8/summary.md) records real CLI
+child-process runs at 10k/100k/1M synthetic rows with BatchSize 256 and Workers 4:
+an uninterrupted baseline and a deterministic half-way interruption followed by a
+separate `--resume` process. At 1M the baseline Apply was 109.7 s, resume was
+67.1 s (0.612× the baseline Apply), strict Validate passed, Peak RSS was 34.5 MiB
+for the interrupted process and 37.9 MiB for resume, and the A/B ordered-email
+SHA-256 matched. Resume re-verifies the committed prefix and uncommitted suffix,
+so it is not a cheap cursor seek. These are single-machine synthetic samples, not
+production throughput; the scale test is opt-in and not part of CI.

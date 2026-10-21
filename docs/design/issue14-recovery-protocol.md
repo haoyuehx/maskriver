@@ -1,6 +1,6 @@
 # Issue #14 WP0 — SQLite Local Transactional Recovery Protocol v1
 
-**Status:** `WP0 REVIEWED — P1 CHANGES APPLIED, PENDING SECOND-CONTEXT RECHECK`
+**Status:** `WP0 ACCEPTED — INITIAL AND SECOND-CONTEXT REVIEWS RECORDED; P1 CLOSED`
 **Issue:** [#14](https://github.com/haoyuehx/maskriver/issues/14)
 **Baseline `main`:** `aee0b801c738b89a6267e06c575c95878f785c7f`
 **Protocol revision:** `m2-recovery-v1`
@@ -130,7 +130,7 @@ for the outbox migration).
 | `strategy_id`, `strategy_version` | single strategy tuple |
 | `normalization_version` | e.g. `typed-lexical-v1` |
 | `key_id` | key identifier label, never key material |
-| `key_check` | KCV = HMAC-SHA256(key bytes, `"maskriver-recovery-v1/key-check\0" || key_id`); binds the actual key without storing it |
+| `key_check` | KCV = HMAC-SHA256(key bytes, `"maskriver-recovery-v1/key-check\0" || key_id`); binds the actual key without storing it. The key file must be a CSPRNG-generated >=32-byte secret, not a passphrase; the KCV is an offline guessing oracle for low-entropy keys |
 | `settings_digest` | canonical digest of `ResourceBudget` + `BatchSize` |
 | `state` | recovery state machine value |
 | `business_complete` | 0/1, set only by the final boundary transaction |
@@ -542,11 +542,12 @@ asserts the target bytes (and absence of new journal files) are unchanged.
 ### 13.1 Retention of recovery metadata
 
 After completion the masked database retains the `maskriver_recovery_*` rows
-(run ID, plan/scope digests, counts, timestamps) and the outbox receipts. They are
-never auto-dropped. Downstream holders of a masked artifact therefore also hold
-this non-sensitive recovery metadata; a later run on that file must treat the
-names as reserved. Dropping them is an explicit operator action outside this
-protocol.
+(run ID, plan/scope digests, counts, timestamps, KCV) and the outbox receipts.
+They are never auto-dropped. Downstream holders of a masked artifact therefore
+also hold this non-sensitive recovery metadata and a key-check oracle; a later
+run on that file must treat the names as reserved. Dropping them is an explicit
+operator action outside this protocol. Keys must be high-entropy (CSPRNG >=32
+bytes), otherwise the retained KCV weakens offline guessing resistance.
 
 ## 14. Explicit non-claims
 

@@ -37,8 +37,10 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 | SQLite 连接与真实集成 | SQLite 真实驱动执行 Reader/Writer、只读、类型、复合键分页和安全拒绝测试；以 PR #21 最终 CI 为证据 | 部分实现（#5 组件） | #5 / PR #21 |
 | MySQL 连接与真实集成 | TestMySQLAdapter 在一次性 MySQL 8.0.46 实例真实通过；包含 nine CN 策略的 typed SQL 写入/读回；其他版本与整套 CLI 流程未验收 | 部分实现（适配器实测） | #10 / PR #30 |
 | MariaDB / PostgreSQL / SQL Server / Oracle | 需独立适配与独立验证 | 未实现 | 后续评估 |
-| SQLite 流式回执 Outbox（WP2，DB 层能力） | `internal/db` 显式 opt-in：预置版本化 outbox schema、同库同事务业务 UPDATE + receipt INSERT、有界 keyset 分页读取、CommitUnknown 保守分类、Linux 本地 SQLite（journal=DELETE，会话 synchronous=FULL）；未接入 Runner/CLI，未验证断电 durability/MySQL/Windows streaming | 部分实现（DB 组件，待独立评审） | #13 / WP2 |
+| SQLite 流式回执 Outbox（WP2，DB 层能力） | `internal/db` 显式 opt-in：预置版本化 outbox schema、同库同事务业务 UPDATE + receipt INSERT、有界 keyset 分页读取、CommitUnknown 保守分类、Linux 本地 SQLite（journal=DELETE，会话 synchronous=FULL）；已接入 Runner/CLI（#13）并被 #14 recovery 复用；未验证断电 durability/MySQL/Windows streaming | 已实现（Linux amd64 本地 SQLite） | #13 / #14 |
 | 参数化更新、批次事务、复合键 keyset 分页 | #5 提供按真实复合主键游标、参数绑定、乐观受影响行数检查与回滚；跨方言独立验证持续进行 | 部分实现（#5 组件） | #5 / PR #21；MySQL 适配器见 #10 / PR #30 |
+| SQLite 本地事务恢复 schema（manifest/progress/KCV） | 显式 `init-recovery` 安装 `maskriver-recovery-v1`；manifest 与 append-only progress 只含 ID、摘要、计数、状态与时间；业务 UPDATE + receipt + progress + manifest CAS 同事务；无-op 页面只推进 progress；旧 outbox v1 数据/形状不变；部分或错误版本 fail closed | 已实现（Linux amd64 本地 SQLite） | #14 |
+| CLI `status` 与显式 `--resume` | `status --target --run-id` 以 SQLite `mode=ro` 打开，显示 state/checkpoint/已处理/已提交/批次数/表位置/resume_eligible/commit_unknown/conflict，零写入；`mask --streaming --apply --resume --run-id` 复用真实 Ed25519 审批与静态 preflight，已提交批次不重写；退出码区分 complete/recoverable/conflict/commit_unknown/unsupported/invalid/unauthorized/validation_failed | 已实现（Linux amd64 本地 SQLite） | #14 |
 | 无主键 apply 拒绝、敏感主键明确未处理 | 数据库 Writer 已对无主键及试图改主键的计划拒绝；CLI 端到端拒绝路径已由 `TestE2EApprovalDoesNotBypassExistingGates` 覆盖，MySQL CLI 未实现 | 部分实现（组件 + SQLite CLI 拒绝） | #5 / #9 |
 
 ## 敏感信息检测
@@ -143,9 +145,9 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 | 功能 | 状态 | 目标 |
 |---|---|---|
 | 中国 PII 检测与格式约束脱敏 | 部分实现（检测 + 有界替换 + SQL 集成测试） | 检测见 #6/PR #20，九种策略见 PR #29，真实 SQLite/MySQL 8.0.46 组件级读/写/回读与只读快照测试见 PR #30；用户 CLI 工作流与独立安全评审仍属 #9/#11 |
-| SQLite 同事务流式 Apply + M2 审批 + CLI | 已实现并验收（Linux amd64 SQLite；DB 层物化前字节预检、Runner dry-run/apply/validate 统一受 MaxRowBytes 约束；ADR-08 已按 delegated technical direction 批准，生产默认仍显式 opt-in） | 显式 `--streaming --apply` + 独立 `--streaming` Ed25519 审批 + canonical plan 绑定 + WP2 outbox 同事务回执 + 有界分页 + 独立 Validate；证据见 [WP3 设计与证据](design/issue13-wp3-streaming-apply.md)、[规模数据](perf/issue13-wp3-a4a2e41/summary.md)。G5/G7/G9 残余风险、MySQL/Windows streaming、1M 单次样本仍未验证 |
+| SQLite 同事务流式 Apply + M2 审批 + CLI | 已实现并验收（Linux amd64 SQLite；DB 层物化前字节预检、Runner dry-run/apply/validate 统一受 MaxRowBytes 约束；ADR-08 已按 delegated technical direction 批准，生产默认仍显式 opt-in） | 显式 `--streaming --apply` + 独立 `--streaming` Ed25519 审批 + canonical plan 绑定 + WP2 outbox 同事务回执 + 有界分页 + 独立 Validate；Issue #14 增加可选 recovery schema 与 `--resume`，不改变无 recovery schema 时的 #13 事务。证据见 [WP3 设计与证据](design/issue13-wp3-streaming-apply.md)、[规模数据](perf/issue13-wp3-a4a2e41/summary.md)、[Issue #14 验收](issue14-acceptance-report.md)。G5/G7/G9 残余风险、MySQL/Windows streaming 与 1M 单次样本仍未验证 |
 | 有界流式并发、背压、取消 | 部分实现（PR #36） | SQLite：每页有界 1–16 Worker、固定队列、顺序输出、取消与故障注入回归；SQL 读写仍顺序执行；多表 + 多 Worker 的 CLI 证据与 DB 性能评估未交付 |
-| 故障恢复、版本化 checkpoint、幂等重放 | 计划中 | M2；先解决事务提交与映射一致性 |
+| 故障恢复、版本化 checkpoint、幂等重放 | 已实现（Linux amd64 本地 SQLite） | `m2-recovery-v1`：manifest + append-only progress + 同事务 checkpoint/receipt/业务 UPDATE + 显式 `--resume` + 只读 `status`；纯确定性策略 allowlist、KCV 绑定、冲突/commit_unknown fail closed；真实 CLI 子进程在 1/10/100/500 批、跨表、Validate 前后中断均恢复且 A/B 结果一致。MySQL/Windows/WAL、跨库映射与通用 exactly-once 不支持 |
 | precision/recall 与吞吐/内存基准、可视化 | 部分实现（有实测合成值） | #6 的 74 条检测合成评估；PR #36 的 128 条 HMAC 合成批次 3 次重复基准；#13 phase 5 在 Linux 对真实 SQLite Runner 执行 10k/100k/1M 合成矩阵（42 次、BatchSize=64），含分阶段耗时、rows/s、采样 RSS/CPU/连接、收据容量与正确性核验，证据见 [phase-5 报告](perf/issue13-phase5-20261019-final/summary.md)。仅 1M 为单次，矩阵非 CLI、无 MySQL CLI、非未插桩生产吞吐；结果不证明严格的 batch×workers 内存上界，也未支持并行优化或关闭 #13。详见 [性能证据](performance.md) |
 | 数据目录/治理平台导出 | 未实现 | 未纳入当前承诺 |
 

@@ -147,10 +147,20 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - **fake Reader / 仅适配器**：`internal/verify` 的 schema/行数/keyset 回归使用 fake Reader；MySQL 只有 `TestMySQLAdapter` 适配器组件测试，没有 MySQL CLI。
 - 组件测试通过不等于用户 CLI 路径或生产可用；MySQL CLI 与完整 #11 独立验收不在已测范围。
 
+## Issue #14 本地事务恢复（m2-recovery-v1）
+
+- **协议与边界**：[恢复协议](design/issue14-recovery-protocol.md)。仅 Linux amd64 本地 SQLite、rollback journal、session `synchronous=FULL`；manifest + append-only progress + 同事务 checkpoint；显式 `init-recovery`/`--resume`/`status`。
+- **DB 证据**（`internal/db/recovery_test.go`）：schema 安装/重复安装/版本不符、同事务 UPDATE+receipt+progress+CAS、checkpoint 失败回滚业务、no-op progress、重复/跳号、CAS 过期、terminal state 不可变、真实 Commit 后响应丢失、tampered progress 可见不修复、legacy outbox 不可恢复、shape 篡改拒绝、read-only reader 文件哈希不变。
+- **Runner 证据**（`internal/runner/recovery_test.go`）：1/多批中断、跨表、全 NULL 页、Commit 前崩溃回滚、真实 Commit 后进程死亡、commit_unknown 重核、重复 resume 幂等、目标外部修改、manifest 领先日志、source/settings/approval 变化拒绝、错误 key 拒绝、verification 后写入前外部修改拒绝、Validate 中断后重验、validation_failed 不得 complete。
+- **真实 CLI 子进程证据**（`cmd/maskriver/recovery_e2e_test.go`）：第 1/10/100/500 批后进程退出 → 新进程 `status`（只读）→ `--resume` → strict `validate` → 再次 resume；与不中断基线的排序脱敏邮箱列表一致；`before_commit` 与 `after_validate` 中断恢复；无 `--apply`/无审批/撤销审批/坏 run id/不存在 run 的退出码。
+- **规模证据**（opt-in，`cmd/maskriver/recovery_scale_test.go`）：10k/100k/1M 真实 CLI，正常执行与“半程中断 + resume”对比；记录 apply/resume/validate 耗时、Peak RSS、rows/batches/checkpoint/receipt、目标大小与 A/B 摘要一致。
+- **命令**：`gofmt -l cmd internal pkg tools`、`go vet ./...`、`go test -count=1 ./...`、`go test -race -count=1 ./...`、`GOOS=windows/darwin go build ./...`，以及 `MASKRIVER_ISSUE14_SCALE=1 MASKRIVER_ISSUE14_SCALE_DIR=<abs> MASKRIVER_ISSUE14_ROWS=10000,100000,1000000 go test -run TestCLIRecoveryScaleEvidence -v ./cmd/maskriver`。
+- **明确不支持**：MySQL/Windows/WAL 恢复、跨库/持久映射的跨存储原子性、通用分布式 exactly-once、真实断电 durability、TOCTOU-proof 文件绑定、无 `--force` 冲突修复、approval 运行期持续复核（仅在 resume 开始时检查）。
+
 ## UNVERIFIED 清单
 
 - MySQL CLI 端到端：未实现/未验证；只有隔离 MySQL 8.0.46 适配器测试。
-- 断点恢复/checkpoint、跨进程幂等重放、exactly-once：未实现；不得从批次事务或审批记录推断。
+- MySQL/Windows/WAL 恢复、跨存储 mapping commit gap 的恢复、通用 exactly-once：不支持；不得从本地 SQLite 恢复能力推断。
 - 生产级检测准确率：只有 74 条自编样本（38 正、36 负，8 条超出覆盖），姓名 P=0.500/R=0.750；不是独立留出评估。
 - 持久映射、全局唯一性/匿名化、参照完整性：未实现/未验证。
 - macOS CI：仓库 CI 只跑 Ubuntu/Windows；未宣称 macOS 覆盖。

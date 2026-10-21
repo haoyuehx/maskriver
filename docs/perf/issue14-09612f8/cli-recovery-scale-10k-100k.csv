@@ -1,0 +1,5 @@
+rows,scenario,interrupt_after_batches,baseline_apply_ms,interrupted_apply_ms,resume_ms,resume_overhead_ratio,validate_ms,total_ms,interrupted_peak_rss_kb,resume_peak_rss_kb,rows_committed,batches_committed,checkpoint_sequence,progress_rows,receipt_rows,target_bytes,digest_matches_baseline,strict_validate
+10000,baseline,,1470,,,,203,1673,,,10000,40,41,41,40,,,true
+10000,interrupted+resume,20,1470,808,862,0.586,153,1823,22400,23960,10000,40,41,41,40,663552,true,true
+100000,baseline,,12383,,,,1065,13448,,,100000,391,392,392,391,,,true
+100000,interrupted+resume,195,12383,7382,7134,0.576,1051,15567,31128,34552,100000,391,392,392,391,6426624,true,true

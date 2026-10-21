@@ -68,5 +68,5 @@ SQLite/MySQL 计划各自实现 `database/sql` 适配。驱动已固定 modernc.
 ## 第二阶段
 
 有界 channel、背压、确定性 worker pool、分区顺序与取消传播；内存随 batch×workers 增长而非总行数。
-恢复清单包含源快照标识、schema/plan/策略版本、提交批次与 keyset checkpoint；先解决跨库映射提交一致性、幂等标记和重放，再宣称断点续跑。保留失败注入测试。
+M2 本地恢复协议 `m2-recovery-v1` 已在 Linux amd64 本地 SQLite 上实现并验收：manifest、append-only progress log、同事务业务 UPDATE + receipt + checkpoint、显式 `--resume`、`status` 与故障注入。协议先解决跨存储映射一致性：只支持可由源快照 + Plan + Key 确定性重算的策略，runner 没有 mapping store 接缝；需要跨进程映射的策略被 allowlist 拒绝，不宣称通用分布式 exactly-once。MySQL/Windows/WAL 恢复仍不支持并 fail closed。详见 [Issue #14 恢复协议](design/issue14-recovery-protocol.md) 与 [验收报告](issue14-acceptance-report.md)。
 中国身份证/手机号/银行卡/统一社会信用代码/姓名地址识别与格式约束采用合成数据验证；不把格式保持称为密码学 FPE。
