@@ -511,7 +511,9 @@ func sqlType(d contracts.Dialect, native string, unsigned bool) (contracts.Type,
 }
 
 func dbErrorOrCategory(err error) error {
-	if err == contracts.ErrUnsupported || err == contracts.ErrInvalid || err == contracts.ErrDatabase {
+	if err == contracts.ErrUnsupported || err == contracts.ErrInvalid ||
+		err == contracts.ErrDatabase || err == contracts.ErrUnsafe ||
+		err == contracts.ErrConflict || err == contracts.ErrIncomplete {
 		return err
 	}
 	return dbError(err)
