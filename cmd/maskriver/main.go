@@ -58,12 +58,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintln(stdout, "MaskRiver", version)
 		return 0
-	case "scan", "mask", "validate", "approve", "revoke", "init-outbox":
+	case "scan", "mask", "validate", "approve", "revoke", "init-outbox", "init-recovery", "status":
 	default:
 		return usageError(stderr)
 	}
 	if args[0] == "init-outbox" {
 		return runInitOutbox(args[1:], stdout, stderr)
+	}
+	if args[0] == "init-recovery" {
+		return runInitRecovery(args[1:], stdout, stderr)
+	}
+	if args[0] == "status" {
+		return runStatus(args[1:], stdout, stderr)
 	}
 	command := args[0]
 	// reviewCommand covers the explicit issuance surface. Neither command runs a
@@ -78,7 +84,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var trustFile, historyDir string
 	var reviewerKeyID, reviewerKeyFile, reviewerID string
 	var validFor time.Duration
-	var apply, strict, streaming bool
+	var apply, strict, streaming, resume bool
 	var budgetFile, runID string
 	var receiptPage int
 	var operationTimeout time.Duration
@@ -107,6 +113,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if command == "mask" {
 		flags.BoolVar(&apply, "apply", false, "explicitly request writes after full preview")
 		flags.BoolVar(&streaming, "streaming", false, "use the explicit m2-stream-v1 transaction/outbox path")
+		flags.BoolVar(&resume, "resume", false, "resume an existing m2-recovery-v1 run (requires --streaming --apply --run-id)")
 		flags.StringVar(&trustFile, "trust-file", "", "deployment-provisioned reviewer trust file (required with --apply)")
 		flags.StringVar(&historyDir, "history-dir", "", "review-decision store directory (required with --apply)")
 		flags.StringVar(&budgetFile, "budget-file", "", "explicit ResourceBudget JSON (required with --streaming)")
@@ -173,6 +180,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if command == "mask" && streaming && !apply {
 		return fail(stderr, 2) // --streaming never replaces explicit write intent
+	}
+	if command == "mask" && resume {
+		// Resume is a separate explicit entry point: it must name an existing
+		// run and can never generate or rename one.
+		if !streaming || !apply || runID == "" || !contracts.ValidRunID(runID) {
+			return fail(stderr, 2)
+		}
+	}
+	if command == "mask" && !resume && runID != "" && !contracts.ValidRunID(runID) {
+		return fail(stderr, 2)
 	}
 	// The review commands state every deployment input explicitly. A missing
 	// trust file or reviewer key is a configuration error, not an operation
@@ -296,7 +313,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return fail(stderr, 2)
 	}
 	if streaming {
-		return streamingApply(ctx, engine, approvalStore, plan, cfg, budget, runID, receiptPage, stdout, stderr)
+		return streamingApplyOrResume(ctx, engine, approvalStore, plan, cfg, budget, runID, receiptPage, resume, stdout, stderr)
 	}
 	engine.SetApprovalQuery(approvalStore)
 	report, err := engine.Apply(ctx, contracts.ApplyRequest{
@@ -465,9 +482,11 @@ func (f *scopeFlag) Set(raw string) error {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "MaskRiver — bounded SQLite data masking (M1 in development)")
-	fmt.Fprintln(w, "Usage: maskriver <scan|mask|validate|approve|revoke|init-outbox|version> [flags]")
+	fmt.Fprintln(w, "Usage: maskriver <scan|mask|validate|approve|revoke|init-outbox|init-recovery|status|version> [flags]")
 	fmt.Fprintln(w, "Two independent pre-existing SQLite files are required; mask defaults to dry run.")
 	fmt.Fprintln(w, "mask --apply --approved also requires a stored reviewer decision bound to the plan.")
+	fmt.Fprintln(w, "mask --streaming --apply --resume --run-id <32-hex> resumes m2-recovery-v1.")
+	fmt.Fprintln(w, "status --target <db> --run-id <32-hex> is read-only; it never recovers or writes.")
 	fmt.Fprintln(w, "approve/revoke sign with a reviewer key; apply reads the deployment trust file only.")
 	fmt.Fprintln(w, "A local operator controlling both trust file and reviewer key is not stopped by RBAC.")
 	fmt.Fprintln(w, "Use authorized synthetic copies.")

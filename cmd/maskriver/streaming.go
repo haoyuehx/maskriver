@@ -72,6 +72,83 @@ func resolveRunID(value string) (string, error) {
 	return hex.EncodeToString(raw[:]), nil
 }
 
+// streamingApplyOrResume dispatches the explicit streaming entry points. A
+// resume never generates a run identity and never falls back to a new run.
+func streamingApplyOrResume(ctx context.Context, engine *runner.Engine, store *history.Store, plan contracts.Plan,
+	cfg config.Runtime, budget contracts.ResourceBudget, runID string, receiptPage int, resume bool,
+	stdout, stderr io.Writer) int {
+	if resume {
+		return streamingResume(ctx, engine, store, plan, cfg, budget, runID, receiptPage, stdout, stderr)
+	}
+	return streamingApply(ctx, engine, store, plan, cfg, budget, runID, receiptPage, stdout, stderr)
+}
+
+// streamingResume loads the stored streaming approval and continues an existing
+// run. It prints only aggregate state; no value, key or DSN is ever included.
+func streamingResume(ctx context.Context, engine *runner.Engine, store *history.Store, plan contracts.Plan,
+	cfg config.Runtime, budget contracts.ResourceBudget, runID string, receiptPage int,
+	stdout, stderr io.Writer) int {
+	approval, err := store.LoadStreamingApproval(ctx, plan)
+	if err != nil {
+		fmt.Fprintln(stderr, "resume: refused=true reason=approval")
+		return resumeExitCode(err, contracts.StreamingApplySummary{}, runner.RecoveryReport{})
+	}
+	engine.SetStreamingApprovalQuery(store)
+	summary, report, err := engine.StreamingResume(ctx, runner.StreamingRecoveryRequest{
+		Protocol: contracts.StreamingProtocolRevision, Plan: plan, Approval: approval,
+		ExplicitApply: true, RunID: runID, BatchSize: cfg.BatchSize,
+		ReceiptPageSize: receiptPage, Budget: budget,
+	})
+	write := stdout
+	if err != nil {
+		write = stderr
+	}
+	fmt.Fprintf(write, "resume: protocol=%s run=%s plan=%s\n", summary.Protocol, summary.RunID, summary.PlanID)
+	fmt.Fprintf(write, "resume: state=%s validation=%s rows_committed=%d batches_total=%d batches_committed=%d batches_failed=%d batches_unknown=%d\n",
+		runStateName(summary.State), string(report.Validation), summary.RowsCommitted,
+		summary.BatchesTotal, summary.BatchesCommitted, summary.BatchesFailed, summary.BatchesUnknown)
+	fmt.Fprintf(write, "resume: checkpoint_sequence=%d table_ordinal=%d tables=%d rows_processed=%d business_complete=%t\n",
+		report.CheckpointSequence, report.TableOrdinal, report.Tables, report.RowsProcessed, report.BusinessComplete)
+	fmt.Fprintf(write, "resume: audit=%s resume_eligible=%t receipts_bounded=true\n",
+		auditStateName(summary.Audit), report.ResumeEligible)
+	if summary.State == contracts.RunStateCommitUnknown || report.State == db.RecoveryStateCommitUnknown {
+		fmt.Fprintln(write, "resume: commit_unknown=true retry=never")
+	}
+	if report.State == db.RecoveryStateConflict {
+		fmt.Fprintln(write, "resume: conflict=true overwrite=never")
+	}
+	return resumeExitCode(err, summary, report)
+}
+
+// resumeExitCode maps the result to the documented CLI exit codes. A partial or
+// failed resume is never reported as success.
+func resumeExitCode(err error, summary contracts.StreamingApplySummary, report runner.RecoveryReport) int {
+	if err == nil && summary.State == contracts.RunStateComplete {
+		return 0
+	}
+	switch {
+	case errors.Is(err, contracts.ErrCommitUnknown), report.State == db.RecoveryStateCommitUnknown:
+		return 5
+	case errors.Is(err, contracts.ErrConflict), report.State == db.RecoveryStateConflict:
+		return 4
+	case errors.Is(err, contracts.ErrUnsupported):
+		return 6
+	case errors.Is(err, contracts.ErrNotFound):
+		return 7
+	case errors.Is(err, contracts.ErrUnsafe):
+		return 8
+	case errors.Is(err, contracts.ErrIncomplete), report.State == db.RecoveryStateValidationFailed:
+		return 9
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return 3
+	case err == nil && (summary.State == contracts.RunStateRunning ||
+		report.State == db.RecoveryStateRecoverable || report.State == db.RecoveryStateRecoveryRequired):
+		return 3
+	default:
+		return 1
+	}
+}
+
 // streamingApply runs the explicit streaming path. The approval is loaded from
 // the store through the same signed binding the verifier checks, so a
 // hand-written approval struct can not authorize a write.

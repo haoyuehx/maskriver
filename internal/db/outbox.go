@@ -14,6 +14,7 @@ import (
 
 	"modernc.org/sqlite"
 
+	"github.com/haoyuehx/maskriver/internal/testhooks"
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
 
@@ -35,9 +36,17 @@ func OutboxTables() []string {
 	return []string{outboxSchemaTable, OutboxRunTable, OutboxBatchTable}
 }
 
-// IsOutboxTable reports whether name is a reserved streaming outbox table.
+// IsOutboxTable reports whether name is any reserved streaming/recovery audit
+// table. It covers both schema families so business scopes can never target
+// recovery metadata either. OutboxTables keeps its v1 meaning for the outbox
+// migration itself.
 func IsOutboxTable(name string) bool {
 	for _, reserved := range OutboxTables() {
+		if name == reserved {
+			return true
+		}
+	}
+	for _, reserved := range RecoveryTables() {
 		if name == reserved {
 			return true
 		}
@@ -454,6 +463,13 @@ func (o *Outbox) InitializeRun(ctx context.Context, run OutboxRun) error {
 // returned WriteTx must be committed with Commit, which inserts the receipt in
 // the same transaction before the one Commit call.
 func (o *Outbox) BeginBatch(ctx context.Context, runID string, plan contracts.TablePlan, receipt contracts.StreamingBatchReceipt) (contracts.WriteTx, error) {
+	return o.beginBatch(ctx, runID, plan, receipt, nil)
+}
+
+// beginBatch is the shared implementation. afterReceipt, when non-nil, runs
+// inside the same transaction after the receipt INSERT and before the single
+// Commit; the recovery store uses it to update the checkpoint atomically.
+func (o *Outbox) beginBatch(ctx context.Context, runID string, plan contracts.TablePlan, receipt contracts.StreamingBatchReceipt, afterReceipt func(context.Context, *sql.Tx) error) (contracts.WriteTx, error) {
 	if err := o.check(ctx); err != nil {
 		return nil, err
 	}
@@ -492,7 +508,7 @@ func (o *Outbox) BeginBatch(ctx context.Context, runID string, plan contracts.Ta
 		return nil, dbError(err)
 	}
 	base := &writeTx{owner: o.writer, tx: tx, plan: plan, keyTypes: keyTypes, changed: changed, ordered: ordered}
-	result := &outboxTx{outbox: o, runID: runID, tx: base, receipt: receipt}
+	result := &outboxTx{outbox: o, runID: runID, tx: base, receipt: receipt, afterReceipt: afterReceipt}
 	o.writer.mu.Lock()
 	o.writer.active = base
 	o.writer.mu.Unlock()
@@ -671,13 +687,14 @@ func (o *Outbox) check(ctx context.Context) error {
 }
 
 type outboxTx struct {
-	outbox  *Outbox
-	runID   string
-	tx      *writeTx
-	receipt contracts.StreamingBatchReceipt
-	mu      sync.Mutex
-	ended   bool
-	updated int64
+	outbox       *Outbox
+	runID        string
+	tx           *writeTx
+	receipt      contracts.StreamingBatchReceipt
+	afterReceipt func(context.Context, *sql.Tx) error
+	mu           sync.Mutex
+	ended        bool
+	updated      int64
 }
 
 var _ contracts.WriteTx = (*outboxTx)(nil)
@@ -733,6 +750,24 @@ func (t *outboxTx) Commit(ctx context.Context) error {
 		t.abortLocked()
 		return err
 	}
+	if err := testhooks.Fire("after_receipt_insert"); err != nil {
+		t.abortLocked()
+		return err
+	}
+	if t.afterReceipt != nil {
+		if err := t.afterReceipt(ctx, t.tx.tx); err != nil {
+			t.abortLocked()
+			return err
+		}
+	}
+	if err := testhooks.Fire("after_checkpoint_write"); err != nil {
+		t.abortLocked()
+		return err
+	}
+	if err := testhooks.Fire("before_commit"); err != nil {
+		t.abortLocked()
+		return err
+	}
 	t.tx.mu.Lock()
 	if t.tx.ended {
 		t.tx.mu.Unlock()
@@ -754,6 +789,11 @@ func (t *outboxTx) Commit(ctx context.Context) error {
 	if commitErr != nil {
 		return contracts.ErrCommitUnknown
 	}
+	_ = testhooks.Fire("after_business_commit")
+	// A post-commit hook models "the database committed but the application
+	// never received the response". Its error is deliberately ignored: the
+	// commit already happened and cannot be reclassified as a failure here.
+	_ = testhooks.Fire("after_commit_before_response")
 	return nil
 }
 
