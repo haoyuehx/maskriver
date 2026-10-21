@@ -76,7 +76,7 @@ China-first 的 13 种检测规则由 PR #20（Issue #6）实现；其规则是�
 
 | 策略 | 说明 | 状态 | 目标 |
 |---|---|---|---|
-| null | 显式生成 SQL NULL；CLI 端到端刻意拒绝：dryRun 在 openWriter 前拒绝“非 NULL → NULL”，Preview 与 Apply 均拒绝，因该变化会被验证器判为冲突证据（`TestCLINullStrategyRefusedBeforeWrite`、`TestApplyRefusesNullReplacementBeforeWriter`）；`internal/db` 写入层仍接受该组合（已接受 P2，见[测试计划](test-plan.md)） | 部分实现（组件；CLI 拒绝） | #7 / PR #24 |
+| null | 显式生成 SQL NULL；CLI 端到端刻意拒绝：dryRun 在 openWriter 前拒绝“非 NULL → NULL”，Preview 与 Apply 均拒绝，因该变化会被验证器判为冲突证据（`TestCLINullStrategyRefusedBeforeWrite`、`TestApplyRefusesNullReplacementBeforeWriter`）；M3-1 起 `internal/db` 写入层也拒绝该组合（`ErrUnsafe`） | 部分实现（组件；CLI 拒绝） | #7 / PR #24 |
 | blank | Text/Bytes 清空；拒绝不支持的数值/日期类型 | 部分实现（组件） | #7 / PR #24 |
 | redact | 支持文本、字节和有限基本数值类型；结果未变化时拒绝 | 部分实现（组件） | #7 / PR #24 |
 | format_random | HMAC 派生的 Text ASCII/汉字有界类别替换与 Bytes 等长变换；未支持脚本拒绝。非密码学 FPE | 部分实现（有界组件） | #7 / PR #24 |
@@ -136,7 +136,7 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 | schema 校验：列类型/PK/索引/FK/unique/check | `schemasMatch` 比较列名/类型/NULL/长度/精度/比例、PK、索引、unique、FK、CHECK，并要求对应 `SchemaCoverage`；`schema_coverage_test.go` 覆盖，真实 SQLite CLI 已验证含 CHECK/索引的表；触发器不在 verify 内，由 runner preflight 拒绝 | 已实现（组件 + SQLite CLI） | #8 / PR #33 |
 | triggers/grants 校验 | runner preflight 拒绝任何触发器与入向 FK；verify 不做触发器校验，grants 需驱动能力支持 | 部分实现（触发器拒绝） | 后续评估 |
 | 主键对齐逐值完整性校验 | 基于冻结 Plan，双向 keyset 流式合并，已选敏感列未变化失败，字段缺失/类型/NULL 转换失败 | 已实现（fake Reader 组件） | #8 / PR #32、#33 |
-| 无键/限量覆盖/strict 模式 | RowLimit=0 有界分页全量；正数为总行预算，截断/无主键证据/分页异常不得 PASS；`contracts.Passed` 在 strict 下拒绝 Warning，但 verify 忽略 `ValidateRequest.Strict`，且所有 Warning 路径已置 `Complete=false`，因此 CLI `--strict` 目前没有可区分的严格语义（`TestCLIStrictFlagWiring` 只证明接线与退出码） | 部分实现（strict 语义 inert） | #8 / #33；#9 跟进 |
+| 无键/限量覆盖/strict 模式 | RowLimit=0 有界分页全量；正数为总行预算，截断/无主键证据/分页异常不得 PASS。M3-1 起 strict 要求 `RowLimit=0`、拒绝 Warning，并要求每张计划表在源/目标通过适配器 `IntegrityCheck`；SQLite 已实现 `quick_check`+数据库级 `foreign_key_check`，MySQL strict 未实现并 fail closed（UNVERIFIED）。证据：`TestStrictRequiresFullScanAndIntegrityCapability`、`TestStrictIntegrityFailureIsNotPass`、`TestSQLiteIntegrityCheckDetectsForeignKeyViolation` | 已实现（SQLite 严格语义；MySQL strict UNVERIFIED/unsupported） | #8 / #33；M3-1 |
 | 测试数据忽略、采样上限、形状遮蔽 | 忽略策略须显式审核 | 计划中 | M1/go-verify |
 | 稳定公共库 API | `pkg/contracts` 仅内部协作冻结，非稳定外部 SDK | 未实现 | 待契约稳定后评估 |
 

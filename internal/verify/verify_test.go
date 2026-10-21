@@ -192,6 +192,10 @@ func keyGreater(row contracts.Row, keys []string, after []contracts.Value) bool 
 
 func (f *fakeReader) Close() error { return nil }
 
+// IntegrityCheck makes the fake a strict-capable reader. Tests that need the
+// unsupported path use a wrapper that hides this method.
+func (f *fakeReader) IntegrityCheck(_ context.Context, _ contracts.TableRef) error { return nil }
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -707,3 +711,65 @@ func strconvItoa(i int) string { return strconv.Itoa(i) }
 func parseInt(s string) (int64, error)     { return strconv.ParseInt(s, 10, 64) }
 func parseUint(s string) (uint64, error)   { return strconv.ParseUint(s, 10, 64) }
 func parseFloat(s string) (float64, error) { return strconv.ParseFloat(s, 64) }
+
+type noIntegrityReader struct{ contracts.Reader }
+
+type failingIntegrityReader struct{ *fakeReader }
+
+func (f failingIntegrityReader) IntegrityCheck(context.Context, contracts.TableRef) error {
+	return contracts.ErrConflict
+}
+
+func strictFixture(t *testing.T) (*fakeReader, *fakeReader, contracts.Plan) {
+	t.Helper()
+	tref := peopleTable()
+	schema := peopleSchema()
+	src := []contracts.Row{
+		{"id": mustValue(t, contracts.Int, "1"), "email": textV("a@x.com")},
+		{"id": mustValue(t, contracts.Int, "2"), "email": textV("b@x.com")},
+	}
+	tgt := []contracts.Row{
+		{"id": mustValue(t, contracts.Int, "1"), "email": textV("###")},
+		{"id": mustValue(t, contracts.Int, "2"), "email": textV("###")},
+	}
+	source, target := newFakeReader(), newFakeReader()
+	source.addTable(tref, schema, src)
+	target.addTable(tref, schema, tgt)
+	return source, target, peoplePlan()
+}
+
+func TestStrictRequiresFullScanAndIntegrityCapability(t *testing.T) {
+	source, target, plan := strictFixture(t)
+	// A bounded row budget is refused in strict mode, even if it covers the rows.
+	if _, err := New().Validate(context.Background(), source, target,
+		contracts.ValidateRequest{Plan: plan, RowLimit: 1, Strict: true}); err != contracts.ErrUnsupported {
+		t.Fatalf("strict bounded scan: got %v, want ErrUnsupported", err)
+	}
+	// Non-strict keeps the bounded behavior.
+	if _, err := New().Validate(context.Background(), source, target,
+		contracts.ValidateRequest{Plan: plan, RowLimit: 1}); err != nil {
+		t.Fatalf("non-strict bounded scan: %v", err)
+	}
+	// An adapter without the strict capability fails closed only in strict mode.
+	plainSrc := noIntegrityReader{Reader: source}
+	if _, err := New().Validate(context.Background(), plainSrc, target,
+		contracts.ValidateRequest{Plan: plan, Strict: true}); err != contracts.ErrUnsupported {
+		t.Fatalf("strict without capability: got %v, want ErrUnsupported", err)
+	}
+	if _, err := New().Validate(context.Background(), plainSrc, target,
+		contracts.ValidateRequest{Plan: plan}); err != nil {
+		t.Fatalf("non-strict without capability: %v", err)
+	}
+}
+
+func TestStrictIntegrityFailureIsNotPass(t *testing.T) {
+	source, target, plan := strictFixture(t)
+	rep, err := New().Validate(context.Background(), failingIntegrityReader{source}, target,
+		contracts.ValidateRequest{Plan: plan, Strict: true})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if rep.Passed(true) || rep.Coverage.Complete {
+		t.Fatalf("integrity failure must not pass strict: %+v", rep)
+	}
+}

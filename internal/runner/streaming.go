@@ -267,6 +267,17 @@ func (r boundedValidationReader) Page(ctx context.Context, req contracts.PageReq
 	return bounded.PageWithin(ctx, req, r.maxRowBytes)
 }
 
+// IntegrityCheck forwards the strict-validation capability to the real adapter.
+func (r boundedValidationReader) IntegrityCheck(ctx context.Context, table contracts.TableRef) error {
+	checker, ok := r.Reader.(interface {
+		IntegrityCheck(context.Context, contracts.TableRef) error
+	})
+	if !ok {
+		return contracts.ErrUnsupported
+	}
+	return checker.IntegrityCheck(ctx, table)
+}
+
 func (r *streamingRun) finish(cause error) (contracts.StreamingApplySummary, error) {
 	summary := *r.summary
 	if r.recovery != nil {

@@ -373,3 +373,33 @@ func TestUpdateRejectsEmptyBatch(t *testing.T) {
 		t.Fatalf("rollback: %v", err)
 	}
 }
+
+// TestWriteTxRefusesNonNullToNullReplacement closes the Issue #9 P2-1 gap at the
+// Writer layer: the CLI already refused it, but a direct caller could otherwise
+// persist a row that no strict validation can pass.
+func TestWriteTxRefusesNonNullToNullReplacement(t *testing.T) {
+	ctx := context.Background()
+	opts, _ := writeFixture(t,
+		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT NULL)`,
+		`INSERT INTO people VALUES (1, 'fixture-01@example.invalid')`,
+	)
+	w, err := OpenWriter(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	plan := writePlan(t, ctx, w, "people", []string{"id"}, "email")
+	tx, err := w.Begin(ctx, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	change := contracts.RowChange{
+		Key:         []contracts.Value{testValue(t, contracts.Int, "1")},
+		Expected:    contracts.Row{"email": testValue(t, contracts.Text, "fixture-01@example.invalid")},
+		Replacement: contracts.Row{"email": contracts.Value{}},
+	}
+	if _, err := tx.Update(ctx, []contracts.RowChange{change}); !errors.Is(err, contracts.ErrUnsafe) {
+		t.Fatalf("non-NULL -> NULL: got %v, want ErrUnsafe", err)
+	}
+	_ = tx.Rollback(ctx)
+}

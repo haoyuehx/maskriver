@@ -200,6 +200,12 @@ func (t *writeTx) validateChange(change contracts.RowChange) error {
 			}
 			continue
 		}
+		if replacement.IsNull() {
+			// The read-only verifier treats a non-NULL source becoming NULL as
+			// conflicting evidence. Refuse it at the writer layer too, so a direct
+			// Writer caller cannot produce a row no strict validation can pass.
+			return contracts.ErrUnsafe
+		}
 		if expected == replacement {
 			return contracts.ErrUnsafe
 		}

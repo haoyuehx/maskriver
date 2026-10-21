@@ -4,6 +4,7 @@ package verify
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"strconv"
 	"strings"
@@ -16,6 +17,13 @@ const pageSize = 256
 type validator struct{}
 
 var _ contracts.Validator = (*validator)(nil)
+
+// integrityChecker is an optional, internal adapter capability used only by
+// strict validation. It is intentionally not part of the frozen contracts.Reader
+// surface; an adapter without it fails closed in strict mode.
+type integrityChecker interface {
+	IntegrityCheck(context.Context, contracts.TableRef) error
+}
 
 // New returns the read-only, bounded-memory validation component.
 func New() contracts.Validator { return &validator{} }
@@ -33,6 +41,11 @@ func (*validator) Validate(ctx context.Context, source, target contracts.Reader,
 	}
 	if err := req.Plan.ValidateShape(); err != nil {
 		return report, err
+	}
+	// Strict validation is a full, un-truncated scan. A positive row budget is
+	// refused rather than silently reported as complete if it happens to fit.
+	if req.Strict && req.RowLimit != 0 {
+		return report, contracts.ErrUnsupported
 	}
 	complete := true
 	for _, plan := range req.Plan.Tables {
@@ -102,6 +115,18 @@ func (*validator) Validate(ctx context.Context, source, target contracts.Reader,
 			complete = false
 			continue
 		}
+		if req.Strict {
+			if err := checkIntegrity(ctx, source, target, plan.Table, &report); err != nil {
+				if errors.Is(err, contracts.ErrUnsupported) {
+					return report, err
+				}
+				if ctx.Err() != nil {
+					return report, ctx.Err()
+				}
+				complete = false
+				continue
+			}
+		}
 		if srcCount != dstCount {
 			// Never put raw keys or values in a report.
 			report.Issues = append(report.Issues, issue(contracts.Fail, contracts.RowCountMismatch, 1))
@@ -135,6 +160,32 @@ func (*validator) Validate(ctx context.Context, source, target contracts.Reader,
 	report.Coverage.Complete = complete &&
 		report.Coverage.Tables == int64(len(req.Plan.Tables))
 	return report, nil
+}
+
+func checkIntegrity(ctx context.Context, source, target contracts.Reader, table contracts.TableRef, report *contracts.ValidationReport) error {
+	src, ok := source.(integrityChecker)
+	if !ok {
+		return contracts.ErrUnsupported
+	}
+	dst, ok := target.(integrityChecker)
+	if !ok {
+		return contracts.ErrUnsupported
+	}
+	if err := src.IntegrityCheck(ctx, table); err != nil {
+		if errors.Is(err, contracts.ErrUnsupported) || errors.Is(err, contracts.ErrInvalid) {
+			return err
+		}
+		report.Issues = append(report.Issues, issue(contracts.Error, contracts.DatabaseFailure, 1))
+		return err
+	}
+	if err := dst.IntegrityCheck(ctx, table); err != nil {
+		if errors.Is(err, contracts.ErrUnsupported) || errors.Is(err, contracts.ErrInvalid) {
+			return err
+		}
+		report.Issues = append(report.Issues, issue(contracts.Error, contracts.DatabaseFailure, 1))
+		return err
+	}
+	return nil
 }
 
 func issue(status contracts.Status, code contracts.IssueCode, count int64) contracts.Issue {

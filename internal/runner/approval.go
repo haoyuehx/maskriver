@@ -17,6 +17,8 @@ import (
 //
 // Scan, Preview, Validate and Plan never touch this dependency, so a read-only
 // workflow can not reach the history store at all.
+const approvalFutureIssuedSkew = 5 * time.Minute
+
 type ApprovalQuery interface {
 	Lookup(context.Context, contracts.Plan) (history.Record, error)
 }
@@ -103,7 +105,9 @@ func recordAuthorizes(record history.Record, plan contracts.Plan, now time.Time)
 		record.ConfigDigest != plan.ConfigDigest || record.RevokedAt != nil {
 		return false
 	}
-	if now.Before(record.IssuedAt) || !now.Before(record.ExpiresAt) {
+	// Tolerate the same small clock skew as history.Store; a record dated far
+	// in the future is still refused, and expiry is still exact.
+	if record.IssuedAt.After(now.Add(approvalFutureIssuedSkew)) || !now.Before(record.ExpiresAt) {
 		return false
 	}
 	index := 0
