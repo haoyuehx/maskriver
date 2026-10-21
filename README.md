@@ -1,13 +1,13 @@
 # MaskRiver
 
-An independently developed Go data masking and sensitive-data governance project. Streaming performance and failure recovery are roadmap goals, not yet demonstrated guarantees.
+An independently developed Go data masking and sensitive-data governance project. The `v0.2.0-preview.1` preview adds bounded SQLite streaming and local transactional recovery; it is not a production-stable release.
 
 面向 **2026 开放原子大赛 · 开源基础软件与解决方案赛道** 的独立 Go 项目。
 这是参赛研发目标，不代表已报名、入选或获官方背书。
 
 MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具，面向企业开发、测试与数据共享场景：自动发现敏感数据，提供安全、确定性的脱敏策略，数据库适配器支持 SQLite 与 MySQL（当前 CLI 仅 SQLite），并提供数据完整性校验。
 
-> **M1 限定预览版已发布为 GitHub Pre-release：[`v0.1.0-dev`](https://github.com/haoyuehx/maskriver/releases/tag/v0.1.0-dev)（linux/amd64）。** #9 已关闭（AC1–AC5 全部通过）；#11 已裁定 ACCEPT WITH RESTRICTIONS。**这不是稳定版，也不代表生产就绪**：仅面向授权、隔离、可弃置的 SQLite 测试快照。 当前真实可用范围是合成 SQLite 快照上的多表 CLI（同一表多列由 runner 级用例覆盖）：`scan → preview → approve（独立进程签发）→ 新进程 mask --apply → validate`。Ed25519 审批记录、驱动级 SQL Spy、静态安全门禁和批次故障回归已有真实 SQLite 测试；`--strict` 目前没有独立的严格语义，MySQL CLI、断点恢复/checkpoint、exactly-once、持久映射和生产级检测准确率均未验证。不能据此声称完整产品或生产就绪。
+> **`v0.2.0-preview.1` 已作为 GitHub Pre-release 发布：[`v0.2.0-preview.1`](https://github.com/haoyuehx/maskriver/releases/tag/v0.2.0-preview.1)（linux/amd64）。** 该版本在 M1 SQLite 多表工作流之上增加了有界 Streaming Apply、事务 Outbox、资源预算、Checkpoint、只读 `status` 与显式 `--resume` 的本地事务幂等恢复。**这不是稳定版，也不代表生产就绪**：仅面向授权、隔离、可弃置的本地 SQLite 副本；恢复仅支持 Linux amd64、rollback journal、`synchronous=FULL` 和确定性策略白名单。MySQL CLI/Recovery、Windows/macOS Streaming/Recovery、WAL Recovery、跨存储 Mapping 原子性、通用 exactly-once、真实断电持久性、生产级检测准确率和法律意义上的匿名化均未验证。旧的 `v0.1.0-dev` 仍保留，但其发行说明中的能力边界不因新版本而扩大。
 
 ## 快速开始
 
@@ -22,9 +22,23 @@ go build -o bin/maskriver ./cmd/maskriver
 ```
 
 `scan`、`mask`、`validate`、`approve`、`revoke` 已支持明确限定的 **SQLite 多表**合成测试工作流（同一表多列另有 runner 级用例）；必须提供两个各自存在且不同的绝对路径数据库文件，默认只读。MySQL CLI 尚未实现；非法配置或未获批准的写入一律拒绝。
-`mask` 默认 Dry Run。写入需要三者同时成立：`--approved`（操作者声明）、`--apply`（写意图）和一条由 `approve` 独立签发并绑定当前 Plan 的 Ed25519 审批记录；前两者单独或组合都不充分。`apply` 只从部署预置 trust file 加载可信公钥，不接收审核私钥；`revoke` 撤销已有记录。Preview 由驱动级 SQL Spy 与文件树 SHA256 证明零写入。写入使用批次事务，故障后不保证跨批全局原子，未实现断点恢复。
+`mask` 默认 Dry Run。写入需要三者同时成立：`--approved`（操作者声明）、`--apply`（写意图）和一条由 `approve` 独立签发并绑定当前 Plan 的 Ed25519 审批记录；前两者单独或组合都不充分。`apply` 只从部署预置 trust file 加载可信公钥，不接收审核私钥；`revoke` 撤销已有记录。Preview 由驱动级 SQL Spy 与文件树 SHA256 证明零写入。
+
+可选的 M2 路径使用 `--streaming`、独立 `--budget-file` 和同事务 Outbox 回执。恢复需要先显式 `init-outbox`、`init-recovery`，然后以 `--streaming --apply --resume --run-id <32-hex>` 继续；`status` 只读。已提交批次通过确定性重算校验后跳过，未提交后缀必须仍等于源值；目标外部修改、错误 Key、快照漂移和 `commit_unknown` 均 fail closed。恢复不改变“批次事务不等于整库原子性”的既有边界。
 可复现路径见 `cmd/maskriver/approval_e2e_test.go` 的 `TestE2EPlanIssueNewProcessApply`（子进程签发与加载），以及 `cmd/maskriver/main_test.go` 的 `TestCLIMultiTableWorkflow` 与 `TestCLIRealSQLiteWorkflow`。
 直接运行编译后的二进制可观察原始退出码；`go run` 会包装子进程退出状态。
+
+### 发行包快速开始（linux/amd64）
+
+```sh
+sha256sum -c SHA256SUMS
+tar -xzf maskriver-v0.2.0-preview.1-linux-amd64.tar.gz
+cd maskriver-v0.2.0-preview.1-linux-amd64
+./maskriver --version
+./maskriver --help
+```
+
+发行包、SHA256、许可与恢复 E2E 证据见 [v0.2.0-preview.1 发行记录](docs/releases/v0.2.0-preview.1.md)。只对授权、隔离、可丢弃的 SQLite 副本运行。
 
 ## 四人跨平台协作
 
@@ -44,8 +58,8 @@ CI 包括 Ubuntu/Windows 的测试与 vet、Ubuntu race，以及隔离 MySQL 8.0
 
 - **M1-B 已交付：** 数据库适配器（#5、#10）、检测（#6）、脱敏（#7、#12）和验证器（#8），有真实数据库或有界 fake Reader 测试证据；各组件不等于完整产品。
 - **M1-C 已关闭：** [#9](https://github.com/haoyuehx/maskriver/issues/9) 的 AC 已由独立上下文签署（[验收报告](docs/issue9-acceptance-report.md)）。SQLite 多表 CLI、签名审批记录、SQL Spy、静态门禁和批次故障回归已有真实测试；`--strict` 语义与 MySQL CLI 仍未完成。
-- **M1-D 已裁定 ACCEPT WITH RESTRICTIONS：** [#11](https://github.com/haoyuehx/maskriver/issues/11) 独立安全验收已完成，P0=0、P1=0——原 P1（第三方许可/署名）由 PR #58 修复并经第二独立上下文复核；六条 P2 仍开放；`docs/licenses/` 现有 20 份文本（12 份模块顶层 + 8 份依赖内嵌第三方材料），但仓库内有文本不等于发行工件合规——二进制发布仍需 NOTICE 归并、随包完整文本与 MPL-2.0 源码获取途径。**M1 尚未发布**，可宣称与不可宣称范围见 [Issue #11 验收裁定](docs/m1-acceptance-issue11.md)。
-- **M2 待启动/部分：** [#13 有界并发/基准](https://github.com/haoyuehx/maskriver/issues/13) 已有有界 Worker 组件，完整基准与端到端吞吐未验收；[#14 幂等恢复](https://github.com/haoyuehx/maskriver/issues/14) 未启动。中文格式约束替换已有有界组件实现，不再列作从零开发。
+- **M1-D 已裁定 ACCEPT WITH RESTRICTIONS：** [#11](https://github.com/haoyuehx/maskriver/issues/11) 独立安全验收已完成，P0=0、P1=0——原 P1（第三方许可/署名）由 PR #58 修复并经第二独立上下文复核；六条 P2 仍开放。`v0.2.0-preview.1` 的发行包已按实际链接集合生成 NOTICE、随包完整许可文本、MPL-2.0 源码获取说明与 SBOM；历史 M1 报告中的限制不因新版本而消失。
+- **M2 已交付（本地 SQLite 预览）：** [#13](https://github.com/haoyuehx/maskriver/issues/13) 提供有界 Streaming、事务 Outbox 与资源预算；[#14](https://github.com/haoyuehx/maskriver/issues/14) 提供 `m2-recovery-v1` Checkpoint、只读 Status、显式 Resume 与幂等故障恢复。MySQL/Windows/WAL 恢复、跨库映射与通用 exactly-once 仍不支持。
 - 完整阶段划分见 [Roadmap](docs/roadmap.md)。
 
 ## 文档

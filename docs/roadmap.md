@@ -11,7 +11,7 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 | M1-B · 四个核心组件 | 已合并 | #5/#10 数据库、#6 检测、#7/#12 脱敏、#8 验证；有真实 SQLite/MySQL 适配器与 CN 策略 SQL 组件集成、fake Reader 验证器回归。**不等于端到端 CLI** |
 | M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **已关闭（CLOSED）** | SQLite 多表真实 Scan/Preview/签名审批/新进程 Apply/Validate 已测，AC 已由独立上下文签署，证据见 [Issue #9 验收报告](issue9-acceptance-report.md)；`--strict` 独立严格语义与 MySQL CLI 仍未完成 |
 | M1-D · 独立安全验收 [#11](https://github.com/haoyuehx/maskriver/issues/11) | **已裁定 ACCEPT WITH RESTRICTIONS** | 独立非作者审查已完成：P0=0、P1=0（原 P1 为许可/署名，已由 PR #58 修复并经第二独立上下文复核）；六条 P2 仍开放。**M1 未发布**，可宣称与不可宣称的范围须按裁定执行 |
-| M2 · 增强能力 | **部分完成** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 已关闭（SQLite 有界流式 Apply + Outbox）；[#14](https://github.com/haoyuehx/maskriver/issues/14) 本地 SQLite `m2-recovery-v1` 已实现并验收。MySQL/Windows/WAL 恢复、跨库映射与通用 exactly-once 仍不支持 |
+| M2 · 增强能力 | **本地 SQLite 预览已交付** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 已关闭（SQLite 有界流式 Apply + Outbox）；[#14](https://github.com/haoyuehx/maskriver/issues/14) 本地 SQLite `m2-recovery-v1` 已实现并验收，并随 `v0.2.0-preview.1` 发布。MySQL/Windows/WAL 恢复、跨库映射与通用 exactly-once 仍不支持 |
 
 ## 已交付核心能力（M1-B）
 
@@ -59,7 +59,7 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 ## M2：不阻塞首版的研发
 
 1. [#13](https://github.com/haoyuehx/maskriver/issues/13)：有界 Worker Pool/背压/取消以及 race、fuzz、重复跑的吞吐/延迟/RSS/分配基准；只发布真实测得的分布和环境。
-2. [#14](https://github.com/haoyuehx/maskriver/issues/14)：绑定源快照、版本、提交批次的 checkpoint 与跨存储 commit-gap 策略；故障注入证明幂等和可恢复性前不宣称 exactly-once。
+2. [#14](https://github.com/haoyuehx/maskriver/issues/14)：绑定源快照、版本、提交批次的 checkpoint 与跨存储 commit-gap 策略；故障注入证明幂等和可恢复性前不宣称 exactly-once。（已于 2026-10-21 交付本地 SQLite `m2-recovery-v1`。）
 3. 演示与竞赛材料：合成数据、可重放 CLI 录屏/命令、架构与安全边界、测试方法、来源许可清单。报名资格和赛事日程需要另行核实。
 
 ## 2026-10-21 增量：Issue #14 本地事务恢复验收
@@ -67,6 +67,10 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 - **#14 已交付并关闭（以最终 GitHub 状态为准）**：`m2-recovery-v1` manifest/progress、同事务 checkpoint、显式 `--resume`、只读 `status`、commit_unknown 重核、纯确定性策略 allowlist、KCV key 绑定与真实 CLI 故障注入。协议、AC 矩阵、故障矩阵和 10k/100k/1M 规模数据见 [Issue #14 验收报告](issue14-acceptance-report.md)。
 - **支持边界**：Linux amd64 本地 SQLite（rollback journal、`synchronous=FULL`）。MySQL/Windows/WAL 恢复、跨库持久映射的跨存储原子性、通用 exactly-once 与真实断电 durability 不在本轮范围；不支持路径 fail closed。
 - **不改变 #13**：无 recovery schema 时仍是原 outbox v1 事务；`m1a-v1`、`m2-stream-v1`、`m2-approval-binding-v1` 与发布版本保持不变。
+
+## 2026-10-21 发行：v0.2.0-preview.1
+
+`v0.2.0-preview.1` 是面向 Linux amd64、本地 SQLite 的公开 Pre-release，包含 M1 SQLite 工作流与 #13/#14 的 Streaming、Outbox、Checkpoint、Status、Resume 和幂等恢复。发行证据、资产 SHA-256、许可审计与发布后下载复核记录在 [v0.2.0-preview.1 发行记录](releases/v0.2.0-preview.1.md)；协议与限制见 [Issue #14 恢复协议](design/issue14-recovery-protocol.md) 和 [验收报告](issue14-acceptance-report.md)。`v0.1.0-dev` 的历史 Tag/Release/资产保持不变。
 
 ## 不做的承诺
 
