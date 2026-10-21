@@ -19,11 +19,11 @@ remain unverified are not upgraded.
 | Deterministic results | PASS | identical masked values across worker counts and repeated CLI samples |
 | Streaming path has no O(K) receipt memory | PASS | counters only; receipt reader pages; `TestStreamingApplyCommitsEveryBatch` |
 | Row/field size bound before allocation | PASS | `db.PageWithin` same-snapshot length preflight; 8 MiB rejected with ~13 KiB total alloc vs ~33.5 MiB for legacy `Page`; lookahead/huge-key allocation tests; runner checks static/late/source/target/replacement rows |
-| Column/table metadata bound | PASS | `ValidatePlan`, request validation |
-| Directory bound | PASS | chunked enumeration, streaming entry/name caps, legacy compatibility test |
-| Queue bound | PASS | `MaxQueue` 0-only |
+| Column/table metadata bound | PASS | `ResourceBudget.ValidatePlan` before I/O; `TestStreaming...` request-validation cases |
+| Directory bound | PASS | `internal/history` chunked enumeration; `TestBoundedHistoryEnumeration` and legacy large-directory test |
+| Queue bound | PASS | `validateStreamingStructure`; `TestStreamingProcessAndDiskAdmission/queue` |
 | Process/disk guarantee matches documented semantics | PASS | ADR-08 approves `MaxProcessBytes` as admission-only and `MaxDiskBytes` as admission/post-commit; not advertised as OS RSS cap or quota |
-| Sample/validate resource boundary | PASS | Sample 1 MiB/value + 16 MiB/column fail-closed; streaming validation through `PageWithin`; legacy Validate unchanged |
+| Sample/validate resource boundary | PASS | `TestSampleRejectsOversizedValue`; `TestStreamingValidationUsesRowBudget`; legacy `Validate` unchanged |
 
 ## Security
 
