@@ -284,7 +284,15 @@ func (e *Engine) StreamingResume(ctx context.Context, req StreamingRecoveryReque
 	}
 	last, err := verifyRecoveryProgress(ctx, recovery, manifest, req.ReceiptPageSize)
 	if err != nil {
+		if errors.Is(err, contracts.ErrConflict) {
+			report.State = db.RecoveryStateConflict
+		}
 		return summary, report, err
+	}
+	// business_complete is only legitimate after the final table boundary.
+	if !businessCompleteValid(last, len(req.Plan.Tables)) {
+		report.State = db.RecoveryStateConflict
+		return summary, report, contracts.ErrConflict
 	}
 	report.TableOrdinal = last.TableOrdinal
 	report.RowsProcessed = last.RowsProcessed
@@ -342,7 +350,7 @@ func (e *Engine) StreamingResume(ctx context.Context, req StreamingRecoveryReque
 		report.CheckpointSequence = run.progress.Sequence
 		report.BusinessComplete = run.progress.BusinessComplete
 		report.AuditComplete = false
-		report.ResumeEligible = report.State != db.RecoveryStateConflict
+		report.ResumeEligible = recoveryResumeEligible(report.State)
 		return summary, report, cause
 	}
 	if !run.progress.BusinessComplete {
@@ -477,8 +485,19 @@ func recoveryReportFrom(req StreamingRecoveryRequest, m db.RecoveryManifest) Rec
 		State: m.State, Validation: m.Validation,
 		BusinessComplete: m.BusinessComplete,
 		AuditComplete:    m.State == db.RecoveryStateComplete && m.Validation == db.ValidationPassed,
-		ResumeEligible:   m.State != db.RecoveryStateConflict && m.State != db.RecoveryStateAborted,
+		ResumeEligible:   recoveryResumeEligible(m.State),
 	}
+}
+
+// recoveryResumeEligible is the single eligibility rule shared by status and
+// the resume report. validation_failed is terminal for resume.
+func businessCompleteValid(last db.RecoveryProgress, tables int) bool {
+	return !last.BusinessComplete || last.TableOrdinal == tables
+}
+
+func recoveryResumeEligible(state db.RecoveryState) bool {
+	return state != db.RecoveryStateConflict && state != db.RecoveryStateAborted &&
+		state != db.RecoveryStateValidationFailed
 }
 
 // verifyRecoveryProgress re-derives the committed range from the authoritative

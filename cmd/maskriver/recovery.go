@@ -60,9 +60,9 @@ func runInitRecovery(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	if err := db.InstallOutboxSchema(ctx, opts); err != nil {
-		return fail(stderr, 1)
-	}
+	// Recovery is additive to an already-provisioned outbox v1 schema. Requiring
+	// it prevents `init-recovery --target source.db` from silently adding
+	// metadata tables to a source of truth.
 	if err := db.InstallRecoverySchema(ctx, opts); err != nil {
 		return fail(stderr, 1)
 	}
@@ -128,7 +128,9 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "status: unavailable=true reason=receipts")
 		return statusExitCode(err)
 	}
-	eligible := manifest.State != db.RecoveryStateConflict && manifest.State != db.RecoveryStateAborted
+	eligible := manifest.State != db.RecoveryStateConflict &&
+		manifest.State != db.RecoveryStateAborted &&
+		manifest.State != db.RecoveryStateValidationFailed
 	fmt.Fprintf(stdout, "status: run=%s protocol=%s state=%s validation=%s\n",
 		manifest.RunID, string(manifest.Protocol), string(manifest.State), string(manifest.Validation))
 	fmt.Fprintf(stdout, "status: checkpoint_sequence=%d committed_batches=%d rows_committed=%d\n",

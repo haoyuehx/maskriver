@@ -133,6 +133,7 @@ func (f *e2eFixture) recoveryValidateArgs(scopes ...string) []string {
 
 func (f *e2eFixture) initRecovery(t *testing.T) {
 	t.Helper()
+	f.initOutbox(t)
 	f.run(t, 0, "init-recovery", "--target", f.target)
 }
 

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -354,6 +356,7 @@ func TestRecoveryReaderIsReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := fileHash(t, path)
+	beforeSidecars := sidecars(t, path)
 	reader, err := OpenRecoveryReader(context.Background(), recoveryReaderOptions(t, o))
 	if err != nil {
 		t.Fatalf("open reader: %v", err)
@@ -377,6 +380,9 @@ func TestRecoveryReaderIsReadOnly(t *testing.T) {
 	if before != after {
 		t.Fatalf("read-only status changed the database file")
 	}
+	if afterSidecars := sidecars(t, path); afterSidecars != beforeSidecars {
+		t.Fatalf("read-only status created journal/sidecar files: %q -> %q", beforeSidecars, afterSidecars)
+	}
 }
 
 func recoveryReaderOptions(t *testing.T, o *Outbox) contracts.DatabaseOptions {
@@ -386,6 +392,16 @@ func recoveryReaderOptions(t *testing.T, o *Outbox) contracts.DatabaseOptions {
 		DatasetID: "fixture", Schemas: []string{"main"}, MaxOpenConns: 1,
 		ConnectTimeout: 5 * time.Second,
 	}
+}
+
+func sidecars(t *testing.T, path string) string {
+	t.Helper()
+	matches, err := filepath.Glob(path + "-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(matches)
+	return strings.Join(matches, ",")
 }
 
 func fileHash(t *testing.T, path string) string {

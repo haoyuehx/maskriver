@@ -908,3 +908,38 @@ func TestRecoveryResumeRejectsManifestAheadOfProgress(t *testing.T) {
 		t.Fatalf("manifest ahead of log: got %v report=%+v", err, report)
 	}
 }
+
+func TestRecoveryRejectsBusinessCompleteBeforeLastTable(t *testing.T) {
+	people := []string{"a@example.invalid", "b@example.invalid", "c@example.invalid"}
+	contacts := []string{"d@example.invalid", "e@example.invalid"}
+	engine, plan, _, target, cleanup := recoveryFixture(t,
+		[]string{"people.email", "contacts.email"},
+		map[string][]string{"people": people, "contacts": contacts})
+	applyWithRecovery(t, engine, plan)
+	cleanup()
+	// A tampered final boundary placed at table ordinal 1 (there are two tables)
+	// must not authorize skipping the second table.
+	modifyTarget(t, target, `UPDATE maskriver_recovery_progress SET table_ordinal = 1 WHERE run_id = '`+recoveryRunID+`' AND business_complete = 1`)
+	reopened, err := Open(context.Background(), engine.cfg, engine.key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	reopenedPlan, _ := reopened.Plan(context.Background())
+	if _, report, err := resume(t, reopened, reopenedPlan); !errors.Is(err, contracts.ErrConflict) ||
+		report.State != db.RecoveryStateConflict {
+		t.Fatalf("early business_complete: err=%v report=%+v", err, report)
+	}
+}
+
+func TestRecoveryBusinessCompleteRequiresFinalTableOrdinal(t *testing.T) {
+	if !businessCompleteValid(db.RecoveryProgress{BusinessComplete: true, TableOrdinal: 2}, 2) {
+		t.Fatal("final boundary rejected")
+	}
+	if businessCompleteValid(db.RecoveryProgress{BusinessComplete: true, TableOrdinal: 1}, 2) {
+		t.Fatal("early business_complete accepted")
+	}
+	if !businessCompleteValid(db.RecoveryProgress{BusinessComplete: false, TableOrdinal: 1}, 2) {
+		t.Fatal("incomplete progress rejected")
+	}
+}

@@ -145,6 +145,9 @@ func (e *Engine) StreamingApply(ctx context.Context, req contracts.StreamingAppl
 	if available, aerr := outbox.RecoveryAvailable(ctx); aerr != nil {
 		return summary, aerr
 	} else if available {
+		if err := validateRecoverablePlan(req.Plan); err != nil {
+			return summary, err
+		}
 		recovery, rerr := outbox.OpenRecovery(ctx)
 		if rerr != nil {
 			return summary, rerr
