@@ -1,0 +1,11 @@
+{
+  "go": "go1.26.3",
+  "os": "linux",
+  "arch": "amd64",
+  "driver": "modernc.org/sqlite v1.60.1",
+  "journal_mode": "delete",
+  "synchronous": "FULL",
+  "implementation_head": "09612f8",
+  "batch_size": 256,
+  "workers": 4
+}

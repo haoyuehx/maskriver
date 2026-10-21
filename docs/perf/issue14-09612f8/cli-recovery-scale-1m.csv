@@ -1,0 +1,3 @@
+rows,scenario,interrupt_after_batches,baseline_apply_ms,interrupted_apply_ms,resume_ms,resume_overhead_ratio,validate_ms,total_ms,interrupted_peak_rss_kb,resume_peak_rss_kb,rows_committed,batches_committed,checkpoint_sequence,progress_rows,receipt_rows,target_bytes,digest_matches_baseline,strict_validate
+1000000,baseline,,109680,,,,8904,118584,,,1000000,3907,3908,3908,3907,,,true
+1000000,interrupted+resume,1953,109680,59331,67145,0.612,8320,134796,35304,38796,1000000,3907,3908,3908,3907,64221184,true,true

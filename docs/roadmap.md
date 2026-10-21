@@ -11,7 +11,7 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 | M1-B · 四个核心组件 | 已合并 | #5/#10 数据库、#6 检测、#7/#12 脱敏、#8 验证；有真实 SQLite/MySQL 适配器与 CN 策略 SQL 组件集成、fake Reader 验证器回归。**不等于端到端 CLI** |
 | M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **已关闭（CLOSED）** | SQLite 多表真实 Scan/Preview/签名审批/新进程 Apply/Validate 已测，AC 已由独立上下文签署，证据见 [Issue #9 验收报告](issue9-acceptance-report.md)；`--strict` 独立严格语义与 MySQL CLI 仍未完成 |
 | M1-D · 独立安全验收 [#11](https://github.com/haoyuehx/maskriver/issues/11) | **已裁定 ACCEPT WITH RESTRICTIONS** | 独立非作者审查已完成：P0=0、P1=0（原 P1 为许可/署名，已由 PR #58 修复并经第二独立上下文复核）；六条 P2 仍开放。**M1 未发布**，可宣称与不可宣称的范围须按裁定执行 |
-| M2 · 增强能力 | **部分启动** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 有界 Worker 组件已合并，完整基准与端到端吞吐未验收；[#14](https://github.com/haoyuehx/maskriver/issues/14) checkpoint、幂等恢复与故障注入未启动。不得宣称已具备恢复或高吞吐保证 |
+| M2 · 增强能力 | **部分完成** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 已关闭（SQLite 有界流式 Apply + Outbox）；[#14](https://github.com/haoyuehx/maskriver/issues/14) 本地 SQLite `m2-recovery-v1` 已实现并验收。MySQL/Windows/WAL 恢复、跨库映射与通用 exactly-once 仍不支持 |
 
 ## 已交付核心能力（M1-B）
 
@@ -62,9 +62,15 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 2. [#14](https://github.com/haoyuehx/maskriver/issues/14)：绑定源快照、版本、提交批次的 checkpoint 与跨存储 commit-gap 策略；故障注入证明幂等和可恢复性前不宣称 exactly-once。
 3. 演示与竞赛材料：合成数据、可重放 CLI 录屏/命令、架构与安全边界、测试方法、来源许可清单。报名资格和赛事日程需要另行核实。
 
+## 2026-10-21 增量：Issue #14 本地事务恢复验收
+
+- **#14 已交付并关闭（以最终 GitHub 状态为准）**：`m2-recovery-v1` manifest/progress、同事务 checkpoint、显式 `--resume`、只读 `status`、commit_unknown 重核、纯确定性策略 allowlist、KCV key 绑定与真实 CLI 故障注入。协议、AC 矩阵、故障矩阵和 10k/100k/1M 规模数据见 [Issue #14 验收报告](issue14-acceptance-report.md)。
+- **支持边界**：Linux amd64 本地 SQLite（rollback journal、`synchronous=FULL`）。MySQL/Windows/WAL 恢复、跨库持久映射的跨存储原子性、通用 exactly-once 与真实断电 durability 不在本轮范围；不支持路径 fail closed。
+- **不改变 #13**：无 recovery schema 时仍是原 outbox v1 事务；`m1a-v1`、`m2-stream-v1`、`m2-approval-binding-v1` 与发布版本保持不变。
+
 ## 不做的承诺
 
-当前只有 SQLite 多表合成数据库 CLI 的真实端到端路径，没有完整通用数据库 CLI、MySQL CLI、生产级 PII 识别准确率、全局匿名化、稳定公共 SDK、断点恢复、exactly-once 或高性能并发证明。项目只处理获得授权的隔离/合成数据；保持 `m1a-v1` 契约，任何变化必须经 Main 审核并记录证据。发布状态必须以功能与实际测试为依据，而不是 Issue 标记或 CI 配置是否存在。
+当前只有 SQLite 多表合成数据库 CLI 的真实端到端路径，没有完整通用数据库 CLI、MySQL CLI、生产级 PII 识别准确率、全局匿名化、稳定公共 SDK、MySQL/Windows/WAL 断点恢复、通用 exactly-once 或高性能并发证明；本地 SQLite 恢复的范围见 2026-10-21 增量。项目只处理获得授权的隔离/合成数据；保持 `m1a-v1` 契约，任何变化必须经 Main 审核并记录证据。发布状态必须以功能与实际测试为依据，而不是 Issue 标记或 CI 配置是否存在。
 
 ## 2026-10-18 收尾增量
 
@@ -83,4 +89,4 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 
 M1 限定预览版已作为 **GitHub Pre-release** 发布：tag `v0.1.0-dev` → 提交 `f4aeff9103ad064f57f63846cf47de587bdabeea`，工件 `maskriver-m1-linux-amd64-f4aeff9.tar.gz`，存档 SHA-256 `cf06a7e47cb7b1c558651b36f5c2de958b6c90e76f7906f4d51fce679fecc76c`，已通过上传后重新下载核对。发行证据见 [M1 Limited Preview 发行证据](releases/m1-limited-preview-v0.1.0-dev.md)。
 
-该版本**不是**稳定版或生产就绪版本：MySQL CLI、checkpoint/恢复、exactly-once 与生产级检测准确率仍未验证。M2（#13/#14）保持未启动。
+该版本**不是**稳定版或生产就绪版本：MySQL CLI、MySQL/Windows/WAL 恢复、通用 exactly-once、真实断电 durability 与生产级检测准确率仍未验证；本地 SQLite 恢复见 2026-10-21 增量。
