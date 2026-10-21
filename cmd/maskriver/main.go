@@ -249,7 +249,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
 	defer cancel()
-	engine, err := runner.Open(ctx, cfg, key)
+	var engine *runner.Engine
+	if command == "mask" && apply {
+		engine, err = runner.OpenForApply(ctx, cfg, key)
+	} else {
+		engine, err = runner.Open(ctx, cfg, key)
+	}
 	if err != nil {
 		return fail(stderr, 1)
 	}
@@ -481,7 +486,7 @@ func (f *scopeFlag) Set(raw string) error {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, "MaskRiver — bounded SQLite data masking (M1 in development)")
+	fmt.Fprintln(w, "MaskRiver — SQLite masking, streaming and local recovery preview")
 	fmt.Fprintln(w, "Usage: maskriver <scan|mask|validate|approve|revoke|init-outbox|init-recovery|status|version> [flags]")
 	fmt.Fprintln(w, "Two independent pre-existing SQLite files are required; mask defaults to dry run.")
 	fmt.Fprintln(w, "mask --apply --approved also requires a stored reviewer decision bound to the plan.")

@@ -31,6 +31,7 @@ dependencies keep their own licences and their verbatim texts are kept under
 | `github.com/remyoudompheng/bigfft` | BSD-3-Clause | `licenses/bigfft-LICENSE` |
 | `golang.org/x/sys` | BSD-3-Clause | `licenses/x-sys-LICENSE` |
 | Go toolchain / standard library (go1.26.3) | BSD-3-Clause | `licenses/go-toolchain-LICENSE` (copied from `GOROOT/LICENSE` at build time) |
+| Go toolchain / standard library (go1.26.3) | Additional IP Rights Grant (patents) | `licenses/go-toolchain-PATENTS` (copied from `GOROOT/PATENTS` at build time) |
 
 Every module requirement above has its verbatim licence text under `licenses/`,
 including modules that are required but not linked into a default linux/amd64
@@ -67,8 +68,9 @@ and ships `NOTICE.md`, the complete `licenses/` texts, `SBOM.json`, and
 `MPL-2.0-SOURCE.md` for the MPL-2.0 covered `go-sql-driver/mysql` files.
 `scripts/verify-release.sh` checks that every NOTICE reference resolves, every
 shipped licence text is referenced, and the manifest/checksums match the package.
-Release records are added under [`releases/`](releases/) when an artifact is
-published, including the commit, archive SHA-256 and verification evidence.
+Candidate acceptance records are added under [`releases/`](releases/); the
+published tag, final archive SHA-256 and post-download verification are recorded
+in the GitHub Release acceptance comment.
 
 Binary distribution must include the applicable notices and, for MPL-2.0
 covered files, a way to obtain the corresponding source form. See

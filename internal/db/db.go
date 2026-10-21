@@ -39,6 +39,41 @@ var _ contracts.Writer = (*writer)(nil)
 // takes the sql.Open path that every production caller uses.
 type connectorFactory func(driverName, dsn string) (driver.Connector, error)
 
+// ErrHotJournal reports a rollback journal that is still present. A read-only
+// SQLite connection cannot safely recover it; an explicit apply/resume must
+// open the target read-write once to let SQLite roll it back.
+var ErrHotJournal = errors.New("maskriver: hot rollback journal present")
+
+// RecoverSQLiteJournal opens the target read-write once so SQLite can complete
+// rollback-journal recovery. It is called only on explicit apply/resume paths;
+// read-only preview/status must not write.
+func RecoverSQLiteJournal(ctx context.Context, opts contracts.DatabaseOptions) error {
+	if ctx == nil || opts.Dialect != contracts.SQLite {
+		return contracts.ErrUnsupported
+	}
+	path := opts.DSN.Payload()
+	if journalHot(path) {
+		a, err := open(ctx, opts, false, nil)
+		if err != nil {
+			return err
+		}
+		defer a.Close()
+		if _, err := a.db.ExecContext(ctx, "PRAGMA main.journal_mode"); err != nil {
+			return dbError(err)
+		}
+	}
+	return nil
+}
+
+// journalHot reports whether a non-empty rollback journal exists next to path.
+func journalHot(path string) bool {
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path + "-journal")
+	return err == nil && info.Mode().IsRegular() && info.Size() > 0
+}
+
 func OpenReader(ctx context.Context, opts contracts.DatabaseOptions) (contracts.Reader, error) {
 	return openReader(ctx, opts, nil)
 }
@@ -193,6 +228,12 @@ func sqliteDSN(input string, readOnly bool) (string, error) {
 		q.Set("mode", "rw")
 	}
 	q.Set("_pragma", "foreign_keys(1)")
+	// Rollback-journal databases can briefly hold a reserved/exclusive lock while
+	// a writer commits. Without a busy timeout a concurrent read-only status query
+	// would make that commit fail as SQLITE_BUSY (reported as CommitUnknown). The
+	// bounded wait keeps the single-writer model but does not turn a transient
+	// lock into an ambiguous commit.
+	q.Add("_pragma", "busy_timeout(5000)")
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

@@ -366,8 +366,10 @@ maskriver status --target /path/target.db --run-id <32-hex>
 maskriver mask --streaming --apply --approved --resume --run-id <32-hex> ... --key-file ...
 ```
 
-No flag or environment variable enables writes without `--apply`; streaming also
-requires a valid Ed25519 approval bound to the plan. See `RELEASE-NOTES.md` and
+No flag or environment variable enables **business data** writes without
+`--apply`; streaming also requires a valid Ed25519 approval bound to the plan.
+`init-outbox`, `init-recovery` and `approve`/`revoke` are explicit schema or
+history writes and do not need `--apply`. See `RELEASE-NOTES.md` and
 `BUILD-INFO.md` for the exact supported scope and non-claims.
 README
 

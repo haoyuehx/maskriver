@@ -35,6 +35,20 @@ type Engine struct {
 	streamingApprovals StreamingApprovalQuery
 }
 
+// OpenForApply opens the same readers as Open after letting SQLite recover a
+// hot rollback journal on the target. It is used only on explicit apply/resume
+// paths; preview, scan and status remain read-only.
+func OpenForApply(ctx context.Context, cfg config.Runtime, key contracts.Value) (*Engine, error) {
+	targetOpts, err := cfg.DatabaseOptions(false)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.RecoverSQLiteJournal(ctx, targetOpts); err != nil {
+		return nil, err
+	}
+	return Open(ctx, cfg, key)
+}
+
 // Open requires two independent, existing SQLite files and opens only Readers.
 // No Writer, audit file, checkpoint or mapping store is created.
 func Open(ctx context.Context, cfg config.Runtime, key contracts.Value) (*Engine, error) {

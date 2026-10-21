@@ -109,7 +109,11 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 		Schemas: []string{"main"}, MaxOpenConns: 1, ConnectTimeout: 5 * time.Second,
 	})
 	if err != nil {
-		fmt.Fprintln(stderr, "status: unavailable=true reason=recovery_schema")
+		reason := "recovery_schema"
+		if errors.Is(err, db.ErrHotJournal) {
+			reason = "hot_journal"
+		}
+		fmt.Fprintf(stderr, "status: unavailable=true reason=%s\n", reason)
 		return statusExitCode(err)
 	}
 	defer reader.Close()
@@ -158,6 +162,8 @@ func auditLabel(m db.RecoveryManifest) string {
 
 func statusExitCode(err error) int {
 	switch {
+	case errors.Is(err, db.ErrHotJournal):
+		return 3
 	case errors.Is(err, contracts.ErrUnsupported):
 		return 6
 	case errors.Is(err, contracts.ErrNotFound), errors.Is(err, contracts.ErrConflict),
