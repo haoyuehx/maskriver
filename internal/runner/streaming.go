@@ -76,8 +76,10 @@ func (e *Engine) StreamingApply(ctx context.Context, req contracts.StreamingAppl
 		return summary, fmt.Errorf("preflight: %w", err)
 	}
 	// 5. Full read-only dry run: every planned row and column is compared before
-	// any transaction exists.
-	if err := e.dryRun(ctx, req.Plan); err != nil {
+	// any transaction exists. The streaming dry run uses the same row-byte
+	// budget as the apply loop, so it can not materialise an oversized field and
+	// then claim the run was bounded.
+	if err := e.dryRunWithin(ctx, req.Plan, req.Budget.MaxRowBytes); err != nil {
 		return summary, fmt.Errorf("dryRun: %w", err)
 	}
 	// 6. Open the explicit outbox only after all pre-write gates pass. Opening
@@ -331,11 +333,11 @@ func (r *streamingRun) applyTable(ctx context.Context, table contracts.TablePlan
 			Table: table.Table, Columns: cols, KeyColumns: table.PrimaryKey,
 			After: after, Limit: r.batch,
 		}
-		left, err := r.engine.source.Page(ctx, request)
+		left, err := pageWithin(ctx, r.engine.source, request, r.budget.MaxRowBytes)
 		if err != nil {
 			return err
 		}
-		right, err := r.engine.target.Page(ctx, request)
+		right, err := pageWithin(ctx, r.engine.target, request, r.budget.MaxRowBytes)
 		if err != nil {
 			return err
 		}
@@ -348,11 +350,11 @@ func (r *streamingRun) applyTable(ctx context.Context, table contracts.TablePlan
 			}
 			return contracts.ErrIncomplete
 		}
-		// Enforce the row and working-set budgets on the page that was just
-		// materialised, before masking, SQL or receipts exist. This is a
-		// post-materialisation check: the reader already allocated the page, but
-		// the retained working set stays a fixed function of BatchSize and
-		// MaxRowBytes rather than of the table row count.
+		// The byte-aware reader already rejected an oversized row before
+		// materialising it; this second check validates the real decoded payload
+		// (the SQL preflight uses an upper bound for numeric columns) and then
+		// applies the process and disk admission rules before masking, SQL or
+		// receipts exist.
 		pageBytes, err := pagePayloadBytes(left.Rows, r.budget.MaxRowBytes)
 		if err != nil {
 			return err
