@@ -20,7 +20,7 @@ medians are over 3 samples per cell. No p95 is claimed from 3 samples.
 
 - Apply peak RSS is flat in row count: about 24 MiB at 10k, 38 MiB at 100k and 39 MiB at 1M, matching the constant-size page/worker/outbox working set.
 - Batch 256 is about 2.5-2.8x faster than batch 64 at 100k and 1M; workers 1 vs 4 is within run-to-run noise, as in WP3-F.
-- Compared with WP3-F (`docs/perf/issue13-wp3f-41e96b1/`, same machine class, different day), apply wall time is 68-73% higher at 10k, 6-17% higher at 100k and 10-28% higher at 1M (throughput 40-42% lower at 10k, 6-14% lower at 100k, 9-22% lower at 1M). The delta is consistent with the extra same-snapshot length preflight, the replacement-row check and per-page transaction cost; no throughput target is claimed.
+- Compared with WP3-F (`docs/perf/issue13-wp3f-41e96b1/`, same machine class, different day), apply wall time is 63-73% higher at 10k, 6-17% higher at 100k and 10-28% higher at 1M (throughput 38-42% lower at 10k, 6-14% lower at 100k, 9-22% lower at 1M). The delta is consistent with the extra same-snapshot length preflight, the replacement-row check and per-page transaction cost; no throughput target is claimed.
 - Every sample reported `rows_committed` equal to the dataset size, complete state, consistent audit and a passing strict Validate (enforced by the harness).
 
 ## Not verified
