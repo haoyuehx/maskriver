@@ -1,0 +1,23 @@
+{
+  "code_head": "e02fa8e595a5ff4b008a173ed8e146e75794d4b6",
+  "base_before_wp3g": "3f97ca225615fa7dfe0294288e30714d29a1c870",
+  "os": "Linux 7.0.0-38-generic x86_64",
+  "go": "go1.26.3",
+  "sqlite_driver": "modernc.org/sqlite v1.60.1 (SQLite 3.53.4)",
+  "cpu": "AMD Ryzen 9 7940H, 16 logical CPUs",
+  "storage": "local filesystem, isolated temporary synthetic databases",
+  "dataset": "synthetic people table: integer primary key + distinct synthetic email; no real data",
+  "command": "MASKRIVER_WP3F_CLI_SCALE=1 MASKRIVER_WP3F_SCALE_DIR=<dir> MASKRIVER_WP3F_CLI_ROWS=10000,100000,1000000 MASKRIVER_WP3F_CLI_REPEATS=3 go test ./cmd/maskriver -run TestCLIStreamingScaleEvidence -count=1 -timeout 60m",
+  "method": {
+    "processes": "each sample is a real child CLI process for scan, preview, approve, mask --streaming --apply, validate",
+    "isolation": "fresh source and target copy per sample, fresh RunID, real Ed25519 streaming approval, pre-installed outbox",
+    "timing": "fixture generation and copying are outside timed phases; medians over 3 samples per configuration",
+    "memory": "child VmHWM sampled from /proc/<pid>/status every 50 ms during apply; heap not available for the child",
+    "repeats": "10k x3, 100k x3, 1M x3 for each of (workers,batch) = (1,64), (4,64), (4,256)"
+  },
+  "notes": [
+    "MAXROWBYTES is enforced before materialisation by internal/db PageWithin; this run exercises that path.",
+    "peak_rss is a sampled high-water mark, not a p95 or a guarantee.",
+    "no MySQL or Windows streaming evidence is claimed."
+  ]
+}

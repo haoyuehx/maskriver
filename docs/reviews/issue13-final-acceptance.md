@@ -1,25 +1,29 @@
-# Issue #13 — final acceptance matrix (WP3-F)
+# Issue #13 — final acceptance matrix (2026-10-21)
 
-**Technical head:** `41e96b18130d9becfabb15d2bca502054331c1cd`
 **Approved scope:** original Issue #13 acceptance criteria plus the 2026-10-20 S2 scope revision
-(legacy O(K) retained; streaming path bounded). Windows/MySQL streaming, anchor/seal and #14
+(legacy O(K) retained; the new streaming path bounded). Windows/MySQL streaming, anchor/seal and #14
 recovery are outside the approved scope.
+**Accepted code head:** `e02fa8e595a5ff4b008a173ed8e146e75794d4b6` (PRs #76, #77 on top of #75).
+**Resource decision:** `docs/design/issue13-adr08-final-proposal.md` —
+`ADR-08 APPROVED — DELEGATED TECHNICAL DIRECTION (2026-10-21)`, not a GitHub Owner signature.
 
-Every PASS below points at code and/or executed evidence. A design document alone is not evidence.
+Every PASS cites code and/or executed evidence. A design document alone is not evidence. Items that
+remain unverified are not upgraded.
 
 ## Functional
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| Bounded concurrency (1–16 workers, fixed queue, deterministic order) | PASS | worker pool reuse; `TestStreamingApplyWorkersAgree`; 1/2/4/8/16 identical target |
+| Bounded concurrency (1–16 workers, fixed queue, deterministic order) | PASS | worker pool reuse; `TestStreamingApplyWorkersAgree`; 1/2/4/8/16 identical target; queue non-zero refused |
 | Cancellable | PASS | context through runner/outbox/history/worker; cancel and close tests |
 | Deterministic results | PASS | identical masked values across worker counts and repeated CLI samples |
-| Streaming path has no O(K) receipt memory | PASS | counters only; receipt reader pages; `TestStreamingApplyCommitsEveryBatch` reads pages |
-| Row/field size bound | **PARTIAL** | post-materialisation `pagePayloadBytes` fails closed before writes; `TestStreamingRowBytesPostMaterializationEvidence` shows 8 MiB already allocated before the check |
-| Column/table metadata bound | PASS | `ValidatePlan`, request validation |
-| Directory bound | PASS | chunked enumeration, streaming entry/name caps, legacy compatibility test |
-| Queue bound | PASS | `MaxQueue` 0-only enforcement |
-| Process/disk guarantee | **PARTIAL** | admission + post-commit checks; not OS RSS quota or filesystem quota |
+| Streaming path has no O(K) receipt memory | PASS | counters only; receipt reader pages; `TestStreamingApplyCommitsEveryBatch` |
+| Row/field size bound before allocation | PASS | `db.PageWithin` same-snapshot length preflight; 8 MiB rejected with ~13 KiB total alloc vs ~33.5 MiB for legacy `Page`; lookahead/huge-key allocation tests; runner checks static/late/source/target/replacement rows |
+| Column/table metadata bound | PASS | `ResourceBudget.ValidatePlan` before I/O; `TestStreaming...` request-validation cases |
+| Directory bound | PASS | `internal/history` chunked enumeration; `TestBoundedHistoryEnumeration` and legacy large-directory test |
+| Queue bound | PASS | `validateStreamingStructure`; `TestStreamingProcessAndDiskAdmission/queue` |
+| Process/disk guarantee matches documented semantics | PASS | ADR-08 approves `MaxProcessBytes` as admission-only and `MaxDiskBytes` as admission/post-commit; not advertised as OS RSS cap or quota |
+| Sample/validate resource boundary | PASS | `TestSampleRejectsOversizedValue`; `TestStreamingValidationUsesRowBudget`; legacy `Validate` unchanged |
 
 ## Security
 
@@ -28,56 +32,57 @@ Every PASS below points at code and/or executed evidence. A design document alon
 | Real Ed25519 M2 approval | PASS | separate signed record; trust/expiry/revocation; CLI E2E |
 | Canonical plan binding | PASS | content digest covers Scope/NormalizationVersion/type/PK/order; drift tests |
 | Unauthorized write refused | PASS | no-apply, no-approval, legacy approval, revoked, missing/wrong schema E2E |
-| No raw values or keys leaked | PASS | CLI E2E secret scan; sanitized summaries/errors |
+| No raw values or keys leaked | PASS | CLI E2E secret scan; sanitized summaries/errors; independent Security reviews |
 | CommitUnknown not retried | PASS | WP2/runner tests; CLI prints `retry=never` |
 | Transaction correctness in supported env | PASS | same-transaction receipt tests; independent Validate |
 | Unsafe target directory refused | PASS | `TestE2EStreamingRefusesWorldWritableTargetDirectory` |
+| Oversized row cannot bypass budget | PASS | source/target/static/late/lookahead/huge-key/replacement tests; no fallback to `Page` |
 
 ## Testing
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| Race | PASS | `go test -race ./...` (history/runner/cmd in WP3-F run) |
-| Fuzz | PASS (bounded run) | `FuzzStreamingRequestValidate`, 10 s, 3.3M execs |
-| Leak (connections/goroutines) | PARTIAL | outbox connection-close tests and goroutine counts; no long-running leak detector |
-| Cancellation | PASS | cancel tests and cancellation propagation |
-| Fault injection | PASS / PARTIAL | UPDATE/receipt failure, full disk, commit injection, path/WAL/schema; mid-commit kill and receipt-time ENOSPC UNVERIFIED |
+| Race | PASS | `go test -race ./internal/db ./internal/runner ./internal/history ./cmd/maskriver` |
+| Fuzz | PASS (bounded run) | `FuzzStreamingRequestValidate`, ~1.8M execs / 5 s |
+| Leak (connections/goroutines) | PASS (bounded scope) | outbox close/rollback tests, pool stats, goroutine checks; no long-running leak detector |
+| Cancellation | PASS | cancel tests and propagation |
+| Fault injection | PASS / UNVERIFIED | UPDATE/receipt failure, full disk, commit pre/post exit, path/WAL/schema; receipt-time ENOSPC/fsync and exact mid-commit kill UNVERIFIED |
 | Worker result consistency | PASS | runner equivalence test |
-| Legacy M1 regression | PASS | full existing suite + CLI E2E; defaults unchanged |
+| Legacy M1 regression | PASS | full suite + CLI E2E; defaults unchanged |
+| Large-field pre-materialisation rejection | PASS | DB and runner opt-in evidence; independent QA reproduced |
 
 ## Performance
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| Runner-level 10k/100k/1M | PASS | WP3 evidence; heap flat 1–4 MiB across 2–3,907 batches |
-| Real CLI subprocess 10k/100k/1M | PASS | `docs/perf/issue13-wp3f-41e96b1/` (33 samples) |
-| Repetition | PASS | 10k ×5; 100k ×3; 1M ×3 per configuration |
-| Raw results and environment | PASS | CSV + environment.json |
-| RSS/Heap observation | PASS (with limits) | CLI VmHWM ~24/38/39 MiB; child heap not available; runner heap recorded separately |
-| Complete measurement method | PASS | method and limitations documented |
-| Unmeasurable items listed | PASS | RSS sampling limits, child heap, MySQL/Windows, durability |
+| Runner/CLI real SQLite | PASS | WP3 + WP3-G evidence |
+| 10k / 100k / 1M | PASS | `docs/perf/issue13-wp3g-e02fa8e/` (27 samples; 3 per cell) |
+| Repetition and raw data | PASS | CSV + environment.json; medians generated from raw rows |
+| RSS/Heap observation | PASS (with limits) | CLI VmHWM ~24/38/39.5 MiB; child heap unavailable; DB test measures process allocation |
+| Method and limitations | PASS | environment.json + summary.md; no p95 claim from 3 samples |
+| Performance delta disclosed | PASS | apply wall time +62.5–72.9% at 10k, +6.2–16.8% at 100k, +9.8–27.9% at 1M versus WP3-F (throughput −38.5–−42.2%, −5.8–−14.4%, −8.9–−21.8%); attributed to the length preflight, replacement check and per-page transaction cost |
 
-## Documentation
+## Configuration and documentation
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| Feature Matrix truthful | PASS | updated to WP3-F status and limits |
+| ADR-08 values and semantics approved | PASS | delegated technical direction, explicit guarantee levels |
+| Feature Matrix truthful | PASS | updated to WP3-G status and limits |
 | Legacy M1 O(K) retained | PASS | S2 revision; docs and code unchanged |
-| Streaming limits explicit | PASS | audit + ADR proposal + perf summary |
-| Windows/MySQL not claimed | PASS | documented unsupported/unverified |
+| Streaming limits explicit | PASS | ADR-08 + enforcement audit |
+| MySQL/Windows not claimed | PASS | documented unsupported/unverified |
 | Anchor/checkpoint/exactly-once out of scope | PASS | not implemented, not required |
 
-## Decision inputs
+## G5 / G7 / G9 disposition
 
-- **ADR-08:** `PENDING APPROVAL`; MaxRowBytes is post-materialisation, MaxProcessBytes is admission-only.
-- **Blocking technical gap:** a byte-aware page read in `internal/db` is required before MaxRowBytes can
-  be called a pre-allocation guarantee. `internal/db` was read-only in this round; the proposed DB
-  sub-task is not authorized or implemented.
-- **Unverified, non-blocking for the approved scope:** mid-commit kill, receipt-time ENOSPC/fsync,
-  file-handle TOCTOU, MySQL/Windows streaming.
+| Risk | Current supported range | Evidence | Unverified | Required by approved #13 scope? | Accepted |
+|---|---|---|---|---|---|
+| G5 path identity / TOCTOU | trusted local isolated directory; world-writable target refused; path/inode/symlink checks in outbox open | `TestE2EStreamingRefusesWorldWritableTargetDirectory`; WP2 identity tests | file-handle TOCTOU against an attacker who can replace the directory | No (threat boundary excludes active local attacker) | Yes, bounded risk accepted in ADR-08 |
+| G7 receipt-time ENOSPC/fsync | UPDATE-stage SQLITE_FULL and receipt INSERT failure roll back atomically; CommitUnknown never retried | WP2/runner transaction tests | exact ENOSPC/fsync during receipt commit | No (atomicity already tested; no durability claim) | Yes, UNVERIFIED disclosed |
+| G9 mid-commit kill | exit before/after commit yields no-commit / CommitUnknown, never retried | outbox commit tests | exact kill inside commit | No (#14 recovery is out of scope) | Yes, UNVERIFIED disclosed |
 
-## Verdict
+## Final verdict
 
-**ISSUE #13 BLOCKED** — the technical work, CLI scale evidence and reviews can complete, but the
-approved row-size guarantee cannot be enforced before allocation with the current DB read API, and
-ADR-08 is not approved. This matrix does not justify closure.
+All required functional, security, testing, performance and documentation criteria are satisfied for
+the approved scope, with the stated guarantee levels and unverified items disclosed. No open P0/P1.
+**READY FOR CLOSURE.**
