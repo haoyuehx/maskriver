@@ -68,6 +68,21 @@ func pagePayloadBytes(rows []contracts.Row, maxRowBytes int64) (int64, error) {
 	return total, nil
 }
 
+// changePayloadBytes is the projected write row: primary key plus every
+// replacement value. A strategy may produce a longer value than the original,
+// so MaxRowBytes must cover the replacement too; otherwise a run could commit a
+// row that its own validation then refuses to read.
+func changePayloadBytes(change contracts.RowChange) int64 {
+	var total int64
+	for _, value := range change.Key {
+		total += int64(len(value.Payload()))
+	}
+	for _, value := range change.Replacement {
+		total += int64(len(value.Payload()))
+	}
+	return total
+}
+
 // checkProcessAdmission bounds the worst-case page working set. maxProcessBytes
 // is enforced as an admission rule; it is not a promise about OS RSS.
 func checkProcessAdmission(pageBytes int64, maxProcessBytes int64) error {

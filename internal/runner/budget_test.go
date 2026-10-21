@@ -101,8 +101,9 @@ func TestStreamingRowBytesExactAndOver(t *testing.T) {
 	scopes := []config.Scope{{Table: "people", Column: "email"}}
 	engine, plan, target := customStreamingFixture(t, statements, scopes)
 	installOutboxFor(t, engine)
-	// Projected row bytes = len("1") + len("a@example.invalid").
-	exact := int64(len("1") + len("a@example.invalid"))
+	// The projected row includes the masked replacement, whose fixed shape is
+	// 32 hex characters + "@maskriver.local".
+	exact := int64(len("1") + 32 + len("@maskriver.local"))
 
 	over := testBudget
 	over.MaxRowBytes = exact - 1
@@ -132,9 +133,9 @@ func TestStreamingRowBytesMultiColumnTotal(t *testing.T) {
 	scopes := []config.Scope{{Table: "people", Column: "email"}, {Table: "people", Column: "backup"}}
 	engine, plan, target := customStreamingFixture(t, statements, scopes)
 	installOutboxFor(t, engine)
-	each := int64(len("1") + len("a@example.invalid"))
+	each := int64(len("1") + 32 + len("@maskriver.local"))
 	budget := testBudget
-	// Each column fits, the projected row total does not.
+	// Each masked column fits, the projected row total does not.
 	budget.MaxRowBytes = each + 1
 	if _, err := runStreamingBudget(t, engine, plan, budget); !errors.Is(err, contracts.ErrUnsafe) {
 		t.Fatalf("multi-column total err=%v", err)
@@ -269,8 +270,8 @@ func TestStreamingRowBytesWorkersAndNullAndUTF8(t *testing.T) {
 	installOutboxFor(t, engine)
 	engine.cfg.Workers = 4
 
-	// NULL contributes nothing.
-	rowBytes := int64(len("2") + len("b@example.invalid"))
+	// NULL contributes nothing; the masked email is 32 hex + the domain.
+	rowBytes := int64(len("2") + 32 + len("@maskriver.local"))
 	over := testBudget
 	over.MaxWorkers = 4
 	over.MaxRowBytes = rowBytes - 1
@@ -488,4 +489,35 @@ func (p *plainCapabilityReader) Quiescent(ctx context.Context) error {
 
 func (p *plainCapabilityReader) HasTriggers(ctx context.Context, ref contracts.TableRef) (bool, error) {
 	return p.Reader.(capabilityReader).HasTriggers(ctx, ref)
+}
+
+func TestStreamingValidationUsesRowBudget(t *testing.T) {
+	huge := strings.Repeat("c", 2<<20)
+	statements := []string{
+		`CREATE TABLE people (id INTEGER PRIMARY KEY, email TEXT)`,
+		`INSERT INTO people VALUES (1, 'a@example.invalid')`,
+	}
+	scopes := []config.Scope{{Table: "people", Column: "email"}}
+	engine, plan, target := customStreamingFixture(t, statements, scopes)
+	raw, err := sql.Open("sqlite", "file:"+target+"?mode=rw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`UPDATE people SET email = ? WHERE id = 1`, huge); err != nil {
+		t.Fatal(err)
+	}
+	_ = raw.Close()
+	report, err := engine.validateWithin(context.Background(), contracts.ValidateRequest{Plan: plan, Strict: true}, 1<<20)
+	if err != nil {
+		t.Fatalf("validateWithin: %v", err)
+	}
+	if report.Passed(true) {
+		t.Fatalf("bounded validation passed an oversized row: %+v", report)
+	}
+	// The same data through the legacy Validate still reads the row (and fails
+	// on the mismatch), proving the streaming path did not change legacy
+	// semantics.
+	if _, err := engine.Validate(context.Background(), contracts.ValidateRequest{Plan: plan, Strict: true}); err != nil {
+		t.Fatalf("legacy Validate: %v", err)
+	}
 }

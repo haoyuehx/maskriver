@@ -23,6 +23,7 @@ import (
 	"github.com/haoyuehx/maskriver/internal/config"
 	"github.com/haoyuehx/maskriver/internal/db"
 	"github.com/haoyuehx/maskriver/internal/history"
+	"github.com/haoyuehx/maskriver/internal/verify"
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
 
@@ -143,7 +144,7 @@ func (e *Engine) StreamingApply(ctx context.Context, req contracts.StreamingAppl
 	}
 	// 9. Independent read-only validation over the modified target. A failed
 	// validation can never be reported as a complete run.
-	report, verr := e.Validate(ctx, contracts.ValidateRequest{Plan: req.Plan, Strict: true})
+	report, verr := e.validateWithin(ctx, contracts.ValidateRequest{Plan: req.Plan, Strict: true}, req.Budget.MaxRowBytes)
 	var overflow bool
 	summary.IssueCounts, overflow = boundedIssues(report.Issues, req.Budget.MaxIssueCounts)
 	if overflow {
@@ -168,6 +169,37 @@ func (e *Engine) StreamingApply(ctx context.Context, req contracts.StreamingAppl
 		return summary, fmt.Errorf("summaryValidate: %w", err)
 	}
 	return summary, nil
+}
+
+// validateWithin runs the independent validation through the byte-aware reader,
+// so the post-apply check is bounded by the same MaxRowBytes as the run. Legacy
+// Validate is unchanged.
+func (e *Engine) validateWithin(ctx context.Context, req contracts.ValidateRequest, maxRowBytes int64) (contracts.ValidationReport, error) {
+	if err := req.Plan.ValidateShape(); err != nil {
+		return contracts.ValidationReport{}, err
+	}
+	if err := e.checkPlan(ctx, req.Plan); err != nil {
+		return contracts.ValidationReport{}, err
+	}
+	source := boundedValidationReader{Reader: e.source, maxRowBytes: maxRowBytes}
+	target := boundedValidationReader{Reader: e.target, maxRowBytes: maxRowBytes}
+	return verify.New().Validate(ctx, source, target, req)
+}
+
+// boundedValidationReader overrides only Page; every other reader method is the
+// underlying adapter's. Validation therefore keeps its frozen contract while a
+// page that cannot be proven within the row budget is refused.
+type boundedValidationReader struct {
+	contracts.Reader
+	maxRowBytes int64
+}
+
+func (r boundedValidationReader) Page(ctx context.Context, req contracts.PageRequest) (contracts.Page, error) {
+	bounded, ok := r.Reader.(db.BoundedReader)
+	if !ok {
+		return contracts.Page{}, contracts.ErrUnsupported
+	}
+	return bounded.PageWithin(ctx, req, r.maxRowBytes)
 }
 
 func (r *streamingRun) finish(cause error) (contracts.StreamingApplySummary, error) {
@@ -365,6 +397,11 @@ func (r *streamingRun) applyTable(ctx context.Context, table contracts.TablePlan
 		changes, err := r.engine.pageChanges(ctx, table, left.Rows, right.Rows)
 		if err != nil {
 			return err
+		}
+		for _, change := range changes {
+			if changePayloadBytes(change) > r.budget.MaxRowBytes {
+				return contracts.ErrUnsafe
+			}
 		}
 		if err := r.writeBatch(ctx, table, changes, pageBytes); err != nil {
 			return err
