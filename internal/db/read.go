@@ -50,15 +50,33 @@ func (r *reader) Sample(ctx context.Context, req contracts.SampleRequest) (contr
 		return empty, contracts.ErrInvalid
 	}
 	name := r.quote(req.Column.Column)
-	query := "SELECT DISTINCT " + name + " FROM " + r.qualified(req.Column.TableRef) + " WHERE " + name + " IS NOT NULL LIMIT ?"
-	rows, err := r.db.QueryContext(ctx, query, req.Limit+1)
+	// Sampling is a separate read phase from streaming Apply, but it must still
+	// have a declared resource boundary: one unbounded DISTINCT value could
+	// otherwise be materialised during Scan with no budget at all. A single
+	// statement evaluates the byte length and returns NULL in place of a value
+	// that exceeds the cap, so the oversized value is never transferred; the
+	// companion flag makes that case fail closed instead of silently dropping it.
+	lengthExpr := "length(CAST(" + name + " AS BLOB))"
+	if r.dialect == contracts.MySQL {
+		lengthExpr = "OCTET_LENGTH(" + name + ")"
+	}
+	query := "SELECT DISTINCT CASE WHEN " + lengthExpr + " > ? THEN NULL ELSE " + name + " END," +
+		" CASE WHEN " + lengthExpr + " > ? THEN 1 ELSE 0 END FROM " +
+		r.qualified(req.Column.TableRef) + " WHERE " + name + " IS NOT NULL LIMIT ?"
+	rows, err := r.db.QueryContext(ctx, query, maxSampleValueBytes, maxSampleValueBytes, req.Limit+1)
 	if err != nil {
 		return empty, dbError(err)
 	}
 	vals := make([]contracts.Value, 0, req.Limit+1)
+	var total int64
 	for rows.Next() {
 		var raw any
-		if err = rows.Scan(&raw); err != nil {
+		var over int
+		if err = rows.Scan(&raw, &over); err != nil {
+			break
+		}
+		if over != 0 {
+			err = contracts.ErrUnsafe
 			break
 		}
 		var v contracts.Value
@@ -66,6 +84,12 @@ func (r *reader) Sample(ctx context.Context, req contracts.SampleRequest) (contr
 		if err != nil {
 			break
 		}
+		size := int64(len(v.Payload()))
+		if size > maxSampleValueBytes || total > maxSampleTotalBytes-size {
+			err = contracts.ErrUnsafe
+			break
+		}
+		total += size
 		vals = append(vals, v)
 	}
 	if err == nil {
@@ -85,23 +109,53 @@ func (r *reader) Sample(ctx context.Context, req contracts.SampleRequest) (contr
 	return contracts.Sample{Values: vals, Basis: contracts.DistinctNonNull, Truncated: truncated}, nil
 }
 
-func (r *reader) Page(ctx context.Context, req contracts.PageRequest) (contracts.Page, error) {
-	empty := contracts.Page{}
+const (
+	// maxSampleValueBytes bounds one sampled distinct value.
+	maxSampleValueBytes int64 = 1 << 20
+	// maxSampleTotalBytes bounds the retained sample for one column.
+	maxSampleTotalBytes int64 = 16 << 20
+)
+
+// pageQuery is one validated keyset page request. Page and PageWithin share the
+// same validation, projection, cursor predicate and ordering so the bounded
+// reader can never diverge from the legacy reader's semantics.
+type pageQuery struct {
+	req      contracts.PageRequest
+	colTypes map[string]contracts.Type
+	from     string
+	selected []string
+	where    string
+	args     []any
+	order    string
+}
+
+func (q *pageQuery) sql(limit int) string {
+	query := "SELECT " + strings.Join(q.selected, ",") + " FROM " + q.from
+	if q.where != "" {
+		query += " WHERE " + q.where
+	}
+	query += " ORDER BY " + q.order + " LIMIT ?"
+	return query
+}
+
+// from is filled by preparePage. It is kept separate from the selected list so
+// both readers build exactly the same statement.
+func (r *reader) preparePage(ctx context.Context, req contracts.PageRequest) (*pageQuery, error) {
 	if err := r.check(ctx); err != nil {
-		return empty, err
+		return nil, err
 	}
 	if req.Limit < 1 || req.Limit > 10000 {
-		return empty, contracts.ErrInvalid
+		return nil, contracts.ErrInvalid
 	}
 	schema, err := r.describe(ctx, req.Table)
 	if err != nil {
-		return empty, err
+		return nil, err
 	}
 	if len(schema.PrimaryKey) == 0 {
-		return empty, contracts.ErrUnsupported
+		return nil, contracts.ErrUnsupported
 	}
 	if len(req.KeyColumns) != len(schema.PrimaryKey) {
-		return empty, contracts.ErrInvalid
+		return nil, contracts.ErrInvalid
 	}
 	colTypes := map[string]contracts.Type{}
 	for _, c := range schema.Columns {
@@ -109,69 +163,77 @@ func (r *reader) Page(ctx context.Context, req contracts.PageRequest) (contracts
 	}
 	for i, key := range req.KeyColumns {
 		if key != schema.PrimaryKey[i] {
-			return empty, contracts.ErrInvalid
+			return nil, contracts.ErrInvalid
 		}
 		if colTypes[key].Nullable {
-			return empty, contracts.ErrUnsupported
+			return nil, contracts.ErrUnsupported
 		}
 	}
 	if len(req.Columns) == 0 || (len(req.After) != 0 && len(req.After) != len(req.KeyColumns)) {
-		return empty, contracts.ErrInvalid
+		return nil, contracts.ErrInvalid
 	}
 	cols := map[string]bool{}
 	for _, col := range req.Columns {
 		if col == "" || cols[col] {
-			return empty, contracts.ErrInvalid
+			return nil, contracts.ErrInvalid
 		}
 		if _, ok := colTypes[col]; !ok {
-			return empty, contracts.ErrInvalid
+			return nil, contracts.ErrInvalid
 		}
 		cols[col] = true
 	}
 	for _, key := range req.KeyColumns {
 		if !cols[key] {
-			return empty, contracts.ErrInvalid
+			return nil, contracts.ErrInvalid
 		}
 	}
 	for i, v := range req.After {
 		if v.IsNull() || v.Kind() != colTypes[req.KeyColumns[i]].Kind {
-			return empty, contracts.ErrInvalid
+			return nil, contracts.ErrInvalid
 		}
 	}
-	selected := make([]string, len(req.Columns))
+	q := &pageQuery{req: req, colTypes: colTypes, from: r.qualified(req.Table)}
+	q.selected = make([]string, len(req.Columns))
 	for i, c := range req.Columns {
-		selected[i] = r.quote(c)
+		q.selected[i] = r.quote(c)
 	}
-	query := "SELECT " + strings.Join(selected, ",") + " FROM " + r.qualified(req.Table)
-	args := []any{}
 	if len(req.After) > 0 {
 		terms := make([]string, 0, len(req.KeyColumns))
 		for i := range req.KeyColumns {
 			parts := make([]string, 0, i+1)
 			for j := 0; j < i; j++ {
 				parts = append(parts, r.quote(req.KeyColumns[j])+" = ?")
-				args = append(args, encode(req.After[j]))
+				q.args = append(q.args, encode(req.After[j]))
 			}
 			parts = append(parts, r.quote(req.KeyColumns[i])+" > ?")
-			args = append(args, encode(req.After[i]))
+			q.args = append(q.args, encode(req.After[i]))
 			terms = append(terms, "("+strings.Join(parts, " AND ")+")")
 		}
-		query += " WHERE " + strings.Join(terms, " OR ")
+		q.where = strings.Join(terms, " OR ")
 	}
 	keys := make([]string, len(req.KeyColumns))
 	for i, k := range req.KeyColumns {
 		keys[i] = r.quote(k) + " ASC"
 	}
-	query += " ORDER BY " + strings.Join(keys, ",") + " LIMIT ?"
-	args = append(args, req.Limit+1)
-	rows, err := r.db.QueryContext(ctx, query, args...)
+	q.order = strings.Join(keys, ",")
+	return q, nil
+}
+
+func (r *reader) Page(ctx context.Context, req contracts.PageRequest) (contracts.Page, error) {
+	empty := contracts.Page{}
+	q, err := r.preparePage(ctx, req)
+	if err != nil {
+		return empty, err
+	}
+	args := append(append([]any{}, q.args...), req.Limit+1)
+	rows, err := r.db.QueryContext(ctx, q.sql(req.Limit+1), args...)
 	if err != nil {
 		return empty, dbError(err)
 	}
 	result := make([]contracts.Row, 0, req.Limit+1)
 	for rows.Next() {
 		var row contracts.Row
-		row, err = scanRow(rows, req.Columns, colTypes)
+		row, err = scanRow(rows, req.Columns, q.colTypes)
 		if err != nil {
 			break
 		}
