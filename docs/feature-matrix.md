@@ -29,7 +29,7 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 | 功能 | 说明 / 范围 | 状态 | 目标 |
 |---|---|---|---|
 | 独立 Go module、可编译 CLI help/version | 无框架依赖，标准库 CLI | 已实现 | M0 |
-| `scan` / `mask` / `validate` / `approve` / `revoke` CLI | SQLite 多表真实路径（同一表多列由 runner 级用例覆盖）：Detect→Preview→独立进程签发审批记录→新进程 Apply→Validate；证据见 `TestCLIMultiTableWorkflow`、`TestE2EPlanIssueNewProcessApply`；MySQL CLI 未实现 | 部分实现（SQLite 多表，#9） | #9 |
+| `scan` / `mask` / `validate` / `approve` / `revoke` CLI | SQLite 多表真实路径（同一表多列由 runner 级用例覆盖）：Detect→Preview→独立进程签发审批记录→新进程 Apply→Validate；证据见 `TestCLIMultiTableWorkflow`、`TestE2EPlanIssueNewProcessApply`。M3-2 增加 MySQL 8.0.46 真实 CLI 路径：两个 DSN、共享逻辑 schema、内容摘要计划绑定，证据见 `TestMySQLCLIWorkflow`；MySQL streaming/recovery 明确拒绝 | 已实现（SQLite + MySQL 8.0.46 CLI；MySQL recovery 不支持） | #9 / #86 |
 | 默认 Dry Run，`--apply` 为写意图（需与声明、记录三者同时成立） | 写入需 `--approved` 声明 + `--apply` 意图 + 有效签名记录，三者缺一即拒绝；Preview 由 Writer 能力 Spy（opens/begins/updates/commits 全为 0）、驱动级 SQL Spy（`internal/db/sqlspy.go`，无写/事务语句）与文件树 SHA256 共同证明零写入；不证明并发快照 | 部分实现（SQLite 路径） | #9/#11 |
 | 配置文件、环境变量展开、参数校验 | 连接/检测/脱敏/验证分段校验 | 计划中 | M1 |
 | 连接生命周期、schema/table/column/type/PK 元数据 | SQLite/MySQL Reader/Writer，元数据与 SchemaCoverage 保守声明；不支持或可能丢精度的映射显式拒绝 | 部分实现（#5 组件） | #5 / PR #21；MySQL 适配器见 #10 / PR #30 |
@@ -41,7 +41,7 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 | 参数化更新、批次事务、复合键 keyset 分页 | #5 提供按真实复合主键游标、参数绑定、乐观受影响行数检查与回滚；跨方言独立验证持续进行 | 部分实现（#5 组件） | #5 / PR #21；MySQL 适配器见 #10 / PR #30 |
 | SQLite 本地事务恢复 schema（manifest/progress/KCV） | 显式 `init-recovery` 安装 `maskriver-recovery-v1`；manifest 与 append-only progress 只含 ID、摘要、计数、状态与时间；业务 UPDATE + receipt + progress + manifest CAS 同事务；无-op 页面只推进 progress；旧 outbox v1 数据/形状不变；部分或错误版本 fail closed | 已实现（Linux amd64 本地 SQLite） | #14 |
 | CLI `status` 与显式 `--resume` | `status --target --run-id` 以 SQLite `mode=ro` 打开，显示 state/checkpoint/已处理/已提交/批次数/表位置/resume_eligible/commit_unknown/conflict，零写入；`mask --streaming --apply --resume --run-id` 复用真实 Ed25519 审批与静态 preflight，已提交批次不重写；退出码区分 complete/recoverable/conflict/commit_unknown/unsupported/invalid/unauthorized/validation_failed | 已实现（Linux amd64 本地 SQLite） | #14 |
-| 无主键 apply 拒绝、敏感主键明确未处理 | 数据库 Writer 已对无主键及试图改主键的计划拒绝；CLI 端到端拒绝路径已由 `TestE2EApprovalDoesNotBypassExistingGates` 覆盖，MySQL CLI 未实现 | 部分实现（组件 + SQLite CLI 拒绝） | #5 / #9 |
+| 无主键 apply 拒绝、敏感主键明确未处理 | 数据库 Writer 已对无主键及试图改主键的计划拒绝；CLI 端到端拒绝路径已由 `TestE2EApprovalDoesNotBypassExistingGates` 覆盖；MySQL CLI 复用同一 runner 门禁 | 已实现（组件 + SQLite/MySQL 8.0.46 CLI 拒绝） | #5 / #9 / #86 |
 
 ## 敏感信息检测
 
@@ -65,7 +65,7 @@ China-first 的 13 种检测规则由 PR #20（Issue #6）实现；其规则是�
 | cn_address | 有序中文地址片段、道路/门牌标记，需字段上下文 | 已实现（有界） | #6 / PR #20 |
 | cn_date | 合法年-月-日、年/月/日、中文年月日和 typed Date；不识别自由文本及 MDY/DMY 字符串 | 已实现（有界） | #6 / PR #20 |
 | UNKNOWN 不等于非敏感 | 样本不足、覆盖外、冲突或不确定不得自动授权写入 | 已实现（检测组件） | #6 / PR #20 |
-| 扫描错误 fail-closed 与非零退出 | `runner.Scan` 在 Describe/Sample 故障与中途取消时整体失败；CLI 扫描不完整退出 1 并输出脱敏拒绝信息；证据见 `TestScanFailsClosedOnEvidenceSeamError`、`TestCLIScanFailureExitsNonZeroWithoutWrite`；MySQL CLI 未实现 | 部分实现（SQLite） | #9 |
+| 扫描错误 fail-closed 与非零退出 | `runner.Scan` 在 Describe/Sample 故障与中途取消时整体失败；CLI 扫描不完整退出 1 并输出脱敏拒绝信息；证据见 `TestScanFailsClosedOnEvidenceSeamError`、`TestCLIScanFailureExitsNonZeroWithoutWrite`；MySQL CLI 复用同一 fail-closed 路径，真实 8.0.46 作业执行 | 已实现（SQLite + MySQL 8.0.46 CLI） | #9 / #86 |
 | 可选外部/本地 LLM 辅助分类 | 默认关闭；不得外发样本 | 未实现 | 不在 M1/M2 承诺内 |
 
 **评估证据与局限**：`internal/detect/eval_test.go` 使用 74 条自编合成 `(value, column)` 样本（38 正、36 负；8 条超出既定覆盖范围），以 `MinSamples=1` 独立检验规则/列上下文，**并非生产默认 20 样本的整列检测效果，也不是独立留出测试**。本次测得 `cn_person_name` TP=3、FP=3、FN=1，Precision=0.500、Recall=0.750、F1=0.600；包含普通词误报。部署前必须扩展独立标注数据、开展人工审核，不得默认用它批准 Apply。身份证/信用代码格式校验不是身份或登记真实性验证。规则列表不意味着覆盖一切行政区划、号码段、姓名和地址。原北美 SSN/US ZIP/NANP 等规则不属于本次 China-first 组件交付。
@@ -132,11 +132,11 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 
 | 功能 | 说明 / 边界 | 状态 | 目标 |
 |---|---|---|---|
-| 行数校验 | Count 对比，双向键集逐项核对，数量不一致失败；fake Reader 组件与真实 SQLite 多表 CLI 已测，MySQL CLI 未实现 | 已实现（组件 + SQLite CLI） | #8 / PR #32、#33；MySQL 待 #11 |
+| 行数校验 | Count 对比，双向键集逐项核对，数量不一致失败；fake Reader 组件与真实 SQLite 多表 CLI 已测，M3-2 在真实 MySQL 8.0.46 CLI 中通过 | 已实现（组件 + SQLite/MySQL CLI） | #8 / #86 |
 | schema 校验：列类型/PK/索引/FK/unique/check | `schemasMatch` 比较列名/类型/NULL/长度/精度/比例、PK、索引、unique、FK、CHECK，并要求对应 `SchemaCoverage`；`schema_coverage_test.go` 覆盖，真实 SQLite CLI 已验证含 CHECK/索引的表；触发器不在 verify 内，由 runner preflight 拒绝 | 已实现（组件 + SQLite CLI） | #8 / PR #33 |
 | triggers/grants 校验 | runner preflight 拒绝任何触发器与入向 FK；verify 不做触发器校验，grants 需驱动能力支持 | 部分实现（触发器拒绝） | 后续评估 |
 | 主键对齐逐值完整性校验 | 基于冻结 Plan，双向 keyset 流式合并，已选敏感列未变化失败，字段缺失/类型/NULL 转换失败 | 已实现（fake Reader 组件） | #8 / PR #32、#33 |
-| 无键/限量覆盖/strict 模式 | RowLimit=0 有界分页全量；正数为总行预算，截断/无主键证据/分页异常不得 PASS。M3-1 起 strict 要求 `RowLimit=0`、拒绝 Warning，并要求每张计划表在源/目标通过适配器 `IntegrityCheck`；SQLite 已实现 `quick_check`+数据库级 `foreign_key_check`，MySQL strict 未实现并 fail closed（UNVERIFIED）。证据：`TestStrictRequiresFullScanAndIntegrityCapability`、`TestStrictIntegrityFailureIsNotPass`、`TestSQLiteIntegrityCheckDetectsForeignKeyViolation` | 已实现（SQLite 严格语义；MySQL strict UNVERIFIED/unsupported） | #8 / #33；M3-1 |
+| 无键/限量覆盖/strict 模式 | RowLimit=0 有界分页全量；正数为总行预算，截断/无主键证据/分页异常不得 PASS。M3-1 起 strict 要求 `RowLimit=0`、拒绝 Warning，并要求每张计划表在源/目标通过适配器 `IntegrityCheck`；SQLite 已实现 `quick_check`+数据库级 `foreign_key_check`；M3-2 的 MySQL 实现要求 `CHECK TABLE` 每行均为 `status/OK`，并对触及计划表的每个 FK 执行 orphan 查询，任一失败即 fail closed。证据：`TestStrictRequiresFullScanAndIntegrityCapability`、`TestStrictIntegrityFailureIsNotPass`、`TestSQLiteIntegrityCheckDetectsForeignKeyViolation`、`TestMySQLCLIWorkflow` | 已实现（SQLite + MySQL 8.0.46 严格语义） | #8 / #33；#86 |
 | 测试数据忽略、采样上限、形状遮蔽 | 忽略策略须显式审核 | 计划中 | M1/go-verify |
 | 稳定公共库 API | `pkg/contracts` 仅内部协作冻结，非稳定外部 SDK | 未实现 | 待契约稳定后评估 |
 

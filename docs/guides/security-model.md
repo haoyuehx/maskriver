@@ -10,7 +10,7 @@
   controlling both can approve their own plan.
 - Recovery is local SQLite only and supports deterministic strategies. It does
   not provide distributed exactly-once or cross-store atomicity.
-- Strict validation is full-scan and requires adapter integrity checks; MySQL
-  strict is unsupported and fails closed.
+- Strict validation is full-scan and requires adapter integrity checks: SQLite
+  quick/FK checks and MySQL CHECK TABLE plus FK orphan scans; both fail closed.
 - Logs/reports contain counts and controlled status only, not raw values, keys,
   DSNs or plaintext primary keys.

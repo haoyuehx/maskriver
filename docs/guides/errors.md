@@ -7,7 +7,7 @@ commit-unknown, `6` unsupported, `7` invalid/missing manifest, `8` unauthorized,
 
 Key categories: `ErrInvalid` (malformed request), `ErrUnsafe` (unsafe state or
 unauthorized write), `ErrUnsupported` (dialect/feature not implemented, e.g.
-MySQL strict, MySQL recovery), `ErrConflict` (target/source drift or integrity
+MySQL streaming/recovery), `ErrConflict` (target/source drift or integrity
 violation), `ErrCommitUnknown` (ambiguous commit; never auto-retried),
 `ErrIncomplete` (coverage/validation incomplete), `ErrNotFound` (missing record
 or run), `ErrClosed`.

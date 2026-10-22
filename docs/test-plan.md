@@ -68,7 +68,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 
 - 使用真实 SQLite 驱动运行 `go test -count=1 ./internal/db/...`，确认只读且缺失文件不创建、表元数据与保守 `SchemaCoverage`、有界 DISTINCT 非 NULL 抽样、NULL/空串/Bytes/Decimal/Date 与安全类型处理、25 行三页、真实有序复合主键 keyset、乐观锁冲突零提交、Rollback、取消、非法列名与跨 DatasetID/Schema 白名单拒绝。特别覆盖新增 `internal/db/count_scope_test.go` 的 Count 越界检查。
 - Go CI 应在 Ubuntu/Windows 运行全仓测试和 vet，并在 Ubuntu 运行 race；以合并目标分支对应最终 PR Head 的通过记录为准，不把 queued、SKIP 或 fixture 环境通过写成适配器验收通过。
-- MySQL 业务测试入口是 `internal/db/mysql_test.go:TestMySQLAdapter`，需要隔离容器私有 socket 和 `MASKRIVER_TEST_MYSQL_SOCKET`；未提供时将 `SKIP/UNVERIFIED` 原样记录。#10 的 MySQL 8.0.46 适配器场景已由 PR #30 的测试入口实跑；尚不能宣称用户 CLI 的最终 M1 端到端验收。
+- MySQL 业务测试入口包括 `internal/db/mysql_test.go:TestMySQLAdapter` 与 `cmd/maskriver/mysql_e2e_test.go:TestMySQLCLIWorkflow`，都需要隔离容器私有 socket 和 `MASKRIVER_TEST_MYSQL_SOCKET`；本地无权限时记录 `SKIP/UNVERIFIED`。M3-2 起 CI 作业实际执行真实 CLI 的 Scan→Preview→Approve→Apply→Strict Validate，并覆盖 source 不变、target 变化、重复 apply 拒绝、同库拒绝和 streaming 拒绝。MySQL recovery 仍未实现。
 - 本轮数据库组件不等于 CLI/runner 端到端已交付；全链路 Dry Run/Apply/严格 Validate 仍由 #9/#11 验收。
 
 ## 脱敏策略组件专项验收（#7 / 原 PR #18 / PR #24）
@@ -97,7 +97,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - **契约**：`RowLimit=0` 执行全量有界分页；正数表示总行预算，超过时 `PartialCoverage` + `Complete=false`；负数或 nil ctx/reader 拒绝。缺失 schema/PK 能力、类型不符、计划列缺失、重复键/倒退游标/空页面等必须失败关闭；完整空表可通过。
 - **回归**：`internal/verify/verify_test.go` 保留原始 PR #32 的 fake-Reader 用例；`verify_safety_test.go` 新增 520 行分页、Issue 聚合、非法游标、计划/schema 错配、nil Context、缺少字段、刚好达到总行预算和截断拒绝。仅冻结 `Plan` 中的敏感列查验非 NULL 值变化，NULL 语义异常不通过。
 - **门禁**：`gofmt -l internal/verify`、`go test -count=1 -v ./internal/verify`、`go test -count=1 ./...`、`go vet ./...`、`go test -race ./...`（Linux CI）；记录最终 PR Head 三项 CI 真实结论，不把初期 green 当作末次 green。
-- **剩余未验收**：真实 MySQL CLI 的独立源快照严格 Validate、触发器/grant 校验与 #11 独立安全验收仍属后续；verify 包自身仍以 fake Reader 为主，真实 SQLite 多表路径由 `cmd/maskriver` 与 `internal/runner` 覆盖，不能将 #8 组件通过描述成 M1 完成。
+- **MySQL 状态**：M3-2 已实现真实 8.0.46 CLI 严格 Validate、触发器探测与 FK orphan 检查；恢复仍不支持。verify 包自身仍以 fake Reader 为主，真实 SQLite/MySQL 路径由 `cmd/maskriver` 与 `internal/runner` 覆盖。
 
 ## 特别安全门禁
 

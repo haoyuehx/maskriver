@@ -236,4 +236,24 @@ func TestMySQLAdapter(t *testing.T) {
 		t.Fatal("MySQL CN durable readback failed", err)
 	}
 	verifyCNAdapterIntegration(t, ctx, db, opts)
+
+	// Strict integrity must see logical FK damage, not just CHECK TABLE rows.
+	if err := r.IntegrityCheck(ctx, people); err != nil {
+		t.Fatal("clean MySQL strict integrity failed", err)
+	}
+	if _, err = db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=0"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.ExecContext(ctx, "INSERT INTO links(tenant,seq,person_id) VALUES(999,999,9999)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=1"); err != nil {
+		t.Fatal(err)
+	}
+	if err = r.IntegrityCheck(ctx, people); !errors.Is(err, contracts.ErrConflict) {
+		t.Fatalf("MySQL strict integrity missed orphan FK: %v", err)
+	}
+	if _, err = db.ExecContext(ctx, "DELETE FROM links WHERE tenant=999 AND seq=999"); err != nil {
+		t.Fatal(err)
+	}
 }
