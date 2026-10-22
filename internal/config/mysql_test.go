@@ -42,6 +42,10 @@ func TestMySQLRuntimeRefusesUnsafeDSN(t *testing.T) {
 		"read-only off":    "root@tcp(127.0.0.1:3306)/source_db?tx_read_only=0",
 		"sql mode":         "root@tcp(127.0.0.1:3306)/source_db?sql_mode=",
 		"set injection":    "root@tcp(127.0.0.1:3306)/source_db?time_zone=UTC,foreign_key_checks=0",
+		"session alias":    "root@tcp(127.0.0.1:3306)/source_db?@@session.transaction_read_only=0",
+		"local alias":      "root@tcp(127.0.0.1:3306)/source_db?@@local.foreign_key_checks=0",
+		"scope space":      "root@tcp(127.0.0.1:3306)/source_db?SESSION foreign_key_checks=0",
+		"global unique":    "root@tcp(127.0.0.1:3306)/source_db?@@global.unique_checks=0",
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := mysqlRuntime(dsn, "root@tcp(127.0.0.1:3306)/target_db")
