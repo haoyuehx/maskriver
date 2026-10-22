@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/haoyuehx/maskriver/internal/db/mysqlparam"
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 	_ "modernc.org/sqlite"
 )
@@ -20,6 +21,7 @@ type adapter struct {
 	db      *sql.DB
 	dialect contracts.Dialect
 	dataset string
+	schema  string
 	schemas map[string]bool
 	mu      sync.Mutex
 	closed  bool
@@ -131,11 +133,16 @@ func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool, co
 		if err != nil {
 			return nil, contracts.ErrInvalid
 		}
-		if cfg.DBName == "" || !schemas[cfg.DBName] || len(schemas) != 1 {
+		if cfg.DBName == "" || len(schemas) != 1 {
 			return nil, contracts.ErrInvalid
 		}
 		if cfg.MultiStatements || cfg.AllowAllFiles || cfg.AllowCleartextPasswords {
 			return nil, contracts.ErrUnsafe
+		}
+		for key, value := range cfg.Params {
+			if mysqlparam.Unsafe(key, value) {
+				return nil, contracts.ErrUnsafe
+			}
 		}
 		cfg.ParseTime = false
 		if readOnly {
@@ -175,7 +182,41 @@ func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool, co
 		_ = db.Close()
 		return nil, dbError(err)
 	}
-	return &adapter{db: db, dialect: opts.Dialect, dataset: opts.DatasetID, schemas: schemas}, nil
+	if opts.Dialect == contracts.MySQL {
+		// Do not trust DSN parameters alone: aliases such as @@session.* or
+		// SET-clause values can otherwise make the session property depend on
+		// driver map order. Verify the property on the live connection.
+		var readOnlyValue, foreignKeys, uniqueChecks int
+		var err error
+		if readOnly {
+			err = db.QueryRowContext(pingCtx, "SELECT @@SESSION.transaction_read_only").Scan(&readOnlyValue)
+			if err == nil && readOnlyValue != 1 {
+				err = contracts.ErrUnsafe
+			}
+		} else {
+			err = db.QueryRowContext(pingCtx,
+				"SELECT @@SESSION.foreign_key_checks, @@SESSION.unique_checks").
+				Scan(&foreignKeys, &uniqueChecks)
+			if err == nil && (foreignKeys != 1 || uniqueChecks != 1) {
+				err = contracts.ErrUnsafe
+			}
+		}
+		if err != nil {
+			_ = db.Close()
+			return nil, dbErrorOrCategory(err)
+		}
+	}
+	physical := "main"
+	if opts.Dialect == contracts.MySQL {
+		cfg, err := mysql.ParseDSN(dsn)
+		if err != nil {
+			_ = db.Close()
+			return nil, contracts.ErrInvalid
+		}
+		physical = cfg.DBName
+	}
+	return &adapter{db: db, dialect: opts.Dialect, dataset: opts.DatasetID,
+		schema: physical, schemas: schemas}, nil
 }
 
 func sqliteDSN(input string, readOnly bool) (string, error) {
@@ -294,7 +335,7 @@ func (a *adapter) quote(s string) string {
 }
 
 func (a *adapter) qualified(ref contracts.TableRef) string {
-	return a.quote(ref.Schema) + "." + a.quote(ref.Table)
+	return a.quote(a.schema) + "." + a.quote(ref.Table)
 }
 
 func dbError(err error) error {

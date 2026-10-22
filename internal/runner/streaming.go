@@ -50,6 +50,9 @@ func (e *Engine) SetStreamingApprovalQuery(query StreamingApprovalQuery) {
 // preflight, full dry run) completes before the outbox is opened or a run row is
 // created.
 func (e *Engine) StreamingApply(ctx context.Context, req contracts.StreamingApplyRequest) (contracts.StreamingApplySummary, error) {
+	if e != nil && e.cfg.DialectName() != contracts.SQLite {
+		return contracts.StreamingApplySummary{}, contracts.ErrUnsupported
+	}
 	var summary contracts.StreamingApplySummary
 	if e == nil || ctx == nil {
 		return summary, contracts.ErrInvalid

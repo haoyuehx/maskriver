@@ -48,7 +48,7 @@ jobs:
         run: go test -race -count=1 ./...
 
   mysql-fixture:
-    name: Isolated MySQL fixture and adapter acceptance
+    name: Isolated MySQL fixture, adapter and CLI acceptance
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -63,8 +63,8 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo 'This job runs TestMySQLFixture and TestMySQLAdapter against the same isolated MySQL 8.0.46 socket.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Successful tests verify the current MySQL adapter contract cases, not the full CLI workflow or untested MySQL versions.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This job runs TestMySQLFixture, TestMySQLAdapter and TestMySQLCLIWorkflow against the same isolated MySQL 8.0.46 socket.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'TestMySQLCLIWorkflow is the real Scan->Preview->Approve->Apply->Validate CLI path on two disposable databases. MySQL recovery and versions other than 8.0.46 remain unverified.' >> "$GITHUB_STEP_SUMMARY"
 
   release-package:
     name: Deterministic release package

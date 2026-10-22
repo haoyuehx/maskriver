@@ -1,7 +1,7 @@
 # Quick Start
 
-MaskRiver operates on authorised, isolated, disposable SQLite copies. It is not
-an anonymisation or production-stable tool.
+MaskRiver operates on authorised, isolated, disposable SQLite or MySQL 8.0.46
+copies. It is not an anonymisation or production-stable tool.
 
 1. Build or install the linux/amd64 release; verify `sha256sum -c SHA256SUMS`.
 2. Create separate source and target SQLite files (never point both at the same file).
@@ -22,4 +22,5 @@ an anonymisation or production-stable tool.
    ```
 
 `--strict` requires a full untruncated scan and an adapter integrity check; it
-fails closed if the adapter cannot provide one. See [limitations](../m3/platform-matrix.md).
+fails closed if the adapter cannot provide one. For MySQL use `--dialect mysql` with two DSNs; see the [MySQL tutorial](mysql.md).
+Streaming/recovery remains SQLite-only. See [limitations](../m3/platform-matrix.md).

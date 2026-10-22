@@ -22,3 +22,7 @@
 /.pi/auth.json
 /.pi/models.json
 .DS_Store
+
+# Python bytecode from local harness checks
+__pycache__/
+*.pyc

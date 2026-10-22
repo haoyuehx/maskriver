@@ -225,6 +225,9 @@ func (e *Engine) openRecoveryForRun(ctx context.Context, req StreamingRecoveryRe
 // StreamingResume verifies an existing run and continues it. Every pre-write
 // gate runs before a new business transaction exists.
 func (e *Engine) StreamingResume(ctx context.Context, req StreamingRecoveryRequest) (contracts.StreamingApplySummary, RecoveryReport, error) {
+	if e != nil && e.cfg.DialectName() != contracts.SQLite {
+		return contracts.StreamingApplySummary{}, RecoveryReport{}, contracts.ErrUnsupported
+	}
 	var summary contracts.StreamingApplySummary
 	var report RecoveryReport
 	if e == nil || ctx == nil {

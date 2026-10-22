@@ -45,7 +45,7 @@ UUID/IP/phone 等是 Text 的语义规则，不创建与 SQL 无关的重复 Val
 
 ## 3. schema 与 DB Reader/Writer
 
-`DatabaseOptions{Dialect, DSN, DatasetID, Schemas, MaxOpenConns, ConnectTimeout}` 由 Main/config 构造；Dialect 仅 SQLite/MySQL，DSN 为 Text Value、不得输出。DatasetID 绑定 TableRef.Database，Schemas 是显式允许列表（非空），连接数/超时必须正数；M1-B MaxOpenConns=1 起步。源与目标使用相同逻辑 dataset/schema/table，但不同只读快照/目标连接；首轮不做 schema 重命名（必要时不同实例使用相同 schema 名）。
+`DatabaseOptions{Dialect, DSN, DatasetID, Schemas, MaxOpenConns, ConnectTimeout}` 由 Main/config 构造；Dialect 仅 SQLite/MySQL，DSN 为 Text Value、不得输出。DatasetID 绑定 TableRef.Database，Schemas 是显式允许列表（非空），连接数/超时必须正数；M1-B MaxOpenConns=1 起步。源与目标使用相同逻辑 dataset/schema/table，但不同只读快照/目标连接。M3-2 对 MySQL 明确扩展：`Schemas` 仍是显式允许列表，但内容是共享逻辑 schema（`main`），适配器将 DSN 的物理 database 映射到该逻辑名；因此同一实例上不同 database 名也可作为源/目标，而连接后仍以 `@@server_uuid`+`DATABASE()` 拒绝同一物理库。SQLite 的 `Schemas` 仍必须是 `main`。该扩展只改变内部映射语义，不改变冻结类型或 `APIRevision`，记录见 ADR-M3-2。
 
 `TableSchema` 含列、**按原顺序**的 PrimaryKey、索引、外键动作、唯一约束和 CHECK；`SchemaCoverage` 每项 bool 标识是否真的取到。false 不等于空集合，不支持不能返回“空但已知”。
 

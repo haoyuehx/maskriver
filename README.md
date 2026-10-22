@@ -21,10 +21,10 @@ go vet ./...
 go build -o bin/maskriver ./cmd/maskriver
 ```
 
-`scan`、`mask`、`validate`、`approve`、`revoke` 已支持明确限定的 **SQLite 多表**合成测试工作流（同一表多列另有 runner 级用例）；必须提供两个各自存在且不同的绝对路径数据库文件，默认只读。MySQL CLI 尚未实现；非法配置或未获批准的写入一律拒绝。
+`scan`、`mask`、`validate`、`approve`、`revoke` 支持明确限定的 **SQLite 多表** 与 **MySQL 8.0.46** 合成测试工作流。SQLite 必须提供两个各自存在且不同的绝对路径文件；MySQL 使用 `--dialect mysql` 和两个指向不同数据库的 DSN（连接后按 `@@server_uuid`+`DATABASE()` 拒绝同一物理库，包括 unix/tcp 或地址别名），默认只读。MySQL streaming/recovery 未实现并被明确拒绝；非法配置或未获批准的写入一律拒绝。
 `mask` 默认 Dry Run。写入需要三者同时成立：`--approved`（操作者声明）、`--apply`（写意图）和一条由 `approve` 独立签发并绑定当前 Plan 的 Ed25519 审批记录；前两者单独或组合都不充分。`apply` 只从部署预置 trust file 加载可信公钥，不接收审核私钥；`revoke` 撤销已有记录。Preview 由驱动级 SQL Spy 与文件树 SHA256 证明零写入。
 
-严格的 `validate --strict` 现在要求全量扫描和 SQLite 完整性检查；MySQL strict 未实现并 fail closed。
+严格的 `validate --strict` 现在要求全量扫描和适配器完整性检查：SQLite 使用 `quick_check` + 数据库级 FK 检查，MySQL 8.0.46 使用全行解析的 `CHECK TABLE ... QUICK` + 触及计划表的 FK orphan 检查，任一失败即 fail closed。MySQL strict 不校验 CHECK 约束表达式、唯一重复或未触及表，也不是整库/复制一致性检查。
 
 可选的 M2 路径使用 `--streaming`、独立 `--budget-file` 和同事务 Outbox 回执。恢复需要先显式 `init-outbox`、`init-recovery`，然后以 `--streaming --apply --resume --run-id <32-hex>` 继续；`status` 只读。已提交批次通过确定性重算校验后跳过，未提交后缀必须仍等于源值；目标外部修改、错误 Key、快照漂移和 `commit_unknown` 均 fail closed。恢复不改变“批次事务不等于整库原子性”的既有边界。
 可复现路径见 `cmd/maskriver/approval_e2e_test.go` 的 `TestE2EPlanIssueNewProcessApply`（子进程签发与加载），以及 `cmd/maskriver/main_test.go` 的 `TestCLIMultiTableWorkflow` 与 `TestCLIRealSQLiteWorkflow`。
@@ -59,7 +59,7 @@ CI 包括 Ubuntu/Windows 的测试与 vet、Ubuntu race，以及隔离 MySQL 8.0
 ## 产品路线图
 
 - **M1-B 已交付：** 数据库适配器（#5、#10）、检测（#6）、脱敏（#7、#12）和验证器（#8），有真实数据库或有界 fake Reader 测试证据；各组件不等于完整产品。
-- **M1-C 已关闭：** [#9](https://github.com/haoyuehx/maskriver/issues/9) 的 AC 已由独立上下文签署（[验收报告](docs/issue9-acceptance-report.md)）。SQLite 多表 CLI、签名审批记录、SQL Spy、静态门禁和批次故障回归已有真实测试；`--strict` 语义与 MySQL CLI 仍未完成。
+- **M1-C 已关闭：** [#9](https://github.com/haoyuehx/maskriver/issues/9) 的 AC 已由独立上下文签署（[验收报告](docs/issue9-acceptance-report.md)）。SQLite 多表 CLI、签名审批记录、SQL Spy、静态门禁和批次故障回归已有真实测试；`--strict` 与 MySQL 8.0.46 CLI 已由 M3-1/M3-2 补齐，MySQL recovery 仍未实现。
 - **M1-D 已裁定 ACCEPT WITH RESTRICTIONS：** [#11](https://github.com/haoyuehx/maskriver/issues/11) 独立安全验收已完成，P0=0、P1=0——原 P1（第三方许可/署名）由 PR #58 修复并经第二独立上下文复核；六条 P2 仍开放。`v0.2.0-preview.1` 的发行包已按实际链接集合生成 NOTICE、随包完整许可文本、MPL-2.0 源码获取说明与 SBOM；历史 M1 报告中的限制不因新版本而消失。
 - **M2 已交付（本地 SQLite 预览）：** [#13](https://github.com/haoyuehx/maskriver/issues/13) 提供有界 Streaming、事务 Outbox 与资源预算；[#14](https://github.com/haoyuehx/maskriver/issues/14) 提供 `m2-recovery-v1` Checkpoint、只读 Status、显式 Resume 与幂等故障恢复。MySQL/Windows/WAL 恢复、跨库映射与通用 exactly-once 仍不支持。
 - 完整阶段划分见 [Roadmap](docs/roadmap.md)。

@@ -7,12 +7,12 @@ import (
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
 
-// This file holds the internal read-only capability probes that the frozen
-// m1a-v1 contract surface (pkg/contracts) deliberately does not model: SQLite
-// journal mode and trigger existence. They exist so the runner can prove that
-// a SQLite source is a quiescent snapshot and that a planned write can not fire
-// a trigger. They are read-only, never persist anything and return sanitized
-// category errors only.
+// This file holds internal read-only capability probes that the frozen m1a-v1
+// contract surface (pkg/contracts) deliberately does not model: SQLite journal
+// mode, trigger existence, and MySQL live server identity. They let the runner
+// prove a SQLite source is a quiescent snapshot, refuse any planned write that
+// could fire a trigger, and refuse aliases of one MySQL database. They are
+// read-only, never persist anything and return sanitized category errors only.
 
 // Quiescent reports whether this read-only session can prove that the main
 // database file alone holds the complete committed database state.
@@ -77,15 +77,22 @@ func (a *adapter) HasTriggers(ctx context.Context, ref contracts.TableRef) (bool
 	if err := a.table(ref); err != nil {
 		return false, err
 	}
-	if a.dialect != contracts.SQLite {
+	var count int
+	var err error
+	switch a.dialect {
+	case contracts.SQLite:
+		err = a.db.QueryRowContext(ctx,
+			// SQLite stores the table name exactly as written in the trigger DDL, so
+			// a trigger declared ON PEOPLE for table people would otherwise be
+			// missed. Compare case-insensitively.
+			"SELECT COUNT(*) FROM main.sqlite_schema WHERE type='trigger' AND tbl_name=? COLLATE NOCASE", ref.Table).Scan(&count)
+	case contracts.MySQL:
+		err = a.db.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM information_schema.triggers WHERE event_object_schema=? AND event_object_table=?",
+			a.schema, ref.Table).Scan(&count)
+	default:
 		return false, contracts.ErrUnsupported
 	}
-	var count int
-	err := a.db.QueryRowContext(ctx,
-		// SQLite stores the table name exactly as written in the trigger DDL, so
-		// a trigger declared ON PEOPLE for table people would otherwise be
-		// missed. Compare case-insensitively.
-		"SELECT COUNT(*) FROM main.sqlite_schema WHERE type='trigger' AND tbl_name=? COLLATE NOCASE", ref.Table).Scan(&count)
 	if err != nil {
 		return false, dbError(err)
 	}
@@ -131,4 +138,32 @@ func unquoteSQLToken(token string) string {
 		return token[1 : len(token)-1]
 	}
 	return token
+}
+
+// ServerIdentity reports a stable identity for the connected MySQL server and
+// database. It exists because DSN text can alias one physical database (unix
+// vs tcp, localhost vs 127.0.0.1, path spellings, case folding). The caller
+// compares both sides after connecting and refuses the same identity.
+func (a *adapter) ServerIdentity(ctx context.Context) (string, error) {
+	if err := a.check(ctx); err != nil {
+		return "", err
+	}
+	if a.dialect != contracts.MySQL {
+		return "", contracts.ErrUnsupported
+	}
+	var uuid, database string
+	var lowerCase int
+	if err := a.db.QueryRowContext(ctx,
+		"SELECT @@server_uuid, DATABASE(), @@lower_case_table_names").
+		Scan(&uuid, &database, &lowerCase); err != nil {
+		return "", dbError(err)
+	}
+	uuid = strings.TrimSpace(uuid)
+	if uuid == "" || database == "" {
+		return "", contracts.ErrIncomplete
+	}
+	if lowerCase != 0 {
+		database = strings.ToLower(database)
+	}
+	return uuid + "\x00" + database, nil
 }

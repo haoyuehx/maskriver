@@ -236,4 +236,45 @@ func TestMySQLAdapter(t *testing.T) {
 		t.Fatal("MySQL CN durable readback failed", err)
 	}
 	verifyCNAdapterIntegration(t, ctx, db, opts)
+
+	// Strict integrity must see logical FK damage, not just CHECK TABLE rows.
+	if err := r.IntegrityCheck(ctx, people); err != nil {
+		t.Fatal("clean MySQL strict integrity failed", err)
+	}
+	if _, err = db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=0"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.ExecContext(ctx, "INSERT INTO links(tenant,seq,person_id) VALUES(999,999,9999)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=1"); err != nil {
+		t.Fatal(err)
+	}
+	if err = r.IntegrityCheck(ctx, people); !errors.Is(err, contracts.ErrConflict) {
+		t.Fatalf("MySQL strict integrity missed orphan FK: %v", err)
+	}
+	if _, err = db.ExecContext(ctx, "DELETE FROM links WHERE tenant=999 AND seq=999"); err != nil {
+		t.Fatal(err)
+	}
+
+	// MySQL source and target databases may have different physical names, so
+	// the adapter must expose FK targets under the shared logical schema.
+	logicalOpts := opts
+	logicalOpts.Schemas = []string{"main"}
+	logical, err := OpenReader(ctx, logicalOpts)
+	if err != nil {
+		t.Fatal("logical-schema reader open failed", err)
+	}
+	defer logical.Close()
+	linksSchema, err := logical.Describe(ctx, contracts.TableRef{Database: "fixture", Schema: "main", Table: "links"})
+	if err != nil || len(linksSchema.ForeignKeys) == 0 {
+		t.Fatal("logical-schema FK describe failed", err)
+	}
+	if linksSchema.ForeignKeys[0].Target.Schema != "main" {
+		t.Fatalf("FK target schema = %q, want logical main", linksSchema.ForeignKeys[0].Target.Schema)
+	}
+	identity, err := logical.(*reader).ServerIdentity(ctx)
+	if err != nil || identity == "" {
+		t.Fatal("MySQL server identity unavailable", err)
+	}
 }

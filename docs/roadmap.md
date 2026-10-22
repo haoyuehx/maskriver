@@ -9,7 +9,7 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 | M0 · 项目基座 | 完成 | 独立 Go module、MIT 授权、help/version、跨平台 CI；数据库业务 CLI 仍只会安全拒绝 |
 | M1-A · 共享契约 | 完成 | `pkg/contracts` 冻结 `APIRevision=m1a-v1`、SQLite/MySQL 测试环境及基础类型 |
 | M1-B · 四个核心组件 | 已合并 | #5/#10 数据库、#6 检测、#7/#12 脱敏、#8 验证；有真实 SQLite/MySQL 适配器与 CN 策略 SQL 组件集成、fake Reader 验证器回归。**不等于端到端 CLI** |
-| M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **已关闭（CLOSED）** | SQLite 多表真实 Scan/Preview/签名审批/新进程 Apply/Validate 已测，AC 已由独立上下文签署，证据见 [Issue #9 验收报告](issue9-acceptance-report.md)；`--strict` 独立严格语义与 MySQL CLI 仍未完成 |
+| M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **已关闭（CLOSED）** | SQLite 多表真实 Scan/Preview/签名审批/新进程 Apply/Validate 已测，AC 已由独立上下文签署，证据见 [Issue #9 验收报告](issue9-acceptance-report.md)；`--strict` 独立严格语义与 MySQL CLI 后由 M3-1/M3-2 补齐 |
 | M1-D · 独立安全验收 [#11](https://github.com/haoyuehx/maskriver/issues/11) | **已裁定 ACCEPT WITH RESTRICTIONS** | 独立非作者审查已完成：P0=0、P1=0（原 P1 为许可/署名，已由 PR #58 修复并经第二独立上下文复核）；六条 P2 仍开放。**M1 未发布**，可宣称与不可宣称的范围须按裁定执行 |
 | M2 · 增强能力 | **本地 SQLite 预览已交付** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 已关闭（SQLite 有界流式 Apply + Outbox）；[#14](https://github.com/haoyuehx/maskriver/issues/14) 本地 SQLite `m2-recovery-v1` 已实现并验收，并纳入 `v0.2.0-preview.1` 发布候选。MySQL/Windows/WAL 恢复、跨库映射与通用 exactly-once 仍不支持 |
 
@@ -18,7 +18,7 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 - **go-db**：真实 SQLite 与隔离 MySQL 8.0.46 的 Reader/Writer、元数据、typed 值、复合键分页、乐观写入和事务回滚。MySQL 业务适配器已实际运行 `TestMySQLAdapter`，不是仅有 Fixture smoke（PR #21/#30）。未验证其他 MySQL 版本和通过 CLI 的完整工作流。
 - **go-detect**：有界 13 类 China-first 规则与三态判断（PR #20）；默认采样下的真实世界准确率没有被独立证明，`UNKNOWN` 不可授权写入。
 - **go-mask**：5 种基础策略、并发安全内存映射、9 种中国格式约束替换（PR #24/#29），以及在 SQLite/MySQL 合成表的真实 SQL 组件集成（PR #30）。无持久映射、全局唯一性、未分配号码或匿名化保证。
-- **go-verify**：基于冻结 Plan 的 Schema、行数、双向主键与所选敏感列变化校验；两端有界分页，异常 fail-closed，主要测试为 fake Reader（PR #32/#33）。真实 SQLite CLI 的独立源快照验证已由 #9 覆盖；MySQL CLI 与独立 #11 验收仍待。
+- **go-verify**：基于冻结 Plan 的 Schema、行数、双向主键与所选敏感列变化校验；两端有界分页，异常 fail-closed，主要测试为 fake Reader（PR #32/#33）。真实 SQLite CLI 的独立源快照验证已由 #9 覆盖；MySQL 8.0.46 CLI 由 M3-2 补齐。
 
 ## M1-C：Issue #9 的交付顺序
 
@@ -74,11 +74,11 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 
 ## 不做的承诺
 
-当前只有 SQLite 多表合成数据库 CLI 的真实端到端路径，没有完整通用数据库 CLI、MySQL CLI、生产级 PII 识别准确率、全局匿名化、稳定公共 SDK、MySQL/Windows/WAL 断点恢复、通用 exactly-once 或高性能并发证明；本地 SQLite 恢复的范围见 2026-10-21 增量。项目只处理获得授权的隔离/合成数据；保持 `m1a-v1` 契约，任何变化必须经 Main 审核并记录证据。发布状态必须以功能与实际测试为依据，而不是 Issue 标记或 CI 配置是否存在。
+当前有 SQLite 多表与 MySQL 8.0.46 合成数据库 CLI 的真实端到端路径；没有 MySQL streaming/recovery、MySQL/Windows/WAL 断点恢复、完整通用数据库 CLI、生产级 PII 识别准确率、全局匿名化、稳定公共 SDK、通用 exactly-once 或高性能并发证明；本地 SQLite 恢复的范围见 2026-10-21 增量。项目只处理获得授权的隔离/合成数据；保持 `m1a-v1` 契约，任何变化必须经 Main 审核并记录证据。发布状态必须以功能与实际测试为依据，而不是 Issue 标记或 CI 配置是否存在。
 
 ## 2026-10-18 收尾增量
 
-#9 已交付 SQLite 多表 CLI、Ed25519 审批记录（整计划绑定、有效期、撤销）、驱动级 SQL Spy、静态安全门禁与批次故障/提交未知回归，证据见 [测试计划](test-plan.md)；早期单表收尾记录见 [2026-10-18 验收记录](m1-runner-acceptance.md)。`--strict` 仍是 inert 的（verify 忽略 `ValidateRequest.Strict`），MySQL CLI、断点恢复、exactly-once 与 #11 独立验收仍未完成；已接受 P2 见测试计划。#11 保持未验收，#13/#14 的阶段依赖不变。PR #36 的 Worker 组件已经合并，不能按本文件早期的“M2 未启动”重新开发。
+#9 已交付 SQLite 多表 CLI、Ed25519 审批记录（整计划绑定、有效期、撤销）、驱动级 SQL Spy、静态安全门禁与批次故障/提交未知回归，证据见 [测试计划](test-plan.md)；早期单表收尾记录见 [2026-10-18 验收记录](m1-runner-acceptance.md)。该历史时点 `--strict` 仍 inert；其后 M3-1 补齐 strict，M3-2 补齐 MySQL CLI；断点恢复、exactly-once 与其余边界仍未完成；已接受 P2 见测试计划。#11 保持未验收，#13/#14 的阶段依赖不变。PR #36 的 Worker 组件已经合并，不能按本文件早期的“M2 未启动”重新开发。
 
 > 上段是 2026-10-18 当日结论，作为历史记录保留不改写；其中“#11 保持未验收”已被下节裁定取代。
 
@@ -94,3 +94,9 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 M1 限定预览版已作为 **GitHub Pre-release** 发布：tag `v0.1.0-dev` → 提交 `f4aeff9103ad064f57f63846cf47de587bdabeea`，工件 `maskriver-m1-linux-amd64-f4aeff9.tar.gz`，存档 SHA-256 `cf06a7e47cb7b1c558651b36f5c2de958b6c90e76f7906f4d51fce679fecc76c`，已通过上传后重新下载核对。发行证据见 [M1 Limited Preview 发行证据](releases/m1-limited-preview-v0.1.0-dev.md)。
 
 该版本**不是**稳定版或生产就绪版本：MySQL CLI、MySQL/Windows/WAL 恢复、通用 exactly-once、真实断电 durability 与生产级检测准确率仍未验证；本地 SQLite 恢复见 2026-10-21 增量。
+
+## 2026-10-21/22 增量：M3-1 与 M3-2
+
+- **M3-1 已合并 `cc178aa`**：strict 全量+适配器完整性检查、Writer 非 NULL→NULL 拒绝、审批时钟偏差对齐；`v0.2.1-preview` 已发布。
+- **M3-2 已实现并进入合并评审**：MySQL 8.0.46 CLI `Scan→Preview→Approve→Apply→Validate`，真实隔离 CI E2E；MySQL streaming/recovery 明确拒绝。MySQL 恢复仍无协议，不得宣称支持。
+- M3-3/M3-4/M3-5/M3-6 仍按各自 Issue 验收，F1/生产准确率、跨平台 streaming/recovery 与稳定版门禁不得由本增量推断完成。

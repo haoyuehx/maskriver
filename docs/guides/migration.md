@@ -10,6 +10,6 @@ Changes to account for:
   `RowLimit` is refused in strict mode.
 - Direct `internal/db` Writer callers can no longer replace a non-NULL value with
   NULL.
-- MySQL strict is not available (fails closed); MySQL CLI/recovery remain
-  unsupported.
+- MySQL CLI is available with `--dialect mysql` and two DSNs. MySQL strict is
+  implemented; MySQL streaming/recovery remains unsupported and is refused.
 - Windows/macOS streaming/recovery remain unsupported.
