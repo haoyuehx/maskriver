@@ -15,9 +15,8 @@ incomplete coverage into PASS.
 The MySQL CLI implements Scan/Preview/Approve/Apply/Validate with two DSNs and
 the shared logical schema described in [issue86-mysql-cli.md](../design/issue86-mysql-cli.md).
 Plan binds source content by hashing every row of every planned table because a
-MySQL server has no single snapshot file. Strict validation uses all-row
-`CHECK TABLE` plus explicit orphan scans for every FK touching the planned
-table. Streaming/outbox/recovery remain SQLite-only and the CLI refuses them for
+MySQL server has no single snapshot file. Strict validation uses `CHECK TABLE ... QUICK` status rows plus explicit
+orphan scans for every visible FK touching the planned table. Streaming/outbox/recovery remain SQLite-only and the CLI refuses them for
 MySQL; no MySQL recovery protocol is claimed. Acceptance is the real
 `TestMySQLCLIWorkflow` in the isolated MySQL 8.0.46 CI harness, not adapter-only
 tests.

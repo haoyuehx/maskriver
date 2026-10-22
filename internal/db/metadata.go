@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 
 	"github.com/haoyuehx/maskriver/pkg/contracts"
@@ -408,7 +409,11 @@ func (a *adapter) mysqlDescribe(ctx context.Context, ref contracts.TableRef) (co
 		}
 		fk := fkMap[name]
 		if fk == nil {
-			fk = &contracts.ForeignKey{Target: contracts.TableRef{Database: a.dataset, Schema: targetSchema, Table: targetTable}, OnUpdate: onUpdate, OnDelete: onDelete}
+			logicalSchema := targetSchema
+			if targetSchema == a.schema {
+				logicalSchema = ref.Schema
+			}
+			fk = &contracts.ForeignKey{Target: contracts.TableRef{Database: a.dataset, Schema: logicalSchema, Table: targetTable}, OnUpdate: onUpdate, OnDelete: onDelete}
 			fkMap[name] = fk
 			fkOrder = append(fkOrder, name)
 		}
@@ -511,10 +516,12 @@ func sqlType(d contracts.Dialect, native string, unsigned bool) (contracts.Type,
 }
 
 func dbErrorOrCategory(err error) error {
-	if err == contracts.ErrUnsupported || err == contracts.ErrInvalid ||
-		err == contracts.ErrDatabase || err == contracts.ErrUnsafe ||
-		err == contracts.ErrConflict || err == contracts.ErrIncomplete {
-		return err
+	for _, category := range []error{contracts.ErrUnsupported, contracts.ErrInvalid,
+		contracts.ErrDatabase, contracts.ErrUnsafe, contracts.ErrConflict,
+		contracts.ErrIncomplete} {
+		if errors.Is(err, category) {
+			return err
+		}
 	}
 	return dbError(err)
 }

@@ -139,3 +139,31 @@ func unquoteSQLToken(token string) string {
 	}
 	return token
 }
+
+// ServerIdentity reports a stable identity for the connected MySQL server and
+// database. It exists because DSN text can alias one physical database (unix
+// vs tcp, localhost vs 127.0.0.1, path spellings, case folding). The caller
+// compares both sides after connecting and refuses the same identity.
+func (a *adapter) ServerIdentity(ctx context.Context) (string, error) {
+	if err := a.check(ctx); err != nil {
+		return "", err
+	}
+	if a.dialect != contracts.MySQL {
+		return "", contracts.ErrUnsupported
+	}
+	var uuid, database string
+	var lowerCase int
+	if err := a.db.QueryRowContext(ctx,
+		"SELECT @@server_uuid, DATABASE(), @@lower_case_table_names").
+		Scan(&uuid, &database, &lowerCase); err != nil {
+		return "", dbError(err)
+	}
+	uuid = strings.TrimSpace(uuid)
+	if uuid == "" || database == "" {
+		return "", contracts.ErrIncomplete
+	}
+	if lowerCase != 0 {
+		database = strings.ToLower(database)
+	}
+	return uuid + "\x00" + database, nil
+}

@@ -188,7 +188,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if err := cfg.Validate(); err != nil {
 		return fail(stderr, 2)
 	}
-	if cfg.Dialect == contracts.MySQL && (streaming || resume || command == "status") {
+	if cfg.Dialect == contracts.MySQL && (streaming || resume) {
 		return fail(stderr, 2) // MySQL streaming/recovery has no approved protocol
 	}
 	cfg.Strategy = contracts.StrategyRef{ID: strategy, Version: "1"}
@@ -213,9 +213,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	// trust file or reviewer key is a configuration error, not an operation
 	// refusal, so it exits 2 without echoing a path.
 	if reviewCommand {
-		if cfg.Dialect == contracts.MySQL && streaming {
-			return fail(stderr, 2) // m2-stream-v1 is SQLite-only
-		}
 		if trustFile == "" || historyDir == "" || reviewerKeyID == "" || reviewerKeyFile == "" || keyID == "" {
 			return fail(stderr, 2)
 		}

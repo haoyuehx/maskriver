@@ -54,8 +54,14 @@ Limits, stated explicitly:
   isolation mechanism. The source must still be a quiescent, authorized copy or
   dedicated database; concurrent writers between planning steps can make the
   plan stale, in which case apply/validate fail closed on value/count drift.
-- `TargetID` hashes a credential-stripped target DSN, so password rotation does
-  not invalidate an approval and the target database identity is still bound.
+- `TargetID` hashes only the normalized target `Net`/`Addr`/database name, not
+  credentials, timeouts, TLS or user, so credential rotation does not invalidate
+  an approval. It is still a textual target binding; the live identity gate above
+  prevents opening the same physical database on both sides.
+- Pages are read in autocommit, not inside a `WITH CONSISTENT SNAPSHOT`
+  transaction, so a concurrent writer can make the digest a mix of states. The
+  workflow is only for isolated/quiescent authorized copies; apply's expected
+  value checks and validate fail closed on drift.
 
 ## Write preflight and strict validation
 
@@ -70,13 +76,16 @@ The existing runner gates remain:
 For MySQL strict validation:
 
 - every `CHECK TABLE ... QUICK` row must be `status`/`OK`; an empty result,
-  warning, note or error fails closed;
+  warning, note or error fails closed. `QUICK` does not verify every row/index,
+  CHECK-constraint expressions or duplicate UNIQUE values;
 - `@@SESSION.foreign_key_checks` must be 1;
-- every foreign key touching the planned table (as child or parent) is checked
-  with an explicit orphan query; any orphan or permission/query failure fails
-  closed.
+- every foreign key visible to the connected account and touching the planned
+  table (as child or parent) is checked with an early-exit orphan query; any
+  orphan or permission/query failure fails closed. A foreign key the account
+  cannot see cannot be checked: grant metadata visibility for the whole
+  relevant schema, or treat strict MySQL validation as scoped to visible FKs.
 
-This validates the planned table's storage and all FKs touching it. It is not a
+This validates the planned table's storage and all visible FKs touching it. It is not a
 whole-server consistency check, MySQL replication verification, or a substitute
 for application constraints.
 

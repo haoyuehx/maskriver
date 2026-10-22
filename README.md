@@ -21,10 +21,10 @@ go vet ./...
 go build -o bin/maskriver ./cmd/maskriver
 ```
 
-`scan`、`mask`、`validate`、`approve`、`revoke` 支持明确限定的 **SQLite 多表** 与 **MySQL 8.0.46** 合成测试工作流。SQLite 必须提供两个各自存在且不同的绝对路径文件；MySQL 使用 `--dialect mysql` 和两个指向不同数据库的 DSN（同一 server/database 组合拒绝），默认只读。MySQL streaming/recovery 未实现并被明确拒绝；非法配置或未获批准的写入一律拒绝。
+`scan`、`mask`、`validate`、`approve`、`revoke` 支持明确限定的 **SQLite 多表** 与 **MySQL 8.0.46** 合成测试工作流。SQLite 必须提供两个各自存在且不同的绝对路径文件；MySQL 使用 `--dialect mysql` 和两个指向不同数据库的 DSN（连接后按 `@@server_uuid`+`DATABASE()` 拒绝同一物理库，包括 unix/tcp 或地址别名），默认只读。MySQL streaming/recovery 未实现并被明确拒绝；非法配置或未获批准的写入一律拒绝。
 `mask` 默认 Dry Run。写入需要三者同时成立：`--approved`（操作者声明）、`--apply`（写意图）和一条由 `approve` 独立签发并绑定当前 Plan 的 Ed25519 审批记录；前两者单独或组合都不充分。`apply` 只从部署预置 trust file 加载可信公钥，不接收审核私钥；`revoke` 撤销已有记录。Preview 由驱动级 SQL Spy 与文件树 SHA256 证明零写入。
 
-严格的 `validate --strict` 现在要求全量扫描和适配器完整性检查：SQLite 使用 `quick_check` + 数据库级 FK 检查，MySQL 8.0.46 使用全行 `CHECK TABLE` + 触及计划表的 FK orphan 检查，任一失败即 fail closed。
+严格的 `validate --strict` 现在要求全量扫描和适配器完整性检查：SQLite 使用 `quick_check` + 数据库级 FK 检查，MySQL 8.0.46 使用全行解析的 `CHECK TABLE ... QUICK` + 触及计划表的 FK orphan 检查，任一失败即 fail closed。MySQL strict 不校验 CHECK 约束表达式、唯一重复或未触及表，也不是整库/复制一致性检查。
 
 可选的 M2 路径使用 `--streaming`、独立 `--budget-file` 和同事务 Outbox 回执。恢复需要先显式 `init-outbox`、`init-recovery`，然后以 `--streaming --apply --resume --run-id <32-hex>` 继续；`status` 只读。已提交批次通过确定性重算校验后跳过，未提交后缀必须仍等于源值；目标外部修改、错误 Key、快照漂移和 `commit_unknown` 均 fail closed。恢复不改变“批次事务不等于整库原子性”的既有边界。
 可复现路径见 `cmd/maskriver/approval_e2e_test.go` 的 `TestE2EPlanIssueNewProcessApply`（子进程签发与加载），以及 `cmd/maskriver/main_test.go` 的 `TestCLIMultiTableWorkflow` 与 `TestCLIRealSQLiteWorkflow`。

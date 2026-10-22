@@ -73,7 +73,43 @@ func Open(ctx context.Context, cfg config.Runtime, key contracts.Value) (*Engine
 		_ = source.Close()
 		return nil, err
 	}
+	if sourceOpts.Dialect == contracts.MySQL {
+		if err := distinctMySQL(ctx, source, target); err != nil {
+			_ = source.Close()
+			_ = target.Close()
+			return nil, err
+		}
+	}
 	return &Engine{cfg: cfg, source: source, target: target, key: key, openWriter: db.OpenWriter}, nil
+}
+
+// distinctMySQL compares live server identity and database name. Textual DSN
+// comparison in config is only a fast path; aliases of one database must be
+// refused here, after connecting and before any plan or write.
+func distinctMySQL(ctx context.Context, source, target contracts.Reader) error {
+	type identityReader interface {
+		ServerIdentity(context.Context) (string, error)
+	}
+	src, ok := source.(identityReader)
+	if !ok {
+		return contracts.ErrUnsupported
+	}
+	dst, ok := target.(identityReader)
+	if !ok {
+		return contracts.ErrUnsupported
+	}
+	sourceID, err := src.ServerIdentity(ctx)
+	if err != nil {
+		return err
+	}
+	targetID, err := dst.ServerIdentity(ctx)
+	if err != nil {
+		return err
+	}
+	if sourceID == targetID {
+		return contracts.ErrUnsafe
+	}
+	return nil
 }
 
 func (e *Engine) Close() error {
@@ -417,6 +453,10 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 		return empty, contracts.ErrInvalid
 	}
 	configDigest := hashString(string(configJSON))
+	targetIdentity, err := e.cfg.TargetIdentity()
+	if err != nil {
+		return empty, err
+	}
 	p := contracts.Plan{
 		Revision:         contracts.APIRevision,
 		SourceSnapshotID: digest,
@@ -424,7 +464,7 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 		// proves which file Apply would write and nothing about that file's
 		// state. Target equivalence is proven by the mandatory full dry run, not
 		// by this digest.
-		TargetID:     hashString(e.cfg.TargetIdentity()),
+		TargetID:     hashString(targetIdentity),
 		SchemaDigest: schemaDigest, ConfigDigest: configDigest,
 		// Derived from the gates above, not assumed: reaching this point means
 		// every declared scope was untruncated and Sensitive.

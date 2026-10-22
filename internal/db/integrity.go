@@ -152,16 +152,16 @@ func (r *reader) mysqlForeignKeyOrphans(ctx context.Context, ref contracts.Table
 			join = append(join, "c."+r.quote(part.column)+" = p."+r.quote(part.targetColumn))
 			nonNull = append(nonNull, "c."+r.quote(part.column)+" IS NOT NULL")
 		}
-		query := "SELECT COUNT(*) FROM " + r.quote(parts[0].schema) + "." + r.quote(parts[0].table) +
+		query := "SELECT EXISTS (SELECT 1 FROM " + r.quote(parts[0].schema) + "." + r.quote(parts[0].table) +
 			" c LEFT JOIN " + r.quote(parts[0].targetSchema) + "." + r.quote(parts[0].targetTable) +
 			" p ON " + strings.Join(join, " AND ") +
 			" WHERE " + strings.Join(nonNull, " AND ") +
-			" AND p." + r.quote(parts[0].targetColumn) + " IS NULL"
-		var orphans int64
-		if err := r.db.QueryRowContext(ctx, query).Scan(&orphans); err != nil {
+			" AND p." + r.quote(parts[0].targetColumn) + " IS NULL LIMIT 1)"
+		var orphan int
+		if err := r.db.QueryRowContext(ctx, query).Scan(&orphan); err != nil {
 			return dbError(err)
 		}
-		if orphans != 0 {
+		if orphan != 0 {
 			return contracts.ErrConflict
 		}
 	}

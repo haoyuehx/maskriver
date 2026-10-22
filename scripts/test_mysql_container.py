@@ -75,10 +75,22 @@ def main():
         # Scan->Preview->Approve->Apply->Validate workflow against this exact
         # harness-owned, disposable Unix socket. A skip is not a passing
         # acceptance: CI additionally requires positive test evidence.
-        result = subprocess.run([
+        completed = subprocess.run([
             "go", "test", "-count=1", "-v", "./internal/testenv", "./internal/db", "./cmd/maskriver",
             "-run", "^(TestMySQLFixture|TestMySQLAdapter|TestMySQLCLIWorkflow)$",
-        ], cwd=ROOT, env=env).returncode
+        ], cwd=ROOT, env=env, capture_output=True, text=True)
+        sys.stdout.write(completed.stdout)
+        sys.stderr.write(completed.stderr)
+        required = [
+            "--- PASS: TestMySQLFixture",
+            "--- PASS: TestMySQLAdapter",
+            "--- PASS: TestMySQLCLIWorkflow",
+        ]
+        result = completed.returncode
+        if result == 0 and (any(name not in completed.stdout for name in required) or
+                            "--- SKIP:" in completed.stdout):
+            print("FAILED: acceptance tests did not produce positive PASS evidence")
+            result = 1
     finally:
         with (directory / "container.log").open("w") as log:
             subprocess.run(["docker", "logs", name], stdout=log, stderr=subprocess.STDOUT)

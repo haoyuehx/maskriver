@@ -138,6 +138,11 @@ func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool, co
 		if cfg.MultiStatements || cfg.AllowAllFiles || cfg.AllowCleartextPasswords {
 			return nil, contracts.ErrUnsafe
 		}
+		for key, value := range cfg.Params {
+			if unsafeMySQLParam(key, value) {
+				return nil, contracts.ErrUnsafe
+			}
+		}
 		cfg.ParseTime = false
 		if readOnly {
 			// The driver applies arbitrary DSN system-variable parameters
@@ -187,6 +192,19 @@ func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool, co
 	}
 	return &adapter{db: db, dialect: opts.Dialect, dataset: opts.DatasetID,
 		schema: physical, schemas: schemas}, nil
+}
+
+func unsafeMySQLParam(key, value string) bool {
+	if strings.ContainsAny(value, ",;") {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "transaction_read_only", "tx_read_only", "foreign_key_checks",
+		"sql_mode", "init_connect", "autocommit", "read_only",
+		"super_read_only", "transaction_isolation", "tx_isolation":
+		return true
+	}
+	return false
 }
 
 func sqliteDSN(input string, readOnly bool) (string, error) {

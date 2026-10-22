@@ -13,7 +13,7 @@
 
 - Strict full-scan refusal: PASS (`verify` tests).
 - Strict integrity capability/failure: PASS for SQLite (`verify` + database-wide FK test).
-- MySQL strict integrity: implemented in M3-2 as all-row CHECK TABLE plus FK orphan scans; verified on 8.0.46 CI. Not a whole-server consistency check.
+- MySQL strict integrity: implemented in M3-2 as CHECK TABLE ... QUICK status rows plus visible-FK orphan scans; verified on 8.0.46 CI. Not a whole-server consistency check.
 - Writer non-NULL -> NULL refusal: PASS (`TestWriteTxRefusesNonNullToNullReplacement`).
 - Approval clock skew aligned: PASS (runner tests + 5-minute bound).
 - Independent reviews: pending.

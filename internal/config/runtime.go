@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -126,18 +127,35 @@ func mysqlConfig(dsn string) (*mysql.Config, error) {
 	if cfg.MultiStatements || cfg.AllowAllFiles || cfg.AllowCleartextPasswords {
 		return nil, contracts.ErrUnsafe
 	}
+	for key, value := range cfg.Params {
+		if unsafeMySQLParam(key, value) {
+			return nil, contracts.ErrUnsafe
+		}
+	}
 	return cfg, nil
+}
+
+// unsafeMySQLParam rejects DSN parameters that can disable the session safety
+// properties this tool relies on, or that can break out of the driver's
+// comma-joined SET statement. The driver applies Params as session variables,
+// so an arbitrary key is not merely a connection option.
+func unsafeMySQLParam(key, value string) bool {
+	if strings.ContainsAny(value, ",;") {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "transaction_read_only", "tx_read_only", "foreign_key_checks",
+		"sql_mode", "init_connect", "autocommit", "read_only",
+		"super_read_only", "transaction_isolation", "tx_isolation":
+		return true
+	}
+	return false
 }
 
 // SchemaName is the logical schema carried in TableRefs. SQLite uses "main";
 // MySQL uses one logical name for both snapshots even when the physical
 // database names differ, so the frozen TableRef stays comparable across sides.
-func (c Runtime) SchemaName() string {
-	if c.dialect() == contracts.MySQL {
-		return "main"
-	}
-	return "main"
-}
+func (c Runtime) SchemaName() string { return "main" }
 
 // DialectName reports the effective dialect for runner-specific gates.
 func (c Runtime) DialectName() contracts.Dialect { return c.dialect() }
@@ -168,14 +186,14 @@ func (c Runtime) DatabaseOptions(source bool) (contracts.DatabaseOptions, error)
 // credentials. SQLite keeps the existing absolute path. MySQL strips the
 // password and session-only parameters so rotating a password does not silently
 // change which database a plan approved.
-func (c Runtime) TargetIdentity() string {
+func (c Runtime) TargetIdentity() (string, error) {
 	if c.dialect() != contracts.MySQL {
-		return c.Target
+		return c.Target, nil
 	}
 	cfg, err := mysqlConfig(c.Target)
 	if err != nil {
-		return c.Target
+		return "", err
 	}
-	cfg.Passwd = ""
-	return cfg.FormatDSN()
+	// Bind only the physical target, not credentials, timeouts or TLS options.
+	return (&mysql.Config{Net: cfg.Net, Addr: cfg.Addr, DBName: cfg.DBName}).FormatDSN(), nil
 }

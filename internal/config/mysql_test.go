@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/haoyuehx/maskriver/pkg/contracts"
@@ -37,6 +38,10 @@ func TestMySQLRuntimeRefusesUnsafeDSN(t *testing.T) {
 		"multi statements": "root@tcp(127.0.0.1:3306)/source_db?multiStatements=true",
 		"local infile":     "root@tcp(127.0.0.1:3306)/source_db?allowAllFiles=true",
 		"cleartext":        "root@tcp(127.0.0.1:3306)/source_db?allowCleartextPasswords=true",
+		"fk off":           "root@tcp(127.0.0.1:3306)/source_db?foreign_key_checks=0",
+		"read-only off":    "root@tcp(127.0.0.1:3306)/source_db?tx_read_only=0",
+		"sql mode":         "root@tcp(127.0.0.1:3306)/source_db?sql_mode=",
+		"set injection":    "root@tcp(127.0.0.1:3306)/source_db?time_zone=UTC,foreign_key_checks=0",
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := mysqlRuntime(dsn, "root@tcp(127.0.0.1:3306)/target_db")
@@ -62,10 +67,18 @@ func TestMySQLDatabaseOptionsUseLogicalSchema(t *testing.T) {
 	// TargetIdentity is stable across password rotation, so an approval is not
 	// invalidated merely because a credential changed.
 	rotated := mysqlRuntime(source, "root:NEWPASSWORD@unix(/tmp/test.sock)/target_db")
-	if cfg.TargetIdentity() != rotated.TargetIdentity() {
+	cfgID, err := cfg.TargetIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotatedID, err := rotated.TargetIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfgID != rotatedID {
 		t.Fatal("target identity depended on the password")
 	}
-	if cfg.TargetIdentity() == cfg.Source {
+	if cfgID == cfg.Source || strings.Contains(cfgID, "NEWPASSWORD") {
 		t.Fatal("target identity exposed the raw DSN")
 	}
 }
