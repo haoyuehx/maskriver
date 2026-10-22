@@ -28,6 +28,15 @@ export default function WorkflowDemo() {
                 aria-controls={`workflow-panel-${item.id}`}
                 className={`workflow-tab ${active === index ? 'is-active' : ''}`}
                 onClick={() => setActive(index)}
+                tabIndex={active === index ? 0 : -1}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowRight' || event.key === 'ArrowLeft' || event.key === 'Home' || event.key === 'End') {
+                    event.preventDefault();
+                    const next = event.key === 'Home' ? 0 : event.key === 'End' ? steps.length - 1 : (active + (event.key === 'ArrowRight' ? 1 : -1) + steps.length) % steps.length;
+                    setActive(next);
+                    document.getElementById(`workflow-tab-${steps[next].id}`)?.focus();
+                  }
+                }}
                 type="button"
               >
                 <span className="tab-index">0{index + 1}</span>

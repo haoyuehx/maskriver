@@ -75,7 +75,7 @@ export default function RecoveryDemo() {
           </div>
           <p className="recovery-note">{copy.note}</p>
         </div>
-        <div className="batch-board" aria-label="批次恢复状态">
+        <div className="batch-board" role="group" aria-label="批次恢复状态">
           {[0, 1, 2, 3, 4, 5].map((index) => {
             const isCommitted = index < committed;
             const isNext = recovering && index === committed;

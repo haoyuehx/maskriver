@@ -17,7 +17,7 @@ export default function App() {
     <div className="site">
       <a className="skip-link" href="#main">跳到主要内容</a>
       <Navigation />
-      <main id="main">
+      <main id="main" tabIndex={-1}>
         <Hero />
         <VideoPlayer />
         <ProblemSolution />

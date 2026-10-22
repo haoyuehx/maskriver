@@ -30,7 +30,9 @@ export default function VideoPlayer() {
   const [duration, setDuration] = useState(260);
   const [volume, setVolume] = useState(0.85);
   const [muted, setMuted] = useState(false);
-  const [captions, setCaptions] = useState(false);
+  const [captions, setCaptions] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 560px)').matches,
+  );
   const [fullscreen, setFullscreen] = useState(false);
   const [error, setError] = useState(false);
 
@@ -101,10 +103,13 @@ export default function VideoPlayer() {
     const stage = stageRef.current;
     if (!stage) return;
     try {
+      const video = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
       if (document.fullscreenElement) {
         await document.exitFullscreen();
-      } else {
+      } else if (stage.requestFullscreen) {
         await stage.requestFullscreen();
+      } else if (video?.webkitEnterFullscreen) {
+        video.webkitEnterFullscreen();
       }
     } catch {
       setFullscreen(false);
@@ -124,7 +129,7 @@ export default function VideoPlayer() {
         <div className="video-stage">
           {!loaded && (
             <button type="button" className="video-poster" onClick={loadAndPlay} aria-label="播放在线演示视频">
-              <img src={POSTER_URL} alt="MaskRiver 演示视频封面：安全、可验证、可恢复的数据脱敏" />
+              <img src={POSTER_URL} alt="MaskRiver 演示视频封面：数据库节点与数据流" loading="lazy" decoding="async" />
               <span className="poster-vignette" aria-hidden="true" />
               <span className="poster-copy">
                 <span className="poster-label">MASK RIVER · PRODUCT FILM</span>
@@ -181,7 +186,7 @@ export default function VideoPlayer() {
             </div>
           )}
           {loaded && (
-            <div className="video-controls" aria-label="视频控制栏">
+            <div className="video-controls" role="group" aria-label="视频控制栏">
               <button type="button" onClick={togglePlay} aria-label={playing ? '暂停' : '播放'}>
                 {playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
               </button>
@@ -195,6 +200,7 @@ export default function VideoPlayer() {
                 value={Math.min(current, duration || 260)}
                 onChange={(event) => seek(Number(event.target.value))}
                 aria-label="视频进度"
+                aria-valuetext={`${formatTime(current)} / ${formatTime(duration)}`}
                 style={{ '--progress': `${progress}%` } as React.CSSProperties}
               />
               <button type="button" onClick={toggleMute} aria-label={muted ? '取消静音' : '静音'}>

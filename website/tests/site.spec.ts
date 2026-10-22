@@ -50,8 +50,11 @@ test('mobile menu opens, closes and navigates', async ({ page, viewport }) => {
   await expect(page.getByRole('navigation', { name: '移动端导航' })).toHaveCount(0);
 });
 
-test('workflow tabs switch the five steps', async ({ page }) => {
+test('workflow tabs switch the five steps with ArrowRight', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('tab', { name: 'Scan' }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-selected', 'true');
   for (const [label, text] of [
     ['Scan', '识别敏感字段'],
     ['Preview', '只读预览计划'],
@@ -75,6 +78,14 @@ test('recovery demo follows interrupt, recover, validate and reset', async ({ pa
   await expect(page.getByText('VALIDATION PASSED')).toBeVisible({ timeout: 5000 });
   await page.getByRole('button', { name: '重置' }).click();
   await expect(page.getByText('APPLY · 批次事务提交')).toBeVisible();
+});
+
+test('architecture scroll region is keyboard focusable and labelled', async ({ page }) => {
+  await page.goto('/');
+  const region = page.getByRole('region', { name: /架构图/ });
+  await expect(region).toHaveAttribute('tabindex', '0');
+  await region.focus();
+  await expect(region).toBeFocused();
 });
 
 test('video poster loads the real MP4 and playback advances', async ({ page }) => {

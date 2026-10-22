@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Github, Menu, X } from 'lucide-react';
 import Logo from './Logo';
 import { GITHUB, nav } from '../data/content';
 
 export default function Navigation() {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLElement>(null);
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -20,6 +21,8 @@ export default function Navigation() {
       if (event.key === 'Escape') setOpen(false);
     };
     window.addEventListener('keydown', onKey);
+    const first = menuRef.current?.querySelector<HTMLAnchorElement>('a');
+    first?.focus();
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
@@ -55,7 +58,7 @@ export default function Navigation() {
         </div>
       </div>
       {open && (
-        <nav id="mobile-menu" className="mobile-menu" aria-label="移动端导航">
+        <nav id="mobile-menu" className="mobile-menu" aria-label="移动端导航" ref={menuRef}>
           {nav.map((item) => (
             <a key={item.href} href={item.href} onClick={() => setOpen(false)}>
               {item.label}

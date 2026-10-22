@@ -36,9 +36,10 @@ Vite `base` 为 `/maskriver/`，适用于 `https://haoyuehx.github.io/maskriver/
 工作流：`.github/workflows/website.yml`
 
 - PR：构建、类型检查、ESLint、Playwright 测试，不上传部署。
-- push 到 `feat/showcase-website` 或 `main`：在测试通过后上传 Pages artifact 并部署。
+- push 到 `main`：在测试通过后上传 Pages artifact 并部署；功能分支只跑构建和浏览器测试，不发布生产 Pages。
 - 部署使用官方 `actions/upload-pages-artifact` + `actions/deploy-pages`，不修改 Go CI。
-- 需要仓库管理员在 Settings → Pages 将 Source 设置为 **GitHub Actions**。若未启用，部署 job 会失败，不能声称已上线。
+- 需要仓库管理员在 Settings → Pages 将 Source 设置为 **GitHub Actions**，并允许 `main` 部署。若未启用，部署 job 会失败，不能声称已上线。
+- `deploy` job 有独立的 `pages: write` / `id-token: write` 权限、`github-pages` 环境、不可取消的并发组，并在部署后执行 HTTP/Range/OG smoke test。
 
 ## 部署后检查
 

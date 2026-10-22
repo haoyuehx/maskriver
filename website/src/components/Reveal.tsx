@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-type Props = { children: ReactNode; className?: string; delay?: number };
+type Props = { children: ReactNode; className?: string; delay?: number; tabIndex?: number; role?: string; 'aria-label'?: string };
 
-export default function Reveal({ children, className = '', delay = 0 }: Props) {
+export default function Reveal({ children, className = '', delay = 0, ...rest }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -29,6 +29,7 @@ export default function Reveal({ children, className = '', delay = 0 }: Props) {
       ref={ref}
       className={`reveal ${shown ? 'is-visible' : ''} ${className}`}
       style={{ '--reveal-delay': `${delay}ms` } as React.CSSProperties}
+      {...rest}
     >
       {children}
     </div>

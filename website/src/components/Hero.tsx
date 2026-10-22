@@ -54,7 +54,7 @@ function HeroVisual() {
     ['003', '赵明', 'zhao@example.test', '136****9032', '杭州'],
   ];
   return (
-    <div className="hero-visual" aria-label="数据从源副本经过 MaskRiver 流程进入安全目标副本的示意图">
+    <div className="hero-visual" role="img" aria-label="数据从源副本经过 MaskRiver 流程进入安全目标副本的示意图">
       <div className="visual-topline">
         <span className="visual-label">SYNTHETIC DATA FLOW</span>
         <span className="live-indicator">

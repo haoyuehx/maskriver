@@ -31,7 +31,7 @@ export default function FeatureGrid() {
               </div>
               <h3>{feature.title}</h3>
               <p>{feature.text}</p>
-              <span className="feature-index">0{index + 1}</span>
+              <span className="feature-index" aria-hidden="true">0{index + 1}</span>
             </Reveal>
           );
         })}

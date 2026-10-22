@@ -347,7 +347,7 @@ video::cue { background: #04101ce8; color: #fff; font-family: var(--sans); font-
 .validation-banner { display: flex; align-items: center; gap: 7px; margin-top: 16px; padding: 10px 12px; border-radius: 7px; background: #58e0ba12; border: 1px solid #58e0ba44; color: var(--teal); font-family: var(--mono); font-size: 10px; }
 
 /* Features */
-.feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+.feature-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
 .feature-card { position: relative; border: 1px solid var(--line); border-radius: 18px; padding: 27px; background: linear-gradient(145deg, #0d2032dd, #071522dd); overflow: hidden; min-height: 250px; transition: border-color .2s, transform .2s; }
 .feature-card:hover { border-color: var(--line-bright); transform: translateY(-3px); }
 .feature-wide { grid-column: span 2; }
@@ -356,7 +356,7 @@ video::cue { background: #04101ce8; color: #fff; font-family: var(--sans); font-
 .feature-tag { font-family: var(--mono); font-size: 9px; color: var(--muted-2); border: 1px solid var(--line); border-radius: 999px; padding: 5px 8px; }
 .feature-card h3 { margin: 23px 0 9px; font-size: 20px; letter-spacing: -.025em; }
 .feature-card p { margin: 0; max-width: 520px; color: var(--muted); font-size: 13px; line-height: 1.8; }
-.feature-index { position: absolute; right: 23px; bottom: 18px; font-family: var(--mono); font-size: 9px; color: #2b5874; }
+.feature-index { position: absolute; right: 23px; bottom: 18px; font-family: var(--mono); font-size: 9px; color: #557a92; }
 .feature-wide .feature-icon { color: var(--purple); border-color: #b49cff3d; background: #b49cff10; }
 
 /* Pipeline */
@@ -420,6 +420,8 @@ video::cue { background: #04101ce8; color: #fff; font-family: var(--sans); font-
 .architecture-frame { border: 1px solid var(--line); border-radius: 24px; background: #071522c9; padding: 17px 22px 14px; }
 .architecture-topline { display: flex; justify-content: space-between; gap: 12px; color: var(--muted-2); font-family: var(--mono); font-size: 8.5px; letter-spacing: .1em; padding: 5px 0 12px; }
 .architecture-svg { width: 100%; height: auto; }
+.scroll-hint { display: none; color: var(--cyan); font-family: var(--mono); font-size: 9px; letter-spacing: .08em; padding: 8px 2px 2px; }
+.architecture-frame:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
 .arch-node text { font-family: var(--sans); }
 .architecture-legend { display: flex; flex-wrap: wrap; gap: 19px; border-top: 1px solid var(--line); padding: 14px 4px 2px; color: var(--muted-2); font-size: 9.5px; }
 .architecture-legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -525,9 +527,8 @@ video::cue { background: #04101ce8; color: #fff; font-family: var(--sans); font-
   .volume-slider { display: none; }
   .video-notes { gap: 9px 15px; }
   .video-notes a { margin-left: 0; }
-  .workflow-tabs { grid-template-columns: repeat(5, minmax(92px, 1fr)); overflow-x: auto; scrollbar-width: none; }
-  .workflow-tabs::-webkit-scrollbar { display: none; }
-  .workflow-tab { padding: 14px 11px; font-size: 10px; gap: 5px; }
+  .workflow-tabs { grid-template-columns: repeat(5, 1fr); overflow: visible; }
+  .workflow-tab { padding: 14px 8px; font-size: 10px; gap: 5px; justify-content: center; }
   .tab-index { display: none; }
   .workflow-panel { grid-template-columns: 1fr; padding: 25px; }
   .workflow-panel h3 { font-size: 27px; }
@@ -542,6 +543,7 @@ video::cue { background: #04101ce8; color: #fff; font-family: var(--sans); font-
   .architecture-frame { padding: 13px; }
   .architecture-svg { min-width: 650px; }
   .architecture-frame { overflow-x: auto; }
+  .scroll-hint { display: block; }
   .start-card { padding: 28px; }
   .footer-inner { grid-template-columns: 1fr 1fr; gap: 35px; }
   .footer-brand { grid-column: span 2; }
@@ -582,6 +584,9 @@ video::cue { background: #04101ce8; color: #fff; font-family: var(--sans); font-
   .pipeline-node > span:not(.pipeline-icon):not(.node-meter) { grid-column: 2; }
   .node-meter { grid-column: 2 / 4; margin-top: 10px; }
   .pipeline-stats { grid-template-columns: 1fr 1fr; }
+  .workflow-tabs { grid-template-columns: repeat(5, 1fr); }
+  .workflow-tab { flex-direction: column; padding: 10px 2px; font-size: 8.5px; gap: 3px; }
+  .workflow-tab svg { width: 15px; height: 15px; }
   .batch-card { padding-top: 94px; }
   .batch-board { gap: 6px; }
   .batch-label { font-size: 7.5px; }

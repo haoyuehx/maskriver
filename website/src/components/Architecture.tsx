@@ -32,11 +32,12 @@ export default function Architecture() {
         <h2 id="architecture-title">单机、可审计的处理链，而不是想象中的云平台</h2>
         <p>从 CLI 配置到检测、计划、审批、执行、适配器与验证；Streaming 和本地恢复只在支持的 SQLite 范围内增量存在。</p>
       </div>
-      <Reveal className="architecture-frame">
+      <Reveal className="architecture-frame" tabIndex={0} role="region" aria-label="MaskRiver 架构图，可横向滚动">
         <div className="architecture-topline">
           <span>LOCAL / SINGLE PROCESS</span>
           <span className="mono">m1a-v1 · m2-stream-v1 · m2-recovery-v1</span>
         </div>
+        <span className="scroll-hint">← 横向滑动查看完整架构 →</span>
         <svg viewBox="0 0 960 470" role="img" aria-labelledby="arch-svg-title arch-svg-desc" className="architecture-svg">
           <title id="arch-svg-title">MaskRiver 架构图</title>
           <desc id="arch-svg-desc">CLI 与配置进入检测、计划与审批，然后由 Runner 协调脱敏、数据库适配器、事务 Outbox、验证与恢复。</desc>
