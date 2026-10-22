@@ -19,10 +19,10 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 | 共享 DTO/接口 `m1a-v1` | 已实现 | `pkg/contracts` + 契约测试；不是完整引擎 |
 | `database/sql` 驱动版本锁定 | 已实现 | `go.mod`/`go.sum`、database-drivers.md |
 | SQLite 合成环境 | 已实现 | `internal/testenv`、`tools/fixture`；业务 Reader/Writer、分页和事务测试由 #5/PR #21 交付，是否通过以最终 CI 为准 |
-| MySQL 隔离环境 | 已实现（隔离测试） | PR #30 在固定 MySQL 8.0.46 私有 socket 容器执行 TestMySQLFixture + TestMySQLAdapter；其他版本与完整 CLI 未验证 |
+| MySQL 隔离环境 | 已实现（隔离测试 + 真实 CLI） | 固定 MySQL 8.0.46 私有 socket 容器执行 TestMySQLFixture、TestMySQLAdapter 与真实 TestMySQLCLIWorkflow；其他 MySQL 版本仍未验证 |
 | 可选工作树工具 | 已实现（历史单机） | `scripts/check-native-worktree.mjs` 的旧预检，不是跨平台开发前置条件 |
 | 四人模块任务定义 | 已实现（文档） | parallel-tasks.md；独立克隆/分支/PR，业务组件仍待实现 |
-| 跨平台 CI | 部分实现 | Ubuntu/Windows 测试、格式、vet；Ubuntu race/MySQL fixture。配置不等于运行通过，以 PR checks 为准 |
+| 跨平台 CI | 已实现（非流式 M1） | Ubuntu/Windows/macOS 测试、格式、vet；Ubuntu race/MySQL fixture；Linux 交叉构建 darwin/windows/linux-arm64。streaming/recovery 仍仅 Linux |
 
 ## 数据库接入
 

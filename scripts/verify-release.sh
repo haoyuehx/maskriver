@@ -71,6 +71,26 @@ done
 [[ -d "$PKG/licenses" ]] || { echo "verify-release: missing licenses/ directory" >&2; exit 1; }
 [[ -x "$PKG/maskriver" ]] || { echo "verify-release: binary is not executable" >&2; exit 1; }
 
+# A v1+ stable package must not describe itself as a SQLite-only pre-release.
+if [[ "$VERSION" == 1.* ]]; then
+  grep -q "pre-release" "$PKG/README.md" && {
+    echo "verify-release: v$VERSION README still says pre-release" >&2
+    exit 1
+  }
+  grep -qi "mysql" "$PKG/README.md" || {
+    echo "verify-release: v$VERSION README does not document MySQL support" >&2
+    exit 1
+  }
+  grep -q "pre-release" "$PKG/BUILD-INFO.md" && {
+    echo "verify-release: v$VERSION BUILD-INFO still says pre-release" >&2
+    exit 1
+  }
+  grep -qi "mysql" "$PKG/BUILD-INFO.md" || {
+    echo "verify-release: v$VERSION BUILD-INFO does not document MySQL support" >&2
+    exit 1
+  }
+fi
+
 # No forbidden material.
 if find "$PKG" \( -name '.git' -o -name '.env*' -o -name '*.db' -o -name '*.sqlite*' \
      -o -name '*.key' -o -name '*.seed' -o -name 'id_ed25519*' -o -name '*.pem' \) -print -quit | grep -q .; then

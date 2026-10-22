@@ -36,7 +36,7 @@ import (
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
 
-const version = "0.2.1-preview"
+const version = "1.0.0"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 

@@ -7,7 +7,7 @@
 | M3-3 UX/docs | COMPLETE after merge: `help <command>`, examples, guide index, troubleshooting/operations runbooks |
 | M3-4 detection/masking evaluation | COMPLETE after merge: 345-case generated holdout (210 positive/135 negative) + 100 values for five masking formats; external/human adjudication still not claimed |
 | M3-5 cross-platform | COMPLETE after merge: Linux runtime+MySQL CI; Windows/macOS non-streaming M1 CI; Linux cross-builds; streaming/recovery unsupported |
-| M3-6 stable release | BLOCKED: v1.0.0 requirements not met; v0.2.1-preview only |
+| M3-6 stable release | RELEASE CANDIDATE: v1.0.0 PR; final CI/review/tag/asset verification pending |
 
 ## M3-1 detail
 
@@ -16,4 +16,4 @@
 - MySQL strict integrity: implemented in M3-2 as CHECK TABLE ... QUICK status rows plus visible-FK orphan scans; verified on 8.0.46 CI. Not a whole-server consistency check.
 - Writer non-NULL -> NULL refusal: PASS (`TestWriteTxRefusesNonNullToNullReplacement`).
 - Approval clock skew aligned: PASS (runner tests + 5-minute bound).
-- Independent reviews: pending.
+- Independent reviews: PASS (Architecture, Security, QA); records in `docs/reviews/m3-1-architecture.md`, `m3-1-security.md`, `m3-1-qa.md`.

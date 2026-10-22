@@ -54,7 +54,7 @@ jobs:
       - name: Race regression
         run: go test -race -count=1 ./internal/runner/... ./internal/mask/...
       - name: Fuzz worker ordering and encoding
-        run: go test -run '^$' -fuzz '^FuzzMaskBatchDeterminism$' -fuzztime=10s -parallel=2 ./internal/runner
+        run: go test -run '^$' -fuzz '^FuzzMaskBatchDeterminism$' -fuzztime=15s -parallel=2 ./internal/runner
       - name: Fuzz synthetic CN checksum invariants
         shell: bash
         run: |
