@@ -19,15 +19,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+      - name: Platform identity
+        run: go env GOOS GOARCH
       - name: Format check
         shell: pwsh
         run: |
@@ -43,6 +45,14 @@ jobs:
         run: go test -count=1 -v ./...
       - name: Vet
         run: go vet ./...
+      - name: Cross-build non-release targets
+        if: runner.os == 'Linux'
+        run: |
+          GOOS=darwin  GOARCH=arm64 go build -o /tmp/maskriver-darwin-arm64 ./cmd/maskriver
+          GOOS=darwin  GOARCH=amd64 go build -o /tmp/maskriver-darwin-amd64 ./cmd/maskriver
+          GOOS=windows GOARCH=amd64 go build -o /tmp/maskriver-windows-amd64.exe ./cmd/maskriver
+          GOOS=linux   GOARCH=arm64 go build -o /tmp/maskriver-linux-arm64 ./cmd/maskriver
+          file /tmp/maskriver-darwin-arm64 /tmp/maskriver-darwin-amd64 /tmp/maskriver-windows-amd64.exe /tmp/maskriver-linux-arm64
       - name: Race
         if: runner.os == 'Linux'
         run: go test -race -count=1 ./...
