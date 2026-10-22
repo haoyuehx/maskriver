@@ -7,7 +7,9 @@ An independently developed Go data masking and sensitive-data governance project
 
 MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具，面向企业开发、测试与数据共享场景：自动发现敏感数据，提供安全、确定性的脱敏策略，数据库适配器与 CLI 支持 SQLite 与 MySQL 8.0.46，并提供数据完整性校验。
 
-> **`v1.0.0` 是支持范围内的稳定版：Linux amd64、SQLite 与 MySQL 8.0.46 M1 工作流，SQLite-only streaming/recovery。** 详见 [v1.0.0 发行说明](docs/releases/v1.0.0.md) 与 [验收记录](docs/releases/v1.0.0-acceptance.md)。历史 `v0.2.1-preview` / `v0.2.0-preview.1` 保持可访问；旧资产的能力边界不因新版本扩大。** 该版本在 M1 SQLite 多表工作流之上增加了有界 Streaming Apply、事务 Outbox、资源预算、Checkpoint、只读 `status` 与显式 `--resume` 的本地事务幂等恢复。**这不是稳定版，也不代表生产就绪**：仅面向授权、隔离、可弃置的本地 SQLite 副本；恢复仅支持 Linux amd64、rollback journal、`synchronous=FULL` 和确定性策略白名单。MySQL Recovery、Windows/macOS Streaming/Recovery、WAL Recovery、跨存储 Mapping 原子性、通用 exactly-once、真实断电持久性、生产级检测准确率和法律意义上的匿名化均未验证。旧的 `v0.1.0-dev` 仍保留，但其发行说明中的能力边界不因新版本而扩大。
+> **`v1.0.0` 是支持范围内的稳定版：Linux amd64、SQLite 与 MySQL 8.0.46 M1 工作流，SQLite-only streaming/recovery。** 详见 [v1.0.0 发行说明](docs/releases/v1.0.0.md) 与 [验收记录](docs/releases/v1.0.0-acceptance.md)。
+>
+> 支持范围仅限授权、隔离、可弃置的副本。MySQL Recovery、Windows/macOS Streaming/Recovery、WAL Recovery、跨存储 Mapping 原子性、通用 exactly-once、真实断电持久性、生产级检测准确率和法律意义上的匿名化均未验证。M3-2 的 MySQL CLI 证据仅限 pinned 8.0.46 CI；历史 `v0.2.1-preview` / `v0.2.0-preview.1` 保持可访问，旧资产的能力边界不因新版本扩大。
 
 ## 快速开始
 

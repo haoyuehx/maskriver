@@ -301,9 +301,10 @@ cat >"$PKG/BUILD-INFO.md" <<INFO
 
 ## Scope of use
 
-Authorised, isolated, disposable **local SQLite** snapshots only. Masking is not
-anonymisation. Deterministic output is not collision-free. There is no generic
-distributed exactly-once guarantee and no proof of real power-loss durability.
+Authorised, isolated, disposable **SQLite or MySQL 8.0.46** copies only.
+Streaming, outbox and recovery are SQLite-only. Masking is not anonymisation.
+Deterministic output is not collision-free. There is no generic distributed
+exactly-once guarantee and no proof of real power-loss durability.
 
 ## Verified in this candidate's test suite
 
@@ -317,23 +318,27 @@ distributed exactly-once guarantee and no proof of real power-loss durability.
 - Real CLI child-process interruption at batches 1/10/100/500, between tables,
   after validation and before/after commit; resumed output equals the
   uninterrupted baseline.
+- MySQL 8.0.46 CLI in the isolated CI container: Scan -> Preview -> separate
+  Approve -> Apply -> strict Validate on two distinct databases, with
+  same-database and streaming refusal.
 
 ## Not verified — do not claim
 
-MySQL CLI or MySQL recovery · Windows/macOS streaming or recovery · WAL recovery ·
+MySQL recovery/streaming · Windows/macOS streaming or recovery · WAL recovery ·
 generic distributed exactly-once · cross-store mapping atomicity · real power-loss
 durability · production-grade PII identification accuracy · anonymisation ·
-collision-free replacements · tamper-proof history · independent strict semantics
-for \`--strict\` · bounded RSS under all unbounded conditions · every filesystem
-failure mode.
+collision-free replacements · tamper-proof history · MySQL versions other than
+8.0.46 · bounded RSS under all unbounded conditions · every filesystem failure
+mode.
 INFO
 
 # --- package README / quickstart ----------------------------------------------
 cat >"$PKG/README.md" <<'README'
-# MaskRiver — SQLite streaming and recovery preview
+# MaskRiver — data masking CLI
 
-This package is a **Linux amd64 pre-release**. Use it only on authorised,
-isolated, disposable local SQLite copies.
+This is a **Linux amd64 release package**. Use it only on authorised, isolated,
+disposable SQLite or MySQL 8.0.46 copies. See `RELEASE-NOTES.md` for the exact
+supported scope and non-claims.
 
 ```sh
 sha256sum -c SHA256SUMS
@@ -345,12 +350,24 @@ M1 workflow (two separate existing SQLite files):
 
 ```sh
 maskriver scan    --source /path/source.db --target /path/target.db --scope table.column ...
-maskriver mask    --source ... --target ... --scope ... --key-file ...        # preview
-maskriver approve --source ... --target ... --scope ... --trust-file ... --history-dir ... \
-                  --reviewer-key-id ... --reviewer-key-file ... --reviewer-id ...
-maskriver mask    --source ... --target ... --scope ... --key-file ... \
-                  --trust-file ... --history-dir ... --approved --apply
-maskriver validate --source ... --target ... --scope ... --key-file ... --strict
+maskriver mask    --source /path/source.db --target /path/target.db --scope table.column \
+                  --strategy fake_email --key-id demo --key-file key.bin       # preview
+maskriver approve --source /path/source.db --target /path/target.db --scope table.column \
+                  --strategy fake_email --key-id demo \
+                  --trust-file trust.json --history-dir history \
+                  --reviewer-key-id reviewer-1 --reviewer-key-file reviewer.key --reviewer-id reviewer
+maskriver mask    --source /path/source.db --target /path/target.db --scope table.column \
+                  --strategy fake_email --key-id demo --key-file key.bin \
+                  --trust-file trust.json --history-dir history --approved --apply
+maskriver validate --source /path/source.db --target /path/target.db --scope table.column \
+                  --strategy fake_email --key-id demo --key-file key.bin --strict
+```
+
+MySQL 8.0.46 M1 (two DSNs for distinct databases):
+
+```sh
+maskriver scan --dialect mysql --source '<dsn>' --target '<dsn>' --scope people.born ...
+# mask/approve/apply/validate use the same --dialect mysql and DSN flags.
 ```
 
 M2 streaming with budget, outbox and recovery:

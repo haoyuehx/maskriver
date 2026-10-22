@@ -16,4 +16,4 @@
 - MySQL strict integrity: implemented in M3-2 as CHECK TABLE ... QUICK status rows plus visible-FK orphan scans; verified on 8.0.46 CI. Not a whole-server consistency check.
 - Writer non-NULL -> NULL refusal: PASS (`TestWriteTxRefusesNonNullToNullReplacement`).
 - Approval clock skew aligned: PASS (runner tests + 5-minute bound).
-- Independent reviews: pending.
+- Independent reviews: PASS (Architecture, Security, QA).
