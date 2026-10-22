@@ -78,6 +78,15 @@ func TestMySQLCLIWorkflow(t *testing.T) {
 			_ = conn.Close()
 			t.Fatal(err)
 		}
+		// The shared fixture uses one birth date for every row. Detection needs
+		// distinct evidence, so give each synthetic row its own valid date.
+		for i := 1; i <= testenv.Rows; i++ {
+			born := time.Date(2000, 2, 29, 0, 0, 0, 0, time.UTC).AddDate(0, 0, i-1).Format(time.DateOnly)
+			if _, err := conn.ExecContext(ctx, "UPDATE people SET born=? WHERE id=?", born, i); err != nil {
+				_ = conn.Close()
+				t.Fatal("synthetic date setup failed")
+			}
+		}
 		if err := conn.Close(); err != nil {
 			t.Fatal(err)
 		}
@@ -119,7 +128,7 @@ func TestMySQLCLIWorkflow(t *testing.T) {
 	}
 	// Preview must not have changed target birth dates.
 	var unchanged int
-	if err := admin.QueryRowContext(ctx, "SELECT COUNT(*) FROM `"+targetName+"`.people WHERE born='2000-02-29'").Scan(&unchanged); err != nil || unchanged != testenv.Rows {
+	if err := admin.QueryRowContext(ctx, "SELECT COUNT(*) FROM `"+targetName+"`.people t JOIN `"+sourceName+"`.people s ON t.id=s.id AND t.born=s.born").Scan(&unchanged); err != nil || unchanged != testenv.Rows {
 		t.Fatalf("preview changed MySQL target: count=%d err=%v", unchanged, err)
 	}
 	runCmd(2, "mask", append(append([]string{}, common...), "--apply")...)
@@ -128,15 +137,15 @@ func TestMySQLCLIWorkflow(t *testing.T) {
 	if got := runCmd(0, "mask", append(append(append([]string{}, common...), review.applyFlags()...), "--apply", "--approved")...); !strings.Contains(got, "complete=true") {
 		t.Fatalf("authorized MySQL apply incomplete: %q", got)
 	}
-	var sourceChanged, targetChanged int
-	if err := admin.QueryRowContext(ctx, "SELECT COUNT(*) FROM `"+sourceName+"`.people WHERE born <> '2000-02-29'").Scan(&sourceChanged); err != nil {
+	var sourceDistinct, targetChanged int
+	if err := admin.QueryRowContext(ctx, "SELECT COUNT(DISTINCT born) FROM `"+sourceName+"`.people").Scan(&sourceDistinct); err != nil {
 		t.Fatal(err)
 	}
-	if err := admin.QueryRowContext(ctx, "SELECT COUNT(*) FROM `"+targetName+"`.people WHERE born <> '2000-02-29'").Scan(&targetChanged); err != nil {
+	if err := admin.QueryRowContext(ctx, "SELECT COUNT(*) FROM `"+targetName+"`.people t JOIN `"+sourceName+"`.people s ON t.id=s.id WHERE t.born <> s.born").Scan(&targetChanged); err != nil {
 		t.Fatal(err)
 	}
-	if sourceChanged != 0 || targetChanged != testenv.Rows {
-		t.Fatalf("MySQL apply touched wrong side: source_changed=%d target_changed=%d", sourceChanged, targetChanged)
+	if sourceDistinct != testenv.Rows || targetChanged != testenv.Rows {
+		t.Fatalf("MySQL apply touched wrong side: source_distinct=%d target_changed=%d", sourceDistinct, targetChanged)
 	}
 	validated := runCmd(0, "validate", append(append([]string{}, common...), "--approved", "--strict")...)
 	if !strings.Contains(validated, "pass=true") {
