@@ -26,3 +26,6 @@
 # Python bytecode from local harness checks
 __pycache__/
 *.pyc
+
+# Local video deliverable bundle (never commit large archives)
+maskriver-demo-deliverables.zip

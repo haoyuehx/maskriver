@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <radialGradient id="bg" cx="55%" cy="35%" r="80%"><stop stop-color="#143b58"/><stop offset=".55" stop-color="#06111f"/><stop offset="1" stop-color="#020812"/></radialGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#63dcf3"/><stop offset="1" stop-color="#b49cff"/></linearGradient>
+    <pattern id="grid" width="80" height="80" patternUnits="userSpaceOnUse"><path d="M80 0H0V80" fill="none" stroke="#477996" stroke-width="1" opacity=".2"/></pattern>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/><rect width="1920" height="1080" fill="url(#grid)"/>
+  <g opacity=".75" stroke="#63dcf3" stroke-width="2" fill="none">
+    <path d="M310 620L560 450 820 610 1090 380 1390 540 1610 360" opacity=".35"/>
+    <path d="M310 620L560 780 820 610 1090 820 1390 540 1610 720" opacity=".2"/>
+  </g>
+  <g fill="#63dcf3">
+    <circle cx="310" cy="620" r="10"/><circle cx="560" cy="450" r="10"/><circle cx="820" cy="610" r="10"/><circle cx="1090" cy="380" r="10"/><circle cx="1390" cy="540" r="10"/><circle cx="1610" cy="360" r="10"/>
+  </g>
+  <g fill="#b49cff" opacity=".75"><circle cx="560" cy="780" r="7"/><circle cx="1090" cy="820" r="7"/><circle cx="1610" cy="720" r="7"/></g>
+  <g transform="translate(120 120)">
+    <rect x="0" y="0" width="72" height="72" rx="18" fill="#0b2338" stroke="#63dcf3" stroke-width="2"/>
+    <path d="M16 46c8-15 14 15 22 0s14 15 22 0" fill="none" stroke="#63dcf3" stroke-width="5" stroke-linecap="round"/>
+    <text x="94" y="47" fill="#ecf8ff" font-family="Inter,Noto Sans SC,Microsoft YaHei,sans-serif" font-size="38" font-weight="700" letter-spacing="2">MaskRiver</text>
+  </g>
+  <text x="120" y="430" fill="#ecf8ff" font-family="Inter,Noto Sans SC,Microsoft YaHei,sans-serif" font-size="94" font-weight="800" letter-spacing="2">安全、可验证</text>
+  <text x="120" y="540" fill="#ecf8ff" font-family="Inter,Noto Sans SC,Microsoft YaHei,sans-serif" font-size="94" font-weight="800" letter-spacing="2">可恢复的数据脱敏</text>
+  <text x="124" y="620" fill="#9ab5c8" font-family="Inter,Noto Sans SC,Microsoft YaHei,sans-serif" font-size="32">Scan → Preview → Approve → Apply → Validate</text>
+  <g transform="translate(120 760)" font-family="Inter,Noto Sans SC,Microsoft YaHei,sans-serif" font-size="24">
+    <rect width="180" height="52" rx="26" fill="#63dcf31a" stroke="#63dcf370"/><text x="28" y="34" fill="#63dcf3">SQLite</text>
+    <rect x="200" width="210" height="52" rx="26" fill="#b49cff1a" stroke="#b49cff70"/><text x="228" y="34" fill="#b49cff">MySQL 8.0.46</text>
+    <rect x="430" width="250" height="52" rx="26" fill="#58e0ba1a" stroke="#58e0ba70"/><text x="458" y="34" fill="#58e0ba">Ed25519 approval</text>
+  </g>
+  <text x="120" y="1000" fill="#63dcf3" font-family="Inter,Noto Sans SC,Microsoft YaHei,sans-serif" font-size="26" letter-spacing="4">GITHUB.COM/HAOYUEHX/MASKRIVER</text>
+</svg>

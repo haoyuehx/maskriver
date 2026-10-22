@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://haoyuehx.github.io/maskriver/sitemap.xml
