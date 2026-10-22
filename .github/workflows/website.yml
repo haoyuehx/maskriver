@@ -48,6 +48,13 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Browser tests
         run: npx playwright test
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-visual-${{ github.run_id }}
+          path: website/test-results/screens
+          if-no-files-found: warn
       - name: Upload Pages artifact
         if: github.event_name == 'push'
         uses: actions/upload-pages-artifact@v3
