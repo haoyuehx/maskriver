@@ -127,6 +127,8 @@ func TestCLIArguments(t *testing.T) {
 		{"apply missing paths", []string{"mask", "--apply"}, 2, "operation refused"},
 		{"validate missing paths", []string{"validate"}, 2, "operation refused"},
 		{"command help", []string{"mask", "--help"}, 0, "Usage:"},
+		{"help command", []string{"help", "scan"}, 0, "Usage: maskriver scan"},
+		{"help unknown", []string{"help", "nope"}, 2, "invalid arguments"},
 		{"unknown", []string{"unknown"}, 2, "invalid arguments"},
 		{"unknown flag", []string{"mask", "--unknown"}, 2, "invalid arguments"},
 		{"positional rejected", []string{"mask", "unexpected"}, 2, "invalid arguments"},

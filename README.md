@@ -5,9 +5,9 @@ An independently developed Go data masking and sensitive-data governance project
 面向 **2026 开放原子大赛 · 开源基础软件与解决方案赛道** 的独立 Go 项目。
 这是参赛研发目标，不代表已报名、入选或获官方背书。
 
-MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具，面向企业开发、测试与数据共享场景：自动发现敏感数据，提供安全、确定性的脱敏策略，数据库适配器支持 SQLite 与 MySQL（当前 CLI 仅 SQLite），并提供数据完整性校验。
+MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具，面向企业开发、测试与数据共享场景：自动发现敏感数据，提供安全、确定性的脱敏策略，数据库适配器与 CLI 支持 SQLite 与 MySQL 8.0.46，并提供数据完整性校验。
 
-> **`v0.2.1-preview` 是 M3-1 严格验证加固的公开 Pre-release 目标版本；上一版 `v0.2.0-preview.1` 保持可访问。** `v0.2.0-preview.1` 是上一轮发布的公开 Pre-release 目标版本：`v0.2.0-preview.1`（linux/amd64；发布后见 [Release 页](https://github.com/haoyuehx/maskriver/releases/tag/v0.2.0-preview.1)，实际发布状态与资产以该页为准）。** 该版本在 M1 SQLite 多表工作流之上增加了有界 Streaming Apply、事务 Outbox、资源预算、Checkpoint、只读 `status` 与显式 `--resume` 的本地事务幂等恢复。**这不是稳定版，也不代表生产就绪**：仅面向授权、隔离、可弃置的本地 SQLite 副本；恢复仅支持 Linux amd64、rollback journal、`synchronous=FULL` 和确定性策略白名单。MySQL CLI/Recovery、Windows/macOS Streaming/Recovery、WAL Recovery、跨存储 Mapping 原子性、通用 exactly-once、真实断电持久性、生产级检测准确率和法律意义上的匿名化均未验证。旧的 `v0.1.0-dev` 仍保留，但其发行说明中的能力边界不因新版本而扩大。
+> **`v0.2.1-preview` 是 M3-1 严格验证加固的公开 Pre-release；M3-2 的真实 MySQL CLI 已合并但尚未包含在该旧资产中；上一版 `v0.2.0-preview.1` 保持可访问。** `v0.2.0-preview.1` 是上一轮发布的公开 Pre-release 目标版本：`v0.2.0-preview.1`（linux/amd64；发布后见 [Release 页](https://github.com/haoyuehx/maskriver/releases/tag/v0.2.0-preview.1)，实际发布状态与资产以该页为准）。** 该版本在 M1 SQLite 多表工作流之上增加了有界 Streaming Apply、事务 Outbox、资源预算、Checkpoint、只读 `status` 与显式 `--resume` 的本地事务幂等恢复。**这不是稳定版，也不代表生产就绪**：仅面向授权、隔离、可弃置的本地 SQLite 副本；恢复仅支持 Linux amd64、rollback journal、`synchronous=FULL` 和确定性策略白名单。MySQL Recovery、Windows/macOS Streaming/Recovery、WAL Recovery、跨存储 Mapping 原子性、通用 exactly-once、真实断电持久性、生产级检测准确率和法律意义上的匿名化均未验证。旧的 `v0.1.0-dev` 仍保留，但其发行说明中的能力边界不因新版本而扩大。
 
 ## 快速开始
 
@@ -34,13 +34,13 @@ go build -o bin/maskriver ./cmd/maskriver
 
 ```sh
 sha256sum -c SHA256SUMS
-tar -xzf maskriver-v0.2.0-preview.1-linux-amd64.tar.gz
-cd maskriver-v0.2.0-preview.1-linux-amd64
+tar -xzf maskriver-v0.2.1-preview-linux-amd64.tar.gz
+cd maskriver-v0.2.1-preview-linux-amd64
 ./maskriver --version
 ./maskriver --help
 ```
 
-发行包候选验收、测试/恢复 Smoke 与许可审计见 [v0.2.0-preview.1 验收记录](docs/releases/v0.2.0-preview.1-acceptance.md)；最终 Tag、资产 SHA-256 与发布后下载复核记录在 GitHub Release 验收评论中。只对授权、隔离、可丢弃的 SQLite 副本运行。仅构建和发布 linux/amd64；其他 Linux 架构未构建、未测试。
+v0.2.1-preview 的资产与 SHA-256 见 [Release 页](https://github.com/haoyuehx/maskriver/releases/tag/v0.2.1-preview)；v0.2.0-preview.1 的历史验收见 [验收记录](docs/releases/v0.2.0-preview.1-acceptance.md)；最终 Tag、资产 SHA-256 与发布后下载复核记录在 GitHub Release 验收评论中。只对授权、隔离、可丢弃的 SQLite/MySQL 副本运行。仅构建和发布 linux/amd64；其他 Linux 架构未构建、未测试。
 
 ## 四人跨平台协作
 
@@ -55,7 +55,7 @@ cd maskriver-v0.2.0-preview.1-linux-amd64
 
 公共契约 `pkg/contracts`、CI、根文档及跨模块修改由 A 统一协调。非作者交叉审核：D 审 A/B，B 审 C，C 审 D；不得自审自批。具体 PR 依赖与验收标准见 [Roadmap](docs/roadmap.md) 和 [AGENTS.md](AGENTS.md)。
 
-CI 包括 Ubuntu/Windows 的测试与 vet、Ubuntu race，以及隔离 MySQL 8.0.46 的实际 `TestMySQLAdapter`；这是组件业务测试，不代表 CLI 全流程已验收。未运行或 SKIP 的测试仍需如实记录。
+CI 包括 Ubuntu/Windows 的测试与 vet、Ubuntu race，以及隔离 MySQL 8.0.46 的实际 `TestMySQLAdapter` 和 `TestMySQLCLIWorkflow`（真实 CLI Scan→Preview→Approve→Apply→Validate）。MySQL 证据仅限该 pinned 镜像；未运行或 SKIP 的测试仍需如实记录。
 ## 产品路线图
 
 - **M1-B 已交付：** 数据库适配器（#5、#10）、检测（#6）、脱敏（#7、#12）和验证器（#8），有真实数据库或有界 fake Reader 测试证据；各组件不等于完整产品。
@@ -66,6 +66,8 @@ CI 包括 Ubuntu/Windows 的测试与 vet、Ubuntu race，以及隔离 MySQL 8.0
 
 ## 文档
 
+- [操作指南与教程](docs/guides/README.md)
+- [M3 进度与验收](docs/m3/progress.md)
 - [架构设计](docs/architecture.md)
 - [Roadmap](docs/roadmap.md)
 - [测试计划](docs/test-plan.md)

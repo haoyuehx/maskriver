@@ -47,11 +47,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "help", "-h", "--help":
-		if len(args) != 1 {
-			return usageError(stderr)
+		if len(args) == 1 {
+			usage(stdout)
+			return 0
 		}
-		usage(stdout)
-		return 0
+		if args[0] == "help" && len(args) == 2 && knownCommand(args[1]) {
+			return run([]string{args[1], "--help"}, stdout, stderr)
+		}
+		return usageError(stderr)
 	case "version", "--version":
 		if len(args) != 1 {
 			return usageError(stderr)
@@ -513,7 +516,21 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "status --target <db> --run-id <32-hex> is read-only; it never recovers or writes.")
 	fmt.Fprintln(w, "approve/revoke sign with a reviewer key; apply reads the deployment trust file only.")
 	fmt.Fprintln(w, "A local operator controlling both trust file and reviewer key is not stopped by RBAC.")
+	fmt.Fprintln(w, "Examples:")
+	fmt.Fprintln(w, "  maskriver help mask")
+	fmt.Fprintln(w, "  maskriver scan --source /work/source.db --target /work/target.db --scope people.email")
+	fmt.Fprintln(w, "  maskriver scan --dialect mysql --source '<dsn>' --target '<dsn>' --scope people.born")
+	fmt.Fprintln(w, "  maskriver mask ... --trust-file trust.json --history-dir history --approved --apply")
+	fmt.Fprintln(w, "  maskriver validate --strict ...")
 	fmt.Fprintln(w, "Use authorized synthetic copies.")
+}
+
+func knownCommand(command string) bool {
+	switch command {
+	case "scan", "mask", "validate", "approve", "revoke", "init-outbox", "init-recovery", "status":
+		return true
+	}
+	return false
 }
 
 func usageError(w io.Writer) int {
