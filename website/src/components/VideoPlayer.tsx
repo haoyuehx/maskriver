@@ -122,7 +122,7 @@ export default function VideoPlayer() {
     <section id="demo" className="section section-shell video-section">
       <div className="section-heading">
         <span className="section-kicker">PRODUCT DEMO</span>
-        <h2>4 分 20 秒，看懂 MaskRiver 的完整流程</h2>
+        <h2>4 分 20 秒，看懂 MaskRiver 的核心流程</h2>
         <p>从敏感信息识别，到安全审批、执行验证与中断恢复，直观了解它如何组织一次受控的数据脱敏任务。</p>
       </div>
       <div className={`video-frame ${fullscreen ? 'is-fullscreen' : ''}`} ref={stageRef}>
@@ -247,7 +247,7 @@ export default function VideoPlayer() {
       </div>
       <div className="video-notes">
         <span><span className="dot teal" /> 画面内已含中文字幕，可切换外挂字幕</span>
-        <span><span className="dot amber" /> 视频为无配音视觉版；旁白稿与 SRT 随发布素材提供</span>
+        <span><span className="dot amber" /> 视频为无配音视觉版；中文 SRT 随站点提供</span>
         <a href={VIDEO_URL} target="_blank" rel="noreferrer">直接打开 MP4 <ExternalLink size={13} aria-hidden="true" /></a>
       </div>
     </section>

@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Check, Copy, Download, ExternalLink, FileText, Github, ShieldCheck, Terminal } from 'lucide-react';
-import { CHECKSUMS, DOWNLOAD, DOCS, GITHUB, MYSQL_DOC, QUICKSTART, RELEASE, SQLITE_DOC } from '../data/content';
+import { CHECKSUMS, DOWNLOAD, DOCS, GITHUB, MYSQL_DOC, QUICKSTART, RELEASE, SECURITY_DOC, SQLITE_DOC } from '../data/content';
 
-const command = `tar -xzf maskriver-v1.0.0-linux-amd64.tar.gz
-cd maskriver-v1.0.0-linux-amd64
+const command = `curl -LO ${DOWNLOAD}
+curl -LO ${CHECKSUMS}
 sha256sum -c SHA256SUMS
+tar -xzf maskriver-v1.0.0-linux-amd64.tar.gz
+cd maskriver-v1.0.0-linux-amd64
 ./maskriver --version`;
 
 export default function GetStarted() {
@@ -41,6 +43,7 @@ export default function GetStarted() {
           <div className="start-links">
             <a href={SQLITE_DOC} target="_blank" rel="noreferrer">SQLite 教程</a>
             <a href={MYSQL_DOC} target="_blank" rel="noreferrer">MySQL 教程</a>
+            <a href={SECURITY_DOC} target="_blank" rel="noreferrer">安全模型</a>
             <a href={DOCS} target="_blank" rel="noreferrer">全部文档</a>
             <a href={GITHUB} target="_blank" rel="noreferrer"><Github size={14} /> GitHub</a>
           </div>
