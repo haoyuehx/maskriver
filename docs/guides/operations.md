@@ -34,7 +34,8 @@
 
 - CLI output contains counts and status only. Do not enable verbose driver or
   shell tracing that prints DSNs/row values.
-- Preserve the sanitized command, exit code, CI run/head SHA, plan ID and
-  archive SHA-256 as release evidence.
+- Preserve the sanitized command, exit code, CI run/head SHA and archive SHA-256
+  as release evidence. The M1 CLI does not print a plan ID; if needed, record
+  the plan ID as stored in the history directory, not from stdout.
 - Report MySQL evidence separately from SQLite; the pinned 8.0.46 CI image is
   not a statement about other versions.

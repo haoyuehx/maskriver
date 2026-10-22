@@ -53,5 +53,6 @@ maskriver validate --dialect mysql --source "$SRC" --target "$DST" \
 - MySQL streaming, outbox, checkpoint and recovery are **not supported** and are
   refused. `m2-stream-v1`/`m2-recovery-v1` remain SQLite-only.
 
-The acceptance evidence is `TestMySQLCLIWorkflow` in the pinned, network-disabled
+`notes.note` above must contain date-formatted text for `cn_date`; use a
+column-appropriate strategy for other text. The acceptance evidence is `TestMySQLCLIWorkflow` in the pinned, network-disabled
 MySQL 8.0.46 CI container. Adapter-only tests are not CLI acceptance.

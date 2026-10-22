@@ -128,6 +128,9 @@ func TestCLIArguments(t *testing.T) {
 		{"validate missing paths", []string{"validate"}, 2, "operation refused"},
 		{"command help", []string{"mask", "--help"}, 0, "Usage:"},
 		{"help command", []string{"help", "scan"}, 0, "Usage: maskriver scan"},
+		{"help status", []string{"help", "status"}, 0, "Usage: maskriver status"},
+		{"help version", []string{"help", "version"}, 0, "Usage: maskriver version"},
+		{"help extra", []string{"help", "mask", "extra"}, 2, "invalid arguments"},
 		{"help unknown", []string{"help", "nope"}, 2, "invalid arguments"},
 		{"unknown", []string{"unknown"}, 2, "invalid arguments"},
 		{"unknown flag", []string{"mask", "--unknown"}, 2, "invalid arguments"},
@@ -741,5 +744,15 @@ func TestValidationPassedHonorsStrictWarning(t *testing.T) {
 	}
 	if !validationPassed(report, false) {
 		t.Fatal("non-strict validation refused a warning-only complete report")
+	}
+}
+
+func TestHelpCommandWritesStdout(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := run([]string{"help", "mask"}, &out, &errOut); code != 0 {
+		t.Fatalf("exit=%d", code)
+	}
+	if !strings.Contains(out.String(), "Usage: maskriver mask [flags]") || errOut.Len() != 0 {
+		t.Fatalf("help command did not write usage to stdout only: out=%q err=%q", out.String(), errOut.String())
 	}
 }

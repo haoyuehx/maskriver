@@ -28,6 +28,10 @@ func runInitRecovery(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(io.Discard)
 	var target string
 	flags.StringVar(&target, "target", "", "existing absolute SQLite target database path")
+	flags.Usage = func() {
+		fmt.Fprintln(flags.Output(), "Usage: maskriver init-recovery [flags]")
+		flags.PrintDefaults()
+	}
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			flags.SetOutput(stderr)
@@ -79,6 +83,10 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 	var target, runID string
 	flags.StringVar(&target, "target", "", "existing absolute SQLite target database path")
 	flags.StringVar(&runID, "run-id", "", "32-hex run identity")
+	flags.Usage = func() {
+		fmt.Fprintln(flags.Output(), "Usage: maskriver status [flags]")
+		flags.PrintDefaults()
+	}
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			flags.SetOutput(stderr)

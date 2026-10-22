@@ -51,8 +51,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 			usage(stdout)
 			return 0
 		}
-		if args[0] == "help" && len(args) == 2 && knownCommand(args[1]) {
-			return run([]string{args[1], "--help"}, stdout, stderr)
+		if args[0] == "help" && len(args) == 2 {
+			if args[1] == "version" {
+				fmt.Fprintln(stdout, "Usage: maskriver version")
+				return 0
+			}
+			if knownCommand(args[1]) {
+				// Command help is documentation, so send both streams to stdout.
+				return run([]string{args[1], "--help"}, stdout, stdout)
+			}
 		}
 		return usageError(stderr)
 	case "version", "--version":
@@ -527,7 +534,7 @@ func usage(w io.Writer) {
 
 func knownCommand(command string) bool {
 	switch command {
-	case "scan", "mask", "validate", "approve", "revoke", "init-outbox", "init-recovery", "status":
+	case "scan", "mask", "validate", "approve", "revoke", "init-outbox", "init-recovery", "status", "version":
 		return true
 	}
 	return false

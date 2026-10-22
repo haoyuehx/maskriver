@@ -8,11 +8,11 @@ the safe summary to decide what to check.
 
 - `0`: complete success.
 - `1`: operation refused, incomplete, conflicting or validation failed.
-- `2`: usage/configuration refusal (missing flags, invalid dialect, same
-  source/target pair, unsafe DSN, bad budget).
-- Other codes are used by the SQLite streaming/status/resume path for
-  commit-unknown, unsupported, manifest and validation states; see
-  [Error reference](errors.md).
+- `2`: usage/configuration refusal (missing flags, invalid dialect, identical
+  source/target DSN, unsafe DSN, bad budget). An alias of the same MySQL
+  database is detected only after connecting and exits `1`.
+- Conflicting evidence during SQLite streaming/resume can map to `4`, and
+  validation failure to `9`; see [Error reference](errors.md).
 
 ## Common refusals
 
