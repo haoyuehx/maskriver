@@ -10,7 +10,7 @@ test('renders the product landing page without console or page errors', async ({
   await expect(page).toHaveTitle(/MaskRiver/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText('让数据脱敏');
   await expect(page.getByRole('link', { name: '观看演示' })).toBeVisible();
-  await expect(page.getByText('Scan → Preview → Approve → Apply → Validate').first()).toBeVisible();
+  await expect(page.getByText('SQLite · MySQL 8.0.46')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -20,11 +20,21 @@ test('has no horizontal overflow at the configured viewport', async ({ page }) =
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
-test('navigation and anchor targets work', async ({ page }) => {
+test('navigation and anchor targets work', async ({ page, viewport }) => {
   await page.goto('/');
-  await page.getByRole('link', { name: '演示视频' }).first().click();
-  await expect(page.locator('#demo')).toBeInViewport();
-  await page.getByRole('link', { name: '核心功能' }).first().click();
+  if (viewport && viewport.width <= 820) {
+    await page.getByRole('button', { name: '打开菜单' }).click();
+    const menu = page.getByRole('navigation', { name: '移动端导航' });
+    await menu.getByRole('link', { name: '演示视频' }).click();
+    await expect(page.locator('#demo')).toBeInViewport();
+    await page.getByRole('button', { name: '打开菜单' }).click();
+    await page.getByRole('navigation', { name: '移动端导航' }).getByRole('link', { name: '核心功能' }).click();
+  } else {
+    const nav = page.getByRole('navigation', { name: '主导航' });
+    await nav.getByRole('link', { name: '演示视频' }).click();
+    await expect(page.locator('#demo')).toBeInViewport();
+    await nav.getByRole('link', { name: '核心功能' }).click();
+  }
   await expect(page.locator('#features')).toBeInViewport();
 });
 
@@ -99,5 +109,5 @@ test('video poster loads the real MP4 and playback advances', async ({ page }) =
 test('links to the real release and repository are present', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('a[href*="releases/download/v1.0.0/maskriver-v1.0.0-linux-amd64.tar.gz"]').first()).toBeVisible();
-  await expect(page.locator('a[href="https://github.com/haoyuehx/maskriver"]').first()).toBeVisible();
+  await expect(page.locator('footer a[href="https://github.com/haoyuehx/maskriver"]')).toBeVisible();
 });
