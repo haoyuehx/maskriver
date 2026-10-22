@@ -81,6 +81,14 @@ if [[ "$VERSION" == 1.* ]]; then
     echo "verify-release: v$VERSION README does not document MySQL support" >&2
     exit 1
   }
+  grep -q "pre-release" "$PKG/BUILD-INFO.md" && {
+    echo "verify-release: v$VERSION BUILD-INFO still says pre-release" >&2
+    exit 1
+  }
+  grep -qi "mysql" "$PKG/BUILD-INFO.md" || {
+    echo "verify-release: v$VERSION BUILD-INFO does not document MySQL support" >&2
+    exit 1
+  }
 fi
 
 # No forbidden material.

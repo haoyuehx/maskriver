@@ -57,7 +57,7 @@ v0.2.1-preview 的资产与 SHA-256 见 [Release 页](https://github.com/haoyueh
 
 公共契约 `pkg/contracts`、CI、根文档及跨模块修改由 A 统一协调。非作者交叉审核：D 审 A/B，B 审 C，C 审 D；不得自审自批。具体 PR 依赖与验收标准见 [Roadmap](docs/roadmap.md) 和 [AGENTS.md](AGENTS.md)。
 
-CI 包括 Ubuntu/Windows 的测试与 vet、Ubuntu race，以及隔离 MySQL 8.0.46 的实际 `TestMySQLAdapter` 和 `TestMySQLCLIWorkflow`（真实 CLI Scan→Preview→Approve→Apply→Validate）。MySQL 证据仅限该 pinned 镜像；未运行或 SKIP 的测试仍需如实记录。
+CI 包括 Ubuntu/Windows/macOS 的测试与 vet、Ubuntu race，以及隔离 MySQL 8.0.46 的实际 `TestMySQLAdapter` 和 `TestMySQLCLIWorkflow`（真实 CLI Scan→Preview→Approve→Apply→Validate）。MySQL 证据仅限该 pinned 镜像；未运行或 SKIP 的测试仍需如实记录。
 ## 产品路线图
 
 - **M1-B 已交付：** 数据库适配器（#5、#10）、检测（#6）、脱敏（#7、#12）和验证器（#8），有真实数据库或有界 fake Reader 测试证据；各组件不等于完整产品。

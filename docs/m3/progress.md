@@ -10,6 +10,6 @@
 - M3-5: COMPLETE, merged as `ffab23bf3e8eea13e49ebeeada2fb56cc1298a67` (PR #96); macOS/Windows/Linux non-streaming M1 CI and Linux cross-builds; Issue #89 closed.
 - M3-1 delivered on branch `m3/security-quality`: real strict full-scan + adapter integrity checks, Writer NULL-replacement refusal, approval clock-skew alignment, docs/tests.
 - Tests: full `go test -count=1 ./...` PASS; M3-1 race and independent reviews PASS; M3-2 CI includes Go race, Windows and isolated MySQL 8.0.46.
-- Known limits: local Docker is permission-blocked, so MySQL evidence comes from the authorized GitHub Actions isolated container. MySQL streaming/recovery remains unsupported. No v1.0.0 claim until M3-3/M3-4/M3-5/M3-6 pass.
+- Known limits: local Docker is permission-blocked, so MySQL evidence comes from the authorized GitHub Actions isolated container. MySQL streaming/recovery remains unsupported. v1.0.0 is released only for the documented supported scope.
 - Current: M3-6 release candidate `v1.0.0` on branch `release/v1.0.0`; final CI, independent acceptance review, tag and asset verification pending.
 - Next: merge release PR, tag `v1.0.0`, publish/verify artifact, then post-release docs update and close Issue #90.
