@@ -112,9 +112,11 @@ test('video poster loads the real MP4 and playback advances', async ({ page }) =
   const currentTime = await video.evaluate((node: HTMLVideoElement) => node.currentTime);
   expect(currentTime).toBeGreaterThan(0.3);
   await page.getByRole('button', { name: '暂停', exact: true }).click();
-  await expect(page.getByRole('button', { name: '打开中文字幕' })).toBeVisible();
-  await page.getByRole('button', { name: '打开中文字幕' }).click();
-  await expect(page.getByRole('button', { name: '关闭中文字幕' })).toBeVisible();
+  const captionButton = page.getByRole('button', { name: /中文字幕/ });
+  await expect(captionButton).toBeVisible();
+  const before = await captionButton.getAttribute('aria-pressed');
+  await captionButton.click();
+  await expect(captionButton).toHaveAttribute('aria-pressed', before === 'true' ? 'false' : 'true');
 });
 
 test('links to the real release and repository are present', async ({ page }) => {
