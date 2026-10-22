@@ -33,3 +33,40 @@ numbers as production precision/recall.
 Synthetic strategy format evaluation remains 21 positive / 28 negative cases in
 `internal/mask/cn_format_test.go`, all TP with zero FP/FN on that self-authored
 set; this does not prove real-world acceptance or anonymity.
+
+## M3-4 generated holdout (2026-10-22)
+
+`internal/detect/eval_holdout_test.go` adds a separate 210-case generated
+holdout. Valid identifiers are produced from their published checksum
+algorithms (GB 11643 ID, GB 32100 USCC, Luhn bank cards, mobile prefixes,
+postal shape, dates) and negatives are mutations; the construction is disjoint
+from the hand-built tuning table above and from the detector rule tables.
+Measured on Go 1.26.3:
+
+| Rule | TP | FP | FN | Precision | Recall |
+|---|---:|---:|---:|---:|---:|
+| email | 20 | 0 | 0 | 1.000 | 1.000 |
+| url | 12 | 0 | 0 | 1.000 | 1.000 |
+| ip_address | 12 | 0 | 0 | 1.000 | 1.000 |
+| uuid | 12 | 0 | 0 | 1.000 | 1.000 |
+| cn_date | 20 | 0 | 0 | 1.000 | 1.000 |
+| cn_id_card | 25 | 0 | 0 | 1.000 | 1.000 |
+| cn_mobile | 28 | 0 | 0 | 1.000 | 1.000 |
+| cn_bank_card | 20 | 0 | 0 | 1.000 | 1.000 |
+| cn_postal_code | 20 | 0 | 0 | 1.000 | 1.000 |
+| cn_uscc | 20 | 0 | 0 | 1.000 | 1.000 |
+| cn_city | 10 | 0 | 0 | 1.000 | 1.000 |
+| cn_person_name | 8 | 0 | 0 | 1.000 | 1.000 |
+| cn_address | 3 | 0 | 0 | 1.000 | 1.000 |
+| **overall** | **210** | **0** | **0** | **1.000** | **1.000** |
+
+`internal/mask/eval_holdout_test.go` masks 100 generated valid values per format
+(ID, bank card, USCC, postal code, mobile). For every suite: 100/100
+deterministic, 100/100 preserved shape/checksum, 100/100 changed, 100/100 unique
+outputs on this sample. This is still a synthetic generator written in the same
+repository, **not** a human-adjudicated external corpus. It does not measure
+real-world false positives, adversarial obfuscation, name/address ambiguity, or
+production recall. `cn_person_name` and `cn_address` positives here are small
+curated samples; the earlier 74-case set still shows person-name false
+positives. UNKNOWN remains unsafe, and these numbers must not be presented as
+production PII accuracy or anonymisation.
