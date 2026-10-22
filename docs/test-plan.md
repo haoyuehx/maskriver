@@ -30,7 +30,7 @@ go build -o bin/maskriver ./cmd/maskriver
 
 四位成员各自 clone、认领 Issue、开分支并提交 PR。纯内存模块可在 Windows/Linux/macOS 独立测试；不依赖本地 Agent smoke。共享测试环境变动由 Main 协调。
 
-`.github/workflows/ci.yml` 在 Ubuntu/Windows 执行格式检查、`go test -count=1 -v ./...` 和 `go vet ./...`，Ubuntu 另跑 race。MySQL 隔离业务测试单独在 Ubuntu 禁网容器执行 fixture + adapter，失败即 CI 失败；普通测试无 MySQL socket 时明确 SKIP。macOS 可以本地测试，当前 CI 不宣称覆盖 macOS。
+`.github/workflows/ci.yml` 在 Ubuntu/Windows 执行格式检查、`go test -count=1 -v ./...` 和 `go vet ./...`，Ubuntu 另跑 race。MySQL 隔离业务测试单独在 Ubuntu 禁网容器执行 fixture + adapter，失败即 CI 失败；普通测试无 MySQL socket 时明确 SKIP。macOS 可以本地测试，macOS 非流式 M1 已由 CI 覆盖；macOS/Windows streaming/recovery 仍不支持。
 
 PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，统一 CI 与评审完成后才能合并。本机不支持 race 可由 Ubuntu CI 补齐，不能记成本机通过。#10 的当前适配器用例已在 PR #30 隔离 MySQL 8.0.46 实跑；尚未验证完整用户 CLI workflow、其他版本及生产环境。
 
@@ -163,7 +163,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - MySQL/Windows/WAL 恢复、跨存储 mapping commit gap 的恢复、通用 exactly-once：不支持；不得从本地 SQLite 恢复能力推断。
 - 生产级检测准确率：只有 74 条自编样本（38 正、36 负，8 条超出覆盖），姓名 P=0.500/R=0.750；不是独立留出评估。
 - 持久映射、全局唯一性/匿名化、参照完整性：未实现/未验证。
-- macOS CI：仓库 CI 只跑 Ubuntu/Windows；未宣称 macOS 覆盖。
+- macOS CI：仓库 CI 跑 Ubuntu/Windows/macOS（非流式 M1）；未宣称 macOS 覆盖。
 - `--strict` 的 MySQL 严格完整性路径：M3-1 未实现，MySQL `IntegrityCheck` 返回 `ErrUnsupported`，因此 strict MySQL 失败关闭；标记 UNVERIFIED，直到 M3-2 的完整实现。
 
 ## 已知残余缺陷（已接受 P2）
