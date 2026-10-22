@@ -80,7 +80,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	// its errors. Keep those details away from user-visible output.
 	flags.SetOutput(io.Discard)
 	cfg := config.Runtime{}
-	var source, target, keyFile string
+	var source, target, keyFile, dialectName string
 	var trustFile, historyDir string
 	var reviewerKeyID, reviewerKeyFile, reviewerID string
 	var validFor time.Duration
@@ -90,8 +90,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var operationTimeout time.Duration
 	var strategy, keyID string
 	var scopes scopeFlag
-	flags.StringVar(&source, "source", "", "existing absolute SQLite source-snapshot path")
-	flags.StringVar(&target, "target", "", "existing absolute SQLite target-copy path")
+	flags.StringVar(&dialectName, "dialect", "sqlite", "database dialect: sqlite or mysql")
+	flags.StringVar(&source, "source", "", "SQLite source path or MySQL source DSN")
+	flags.StringVar(&target, "target", "", "SQLite target path or MySQL target DSN")
 	flags.StringVar(&cfg.Table, "table", "", "explicit table allowlist (one table)")
 	flags.StringVar(&cfg.Column, "column", "", "explicit sensitive column (one column)")
 	flags.Var(&scopes, "scope", "explicit table.column scope; repeat for several scopes")
@@ -161,17 +162,34 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		cfg.Scopes = scopes
 	}
-	var err error
-	cfg.Source, err = filepath.Abs(source)
-	if err != nil || source == "" {
+	switch strings.ToLower(strings.TrimSpace(dialectName)) {
+	case "sqlite":
+		cfg.Dialect = contracts.SQLite
+	case "mysql":
+		cfg.Dialect = contracts.MySQL
+	default:
 		return fail(stderr, 2)
 	}
-	cfg.Target, err = filepath.Abs(target)
-	if err != nil || target == "" {
-		return fail(stderr, 2)
+	var err error
+	if cfg.Dialect == contracts.SQLite {
+		cfg.Source, err = filepath.Abs(source)
+		if err != nil || source == "" {
+			return fail(stderr, 2)
+		}
+		cfg.Target, err = filepath.Abs(target)
+		if err != nil || target == "" {
+			return fail(stderr, 2)
+		}
+	} else {
+		// MySQL DSNs are opaque and may contain credentials; never rewrite them
+		// with filepath.Abs and never print them.
+		cfg.Source, cfg.Target = source, target
 	}
 	if err := cfg.Validate(); err != nil {
 		return fail(stderr, 2)
+	}
+	if cfg.Dialect == contracts.MySQL && (streaming || resume || command == "status") {
+		return fail(stderr, 2) // MySQL streaming/recovery has no approved protocol
 	}
 	cfg.Strategy = contracts.StrategyRef{ID: strategy, Version: "1"}
 	cfg.KeyID = keyID
@@ -195,6 +213,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	// trust file or reviewer key is a configuration error, not an operation
 	// refusal, so it exits 2 without echoing a path.
 	if reviewCommand {
+		if cfg.Dialect == contracts.MySQL && streaming {
+			return fail(stderr, 2) // m2-stream-v1 is SQLite-only
+		}
 		if trustFile == "" || historyDir == "" || reviewerKeyID == "" || reviewerKeyFile == "" || keyID == "" {
 			return fail(stderr, 2)
 		}
@@ -486,9 +507,10 @@ func (f *scopeFlag) Set(raw string) error {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, "MaskRiver — SQLite masking, streaming and local recovery preview")
+	fmt.Fprintln(w, "MaskRiver — SQLite/MySQL masking preview; SQLite streaming and local recovery")
 	fmt.Fprintln(w, "Usage: maskriver <scan|mask|validate|approve|revoke|init-outbox|init-recovery|status|version> [flags]")
-	fmt.Fprintln(w, "Two independent pre-existing SQLite files are required; mask defaults to dry run.")
+	fmt.Fprintln(w, "Two independent pre-existing SQLite files, or two MySQL DSNs (--dialect mysql), are required; mask defaults to dry run.")
+	fmt.Fprintln(w, "MySQL streaming/recovery is not supported; m2-stream-v1/m2-recovery-v1 remain SQLite-only.")
 	fmt.Fprintln(w, "mask --apply --approved also requires a stored reviewer decision bound to the plan.")
 	fmt.Fprintln(w, "mask --streaming --apply --resume --run-id <32-hex> resumes m2-recovery-v1.")
 	fmt.Fprintln(w, "status --target <db> --run-id <32-hex> is read-only; it never recovers or writes.")

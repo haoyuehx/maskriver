@@ -30,7 +30,7 @@ func (r *reader) Tables(ctx context.Context, requested []string) ([]contracts.Ta
 			query = "SELECT name FROM main.sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
 		} else {
 			query = "SELECT table_name FROM information_schema.tables WHERE table_schema=? AND table_type='BASE TABLE' ORDER BY table_name"
-			args = []any{schema}
+			args = []any{r.schema}
 		}
 		rows, err := r.db.QueryContext(ctx, query, args...)
 		if err != nil {
@@ -83,7 +83,7 @@ func (a *adapter) exists(ctx context.Context, ref contracts.TableRef) error {
 	if a.dialect == contracts.SQLite {
 		err = a.db.QueryRowContext(ctx, "SELECT name FROM main.sqlite_schema WHERE type='table' AND name=?", ref.Table).Scan(&found)
 	} else {
-		err = a.db.QueryRowContext(ctx, "SELECT table_name FROM information_schema.tables WHERE table_schema=? AND table_name=? AND table_type='BASE TABLE'", ref.Schema, ref.Table).Scan(&found)
+		err = a.db.QueryRowContext(ctx, "SELECT table_name FROM information_schema.tables WHERE table_schema=? AND table_name=? AND table_type='BASE TABLE'", a.schema, ref.Table).Scan(&found)
 	}
 	return dbError(err)
 }
@@ -279,7 +279,7 @@ func (a *adapter) sqliteDescribe(ctx context.Context, ref contracts.TableRef) (c
 
 func (a *adapter) mysqlDescribe(ctx context.Context, ref contracts.TableRef) (contracts.TableSchema, error) {
 	out := contracts.TableSchema{Ref: ref}
-	rows, err := a.db.QueryContext(ctx, "SELECT column_name,data_type,column_type,is_nullable,character_maximum_length,numeric_precision,numeric_scale,collation_name FROM information_schema.columns WHERE table_schema=? AND table_name=? ORDER BY ordinal_position", ref.Schema, ref.Table)
+	rows, err := a.db.QueryContext(ctx, "SELECT column_name,data_type,column_type,is_nullable,character_maximum_length,numeric_precision,numeric_scale,collation_name FROM information_schema.columns WHERE table_schema=? AND table_name=? ORDER BY ordinal_position", a.schema, ref.Table)
 	if err != nil {
 		return out, dbError(err)
 	}
@@ -323,7 +323,7 @@ func (a *adapter) mysqlDescribe(ctx context.Context, ref contracts.TableRef) (co
 	}
 	out.Coverage.Columns = true
 
-	rows, err = a.db.QueryContext(ctx, "SELECT column_name FROM information_schema.key_column_usage WHERE table_schema=? AND table_name=? AND constraint_name='PRIMARY' ORDER BY ordinal_position", ref.Schema, ref.Table)
+	rows, err = a.db.QueryContext(ctx, "SELECT column_name FROM information_schema.key_column_usage WHERE table_schema=? AND table_name=? AND constraint_name='PRIMARY' ORDER BY ordinal_position", a.schema, ref.Table)
 	if err != nil {
 		return contracts.TableSchema{}, dbError(err)
 	}
@@ -346,7 +346,7 @@ func (a *adapter) mysqlDescribe(ctx context.Context, ref contracts.TableRef) (co
 	}
 	out.Coverage.PrimaryKey = true
 
-	rows, err = a.db.QueryContext(ctx, "SELECT index_name,column_name,non_unique,seq_in_index FROM information_schema.statistics WHERE table_schema=? AND table_name=? ORDER BY index_name,seq_in_index", ref.Schema, ref.Table)
+	rows, err = a.db.QueryContext(ctx, "SELECT index_name,column_name,non_unique,seq_in_index FROM information_schema.statistics WHERE table_schema=? AND table_name=? ORDER BY index_name,seq_in_index", a.schema, ref.Table)
 	if err != nil {
 		return contracts.TableSchema{}, dbError(err)
 	}
@@ -394,7 +394,7 @@ func (a *adapter) mysqlDescribe(ctx context.Context, ref contracts.TableRef) (co
 	}
 	out.Coverage.Indexes, out.Coverage.Unique = true, true
 
-	rows, err = a.db.QueryContext(ctx, "SELECT k.constraint_name,k.column_name,k.referenced_table_schema,k.referenced_table_name,k.referenced_column_name,r.update_rule,r.delete_rule,k.ordinal_position FROM information_schema.key_column_usage k JOIN information_schema.referential_constraints r ON r.constraint_schema=k.constraint_schema AND r.constraint_name=k.constraint_name AND r.table_name=k.table_name WHERE k.table_schema=? AND k.table_name=? AND k.referenced_table_name IS NOT NULL ORDER BY k.constraint_name,k.ordinal_position", ref.Schema, ref.Table)
+	rows, err = a.db.QueryContext(ctx, "SELECT k.constraint_name,k.column_name,k.referenced_table_schema,k.referenced_table_name,k.referenced_column_name,r.update_rule,r.delete_rule,k.ordinal_position FROM information_schema.key_column_usage k JOIN information_schema.referential_constraints r ON r.constraint_schema=k.constraint_schema AND r.constraint_name=k.constraint_name AND r.table_name=k.table_name WHERE k.table_schema=? AND k.table_name=? AND k.referenced_table_name IS NOT NULL ORDER BY k.constraint_name,k.ordinal_position", a.schema, ref.Table)
 	if err != nil {
 		return contracts.TableSchema{}, dbError(err)
 	}
@@ -434,7 +434,7 @@ func (a *adapter) mysqlDescribe(ctx context.Context, ref contracts.TableRef) (co
 	}
 	out.Coverage.ForeignKeys = true
 
-	rows, err = a.db.QueryContext(ctx, "SELECT c.check_clause FROM information_schema.table_constraints t JOIN information_schema.check_constraints c ON t.constraint_schema=c.constraint_schema AND t.constraint_name=c.constraint_name WHERE t.table_schema=? AND t.table_name=? AND t.constraint_type='CHECK' ORDER BY t.constraint_name", ref.Schema, ref.Table)
+	rows, err = a.db.QueryContext(ctx, "SELECT c.check_clause FROM information_schema.table_constraints t JOIN information_schema.check_constraints c ON t.constraint_schema=c.constraint_schema AND t.constraint_name=c.constraint_name WHERE t.table_schema=? AND t.table_name=? AND t.constraint_type='CHECK' ORDER BY t.constraint_name", a.schema, ref.Table)
 	if err == nil {
 		for rows.Next() {
 			var clause string

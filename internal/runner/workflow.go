@@ -6,8 +6,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"hash"
 	"io"
 	"os"
 	"reflect"
@@ -43,8 +45,10 @@ func OpenForApply(ctx context.Context, cfg config.Runtime, key contracts.Value) 
 	if err != nil {
 		return nil, err
 	}
-	if err := db.RecoverSQLiteJournal(ctx, targetOpts); err != nil {
-		return nil, err
+	if targetOpts.Dialect == contracts.SQLite {
+		if err := db.RecoverSQLiteJournal(ctx, targetOpts); err != nil {
+			return nil, err
+		}
 	}
 	return Open(ctx, cfg, key)
 }
@@ -97,9 +101,15 @@ func (e *Engine) PoolStats() (source, target sql.DBStats, ok bool) {
 	return readerStats, writerStats, readerOK && writerOK
 }
 
-// tableRef names one scoped table in the frozen reference form.
+// tableRef names one scoped table in the frozen reference form. The logical
+// schema is shared by both sides; the MySQL adapter maps it to each connection's
+// physical database so differently named source/target databases stay comparable.
 func tableRef(name string) contracts.TableRef {
 	return contracts.TableRef{Database: "maskriver", Schema: "main", Table: name}
+}
+
+func (e *Engine) tableRef(name string) contracts.TableRef {
+	return contracts.TableRef{Database: "maskriver", Schema: e.cfg.SchemaName(), Table: name}
 }
 
 // capabilityReader is the internal db capability set beyond the frozen
@@ -141,7 +151,7 @@ type scopeEvidence struct {
 // describe requires identical source and target schemas with complete column
 // and primary-key metadata, exactly as the single-scope workflow did.
 func (e *Engine) describe(ctx context.Context, name string) (contracts.TableSchema, error) {
-	table := tableRef(name)
+	table := e.tableRef(name)
 	src, err := e.source.Describe(ctx, table)
 	if err != nil {
 		return contracts.TableSchema{}, err
@@ -333,7 +343,12 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 	if err := e.requireQuiescentSnapshot(ctx); err != nil {
 		return empty, err
 	}
-	digest, err := fileDigest(e.cfg.Source)
+	var digest string
+	if e.cfg.DialectName() == contracts.MySQL {
+		digest, err = e.mysqlSnapshotDigest(ctx, set)
+	} else {
+		digest, err = fileDigest(e.cfg.Source)
+	}
 	if err != nil {
 		return empty, err
 	}
@@ -351,7 +366,7 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 			}
 			tablePlan.Columns = append(tablePlan.Columns, contracts.ColumnPlan{
 				Column: scope.column.Ref, Type: scope.column.Type, Strategy: e.cfg.Strategy,
-				Scope:                "sqlite/" + name + "/" + scope.column.Ref.Column,
+				Scope:                dialectLabel(e.cfg.DialectName()) + "/" + name + "/" + scope.column.Ref.Column,
 				NormalizationVersion: "typed-lexical-v1", KeyID: e.cfg.KeyID,
 			})
 		}
@@ -409,7 +424,7 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 		// proves which file Apply would write and nothing about that file's
 		// state. Target equivalence is proven by the mandatory full dry run, not
 		// by this digest.
-		TargetID:     hashString(e.cfg.Target),
+		TargetID:     hashString(e.cfg.TargetIdentity()),
 		SchemaDigest: schemaDigest, ConfigDigest: configDigest,
 		// Derived from the gates above, not assumed: reaching this point means
 		// every declared scope was untruncated and Sensitive.
@@ -427,11 +442,105 @@ func (e *Engine) Plan(ctx context.Context) (contracts.Plan, error) {
 // requireQuiescentSnapshot refuses a source whose journal mode can keep
 // committed data outside the main .db file.
 func (e *Engine) requireQuiescentSnapshot(ctx context.Context) error {
+	if e.cfg.DialectName() != contracts.SQLite {
+		// MySQL identity is a content digest over the planned tables, not a
+		// single-file snapshot, so the SQLite journal-mode probe does not apply.
+		return nil
+	}
 	caps, err := sourceCapabilities(e.source)
 	if err != nil {
 		return err
 	}
 	return caps.Quiescent(ctx)
+}
+
+func dialectLabel(d contracts.Dialect) string {
+	if d == contracts.MySQL {
+		return "mysql"
+	}
+	return "sqlite"
+}
+
+// mysqlSnapshotDigest hashes the complete ordered content of every planned
+// table (all columns, not only the masked ones) on the source. It is
+// deliberately a content identity: a MySQL server has no one file whose bytes
+// describe the committed state. Cost is proportional to the planned tables'
+// size; this is a bounded-workflow CLI, not a streaming snapshot protocol.
+func (e *Engine) mysqlSnapshotDigest(ctx context.Context, set evidenceSet) (string, error) {
+	h := sha256.New()
+	for _, name := range set.tables {
+		schema := set.schemas[name]
+		if len(schema.PrimaryKey) == 0 {
+			return "", contracts.ErrUnsupported
+		}
+		columns := make([]string, len(schema.Columns))
+		for i, col := range schema.Columns {
+			columns[i] = col.Ref.Column
+		}
+		writeField(h, "table", name)
+		for _, col := range schema.Columns {
+			writeField(h, "column", col.Ref.Column)
+			h.Write([]byte{byte(col.Type.Kind)})
+			writeField(h, "native", col.Type.Native)
+		}
+		var after []contracts.Value
+		for {
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
+			page, err := e.source.Page(ctx, contracts.PageRequest{
+				Table: e.tableRef(name), Columns: columns,
+				KeyColumns: schema.PrimaryKey, After: after, Limit: 256,
+			})
+			if err != nil {
+				return "", err
+			}
+			if len(page.Rows) > 256 || (!page.Done && len(page.Rows) == 0) {
+				return "", contracts.ErrIncomplete
+			}
+			for _, row := range page.Rows {
+				writeField(h, "row", "")
+				for _, col := range schema.Columns {
+					value, ok := row[col.Ref.Column]
+					if !ok {
+						return "", contracts.ErrIncomplete
+					}
+					writeValue(h, value)
+				}
+			}
+			if page.Done {
+				break
+			}
+			if len(page.Next) != len(schema.PrimaryKey) {
+				return "", contracts.ErrIncomplete
+			}
+			after = append([]contracts.Value(nil), page.Next...)
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func writeField(h hash.Hash, label, value string) {
+	var size [8]byte
+	binary.BigEndian.PutUint64(size[:], uint64(len(label)))
+	h.Write(size[:])
+	h.Write([]byte(label))
+	binary.BigEndian.PutUint64(size[:], uint64(len(value)))
+	h.Write(size[:])
+	h.Write([]byte(value))
+}
+
+func writeValue(h hash.Hash, value contracts.Value) {
+	h.Write([]byte{byte(value.Kind())})
+	if value.IsNull() {
+		h.Write([]byte{0})
+		return
+	}
+	h.Write([]byte{1})
+	var size [8]byte
+	binary.BigEndian.PutUint64(size[:], uint64(len(value.Payload())))
+	h.Write(size[:])
+	h.Write([]byte(value.Payload()))
 }
 
 func hashString(value string) string {
