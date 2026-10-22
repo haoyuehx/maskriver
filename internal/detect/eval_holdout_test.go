@@ -163,6 +163,7 @@ func TestHoldoutEvaluation(t *testing.T) {
 	cases := holdoutCases(t)
 	type metric struct{ tp, fp, fn int }
 	metrics := map[string]*metric{}
+	negatives := 0
 	request := func(c holdoutCase) contracts.DetectionRequest {
 		return contracts.DetectionRequest{
 			Column: contracts.Column{
@@ -174,6 +175,9 @@ func TestHoldoutEvaluation(t *testing.T) {
 		}
 	}
 	for _, c := range cases {
+		if !c.positive {
+			negatives++
+		}
 		if c.value.Kind() == contracts.Date {
 			req := request(c)
 			req.Column.Type.Kind = contracts.Date
@@ -192,9 +196,9 @@ func TestHoldoutEvaluation(t *testing.T) {
 			} else if c.positive {
 				m.fn++
 				t.Logf("holdout FN rule=%s column=%s", c.rule, c.column)
-			} else if got {
+			} else if r.Sensitivity == contracts.Sensitive {
 				m.fp++
-				t.Logf("holdout FP rule=%s column=%s", c.rule, c.column)
+				t.Logf("holdout FP rule=%s column=%s got_rule=%s", c.rule, c.column, r.RuleID)
 			}
 			continue
 		}
@@ -213,9 +217,9 @@ func TestHoldoutEvaluation(t *testing.T) {
 		} else if c.positive {
 			m.fn++
 			t.Logf("holdout FN rule=%s column=%s", c.rule, c.column)
-		} else if got {
+		} else if r.Sensitivity == contracts.Sensitive {
 			m.fp++
-			t.Logf("holdout FP rule=%s column=%s", c.rule, c.column)
+			t.Logf("holdout FP rule=%s column=%s got_rule=%s", c.rule, c.column, r.RuleID)
 		}
 	}
 	total := metric{}
@@ -238,7 +242,7 @@ func TestHoldoutEvaluation(t *testing.T) {
 	}
 	p := float64(total.tp) / float64(total.tp+total.fp)
 	r := float64(total.tp) / float64(total.tp+total.fn)
-	t.Logf("holdout overall tp=%d fp=%d fn=%d precision=%.3f recall=%.3f", total.tp, total.fp, total.fn, p, r)
+	t.Logf("holdout overall tp=%d fp=%d fn=%d negatives=%d precision=%.3f recall=%.3f", total.tp, total.fp, total.fn, negatives, p, r)
 	if total.tp+total.fp == 0 || total.tp+total.fn == 0 {
 		t.Fatal("holdout produced no evidence")
 	}
