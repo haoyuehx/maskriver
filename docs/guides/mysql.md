@@ -6,8 +6,8 @@ disposable databases on an isolated server. Never point both sides at the same
 database or at production.
 
 ```sh
-export SRC='app:password@tcp(db.internal:3306)/maskriver_source?timeout=5s'
-export DST='app:password@tcp(db.internal:3306)/maskriver_target?timeout=5s'
+export SRC='<user>:<password>@tcp(<host>:3306)/maskriver_source?timeout=5s'
+export DST='<user>:<password>@tcp(<host>:3306)/maskriver_target?timeout=5s'
 
 maskriver scan --dialect mysql --source "$SRC" --target "$DST" \
   --scope people.born --scope notes.note

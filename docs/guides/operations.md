@@ -3,9 +3,11 @@
 ## Provisioning
 
 - Use dedicated, isolated, disposable databases or file copies. MySQL should use
-  a least-privilege account; the source account needs SELECT and metadata
-  visibility, the target needs UPDATE on planned columns. The tool adds a
-  read-only session guard, but database grants remain the primary control.
+  a least-privilege account. Both sides are read for plan/digest/validation, so
+  both need SELECT plus metadata visibility; the target additionally needs
+  UPDATE on planned columns. Strict validation also needs `CHECK TABLE` and
+  foreign-key metadata visibility. The tool adds a read-only session guard, but
+  database grants remain the primary control.
 - Keep the masking key, reviewer Ed25519 private key, deployment trust file and
   history directory outside the database and outside the release package.
 - Record the tag/commit and archive SHA-256 used for every run.
