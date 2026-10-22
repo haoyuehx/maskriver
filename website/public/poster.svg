@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <radialGradient id="bg" cx="58%" cy="38%" r="82%"><stop stop-color="#16415e"/><stop offset=".5" stop-color="#081726"/><stop offset="1" stop-color="#020812"/></radialGradient>
+    <linearGradient id="flow" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#63dcf3" stop-opacity=".15"/><stop offset=".4" stop-color="#63dcf3"/><stop offset="1" stop-color="#b49cff" stop-opacity=".2"/></linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#63dcf3"/><stop offset="1" stop-color="#b49cff"/></linearGradient>
+    <pattern id="grid" width="80" height="80" patternUnits="userSpaceOnUse"><path d="M80 0H0V80" fill="none" stroke="#477996" stroke-width="1" opacity=".17"/></pattern>
+    <filter id="glow"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/><rect width="1920" height="1080" fill="url(#grid)"/>
+  <g opacity=".8">
+    <path d="M260 620 C430 620 500 450 700 450 S980 620 1200 620 S1500 380 1720 380" fill="none" stroke="#25506a" stroke-width="2"/>
+    <path d="M260 620 C430 620 500 790 700 790 S980 620 1200 620 S1500 830 1720 830" fill="none" stroke="#25506a" stroke-width="2"/>
+    <path d="M260 620 C430 620 500 450 700 450 S980 620 1200 620 S1500 380 1720 380" fill="none" stroke="url(#flow)" stroke-width="4" stroke-dasharray="14 20" filter="url(#glow)"/>
+  </g>
+  <g fill="#63dcf3"><circle cx="260" cy="620" r="11"/><circle cx="700" cy="450" r="9"/><circle cx="1200" cy="620" r="9"/><circle cx="1720" cy="380" r="11"/></g>
+  <g fill="#b49cff"><circle cx="700" cy="790" r="8"/><circle cx="1720" cy="830" r="8"/></g>
+  <g transform="translate(120 110)">
+    <rect width="82" height="82" rx="20" fill="#0b2338" stroke="#25506a" stroke-width="2"/>
+    <path d="M18 52c8-16 15 16 24 0s15 16 24 0" fill="none" stroke="url(#mark)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M24 29h34M24 38h21" stroke="#ecf8ff" stroke-width="4" stroke-linecap="round" opacity=".9"/>
+    <text x="108" y="52" fill="#ecf8ff" font-family="Inter,Noto Sans SC,Microsoft YaHei,sans-serif" font-size="46" font-weight="750" letter-spacing="1">MaskRiver</text>
+    <text x="110" y="78" fill="#7f9cb0" font-family="JetBrains Mono,Consolas,monospace" font-size="16" letter-spacing="4">PRODUCT FILM · 2026</text>
+  </g>
+  <g opacity=".5" font-family="JetBrains Mono,Consolas,monospace" font-size="15" fill="#6f8ca1">
+    <text x="122" y="1010" letter-spacing="3">SCAN → PREVIEW → APPROVE → APPLY → VALIDATE</text>
+    <text x="1798" y="1010" text-anchor="end" letter-spacing="3">SYNTHETIC DATA</text>
+  </g>
+</svg>

@@ -33,6 +33,16 @@ dependencies keep their own licences and their verbatim texts are kept under
 | Go toolchain / standard library (go1.26.3) | BSD-3-Clause | `licenses/go-toolchain-LICENSE` (copied from `GOROOT/LICENSE` at build time) |
 | Go toolchain / standard library (go1.26.3) | Additional IP Rights Grant (patents) | `licenses/go-toolchain-PATENTS` (copied from `GOROOT/PATENTS` at build time) |
 
+## Website dependencies (not linked into the Go binary)
+
+The static showcase under `website/` has its own npm lockfile and does not change
+the Go dependency set or release archive. Its runtime dependencies are
+`react`/`react-dom` (MIT) and `lucide-react` (ISC); build/test-only tools include
+Vite, TypeScript, ESLint, Playwright and Sharp under their respective MIT/Apache
+licences. Exact versions and integrity hashes are pinned in
+`website/package-lock.json`. The site is served as static files and has no
+analytics or third-party runtime requests.
+
 Every module requirement above has its verbatim licence text under `licenses/`,
 including modules that are required but not linked into a default linux/amd64
 build (`go-isatty`, `go-strftime`). The build's actual link set is derived at
