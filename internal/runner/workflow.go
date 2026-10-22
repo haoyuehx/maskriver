@@ -53,8 +53,8 @@ func OpenForApply(ctx context.Context, cfg config.Runtime, key contracts.Value) 
 	return Open(ctx, cfg, key)
 }
 
-// Open requires two independent, existing SQLite files and opens only Readers.
-// No Writer, audit file, checkpoint or mapping store is created.
+// Open requires two independent SQLite files or MySQL databases and opens
+// only Readers. No Writer, audit file, checkpoint or mapping store is created.
 func Open(ctx context.Context, cfg config.Runtime, key contracts.Value) (*Engine, error) {
 	sourceOpts, err := cfg.DatabaseOptions(true)
 	if err != nil {

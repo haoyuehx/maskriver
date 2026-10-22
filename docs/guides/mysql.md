@@ -38,9 +38,11 @@ maskriver validate --dialect mysql --source "$SRC" --target "$DST" \
 
 - The same physical database is refused after connecting, including unix/tcp,
   localhost/IP and path aliases.
-- DSNs that can disable read-only/FK/session safety or inject SET clauses are
-  refused. Credentials are not printed, but they are visible in the process
-  command line; protect the host and shell.
+- DSNs that can disable read-only/FK/session/unique safety or inject SET
+  clauses are refused, including `@@session.`/`GLOBAL ` aliases; the live
+  reader re-checks read-only and the writer re-checks FK/unique checks.
+  Credentials are not printed, but they are visible in the process command line;
+  protect the host and shell.
 - Plan binds the full content of every planned table. Cost grows with planned
   table size; unplanned tables are not hashed. The source must be isolated and
   quiescent because the digest is not an atomic consistent snapshot.

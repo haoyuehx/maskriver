@@ -410,7 +410,7 @@ func (a *adapter) mysqlDescribe(ctx context.Context, ref contracts.TableRef) (co
 		fk := fkMap[name]
 		if fk == nil {
 			logicalSchema := targetSchema
-			if targetSchema == a.schema {
+			if strings.EqualFold(targetSchema, a.schema) {
 				logicalSchema = ref.Schema
 			}
 			fk = &contracts.ForeignKey{Target: contracts.TableRef{Database: a.dataset, Schema: logicalSchema, Table: targetTable}, OnUpdate: onUpdate, OnDelete: onDelete}

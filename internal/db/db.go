@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/haoyuehx/maskriver/internal/db/mysqlparam"
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 	_ "modernc.org/sqlite"
 )
@@ -139,7 +140,7 @@ func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool, co
 			return nil, contracts.ErrUnsafe
 		}
 		for key, value := range cfg.Params {
-			if unsafeMySQLParam(key, value) {
+			if mysqlparam.Unsafe(key, value) {
 				return nil, contracts.ErrUnsafe
 			}
 		}
@@ -181,6 +182,30 @@ func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool, co
 		_ = db.Close()
 		return nil, dbError(err)
 	}
+	if opts.Dialect == contracts.MySQL {
+		// Do not trust DSN parameters alone: aliases such as @@session.* or
+		// SET-clause values can otherwise make the session property depend on
+		// driver map order. Verify the property on the live connection.
+		var readOnlyValue, foreignKeys, uniqueChecks int
+		var err error
+		if readOnly {
+			err = db.QueryRowContext(pingCtx, "SELECT @@SESSION.transaction_read_only").Scan(&readOnlyValue)
+			if err == nil && readOnlyValue != 1 {
+				err = contracts.ErrUnsafe
+			}
+		} else {
+			err = db.QueryRowContext(pingCtx,
+				"SELECT @@SESSION.foreign_key_checks, @@SESSION.unique_checks").
+				Scan(&foreignKeys, &uniqueChecks)
+			if err == nil && (foreignKeys != 1 || uniqueChecks != 1) {
+				err = contracts.ErrUnsafe
+			}
+		}
+		if err != nil {
+			_ = db.Close()
+			return nil, dbErrorOrCategory(err)
+		}
+	}
 	physical := "main"
 	if opts.Dialect == contracts.MySQL {
 		cfg, err := mysql.ParseDSN(dsn)
@@ -192,19 +217,6 @@ func open(ctx context.Context, opts contracts.DatabaseOptions, readOnly bool, co
 	}
 	return &adapter{db: db, dialect: opts.Dialect, dataset: opts.DatasetID,
 		schema: physical, schemas: schemas}, nil
-}
-
-func unsafeMySQLParam(key, value string) bool {
-	if strings.ContainsAny(value, ",;") {
-		return true
-	}
-	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "transaction_read_only", "tx_read_only", "foreign_key_checks",
-		"sql_mode", "init_connect", "autocommit", "read_only",
-		"super_read_only", "transaction_isolation", "tx_isolation":
-		return true
-	}
-	return false
 }
 
 func sqliteDSN(input string, readOnly bool) (string, error) {

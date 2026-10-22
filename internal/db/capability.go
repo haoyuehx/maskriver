@@ -7,12 +7,12 @@ import (
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
 
-// This file holds the internal read-only capability probes that the frozen
-// m1a-v1 contract surface (pkg/contracts) deliberately does not model: SQLite
-// journal mode and trigger existence. They exist so the runner can prove that
-// a SQLite source is a quiescent snapshot and that a planned write can not fire
-// a trigger. They are read-only, never persist anything and return sanitized
-// category errors only.
+// This file holds internal read-only capability probes that the frozen m1a-v1
+// contract surface (pkg/contracts) deliberately does not model: SQLite journal
+// mode, trigger existence, and MySQL live server identity. They let the runner
+// prove a SQLite source is a quiescent snapshot, refuse any planned write that
+// could fire a trigger, and refuse aliases of one MySQL database. They are
+// read-only, never persist anything and return sanitized category errors only.
 
 // Quiescent reports whether this read-only session can prove that the main
 // database file alone holds the complete committed database state.

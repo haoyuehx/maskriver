@@ -3,10 +3,10 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/haoyuehx/maskriver/internal/db/mysqlparam"
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
 
@@ -128,28 +128,11 @@ func mysqlConfig(dsn string) (*mysql.Config, error) {
 		return nil, contracts.ErrUnsafe
 	}
 	for key, value := range cfg.Params {
-		if unsafeMySQLParam(key, value) {
+		if mysqlparam.Unsafe(key, value) {
 			return nil, contracts.ErrUnsafe
 		}
 	}
 	return cfg, nil
-}
-
-// unsafeMySQLParam rejects DSN parameters that can disable the session safety
-// properties this tool relies on, or that can break out of the driver's
-// comma-joined SET statement. The driver applies Params as session variables,
-// so an arbitrary key is not merely a connection option.
-func unsafeMySQLParam(key, value string) bool {
-	if strings.ContainsAny(value, ",;") {
-		return true
-	}
-	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "transaction_read_only", "tx_read_only", "foreign_key_checks",
-		"sql_mode", "init_connect", "autocommit", "read_only",
-		"super_read_only", "transaction_isolation", "tx_isolation":
-		return true
-	}
-	return false
 }
 
 // SchemaName is the logical schema carried in TableRefs. SQLite uses "main";
@@ -183,9 +166,9 @@ func (c Runtime) DatabaseOptions(source bool) (contracts.DatabaseOptions, error)
 }
 
 // TargetIdentity is the digest input that names the target without exposing its
-// credentials. SQLite keeps the existing absolute path. MySQL strips the
-// password and session-only parameters so rotating a password does not silently
-// change which database a plan approved.
+// credentials. SQLite keeps the existing absolute path. MySQL binds only the
+// normalized network/address/database name, so rotating a password, user,
+// timeout or TLS option does not silently change which database a plan approved.
 func (c Runtime) TargetIdentity() (string, error) {
 	if c.dialect() != contracts.MySQL {
 		return c.Target, nil
