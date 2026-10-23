@@ -93,4 +93,4 @@ M1 限定预览版已作为 **GitHub Pre-release** 发布：tag `v0.1.0-dev` →
 
 - **M3-1 已合并 `cc178aa`**：strict 全量+适配器完整性检查、Writer 非 NULL→NULL 拒绝、审批时钟偏差对齐；`v0.2.1-preview` 已发布。
 - **M3-2 已合并 `71e85fd`（PR #93）**：MySQL 8.0.46 CLI `Scan→Preview→Approve→Apply→Validate`，真实隔离 CI E2E；MySQL streaming/recovery 明确拒绝。MySQL 恢复仍无协议，不得宣称支持。
-- M3-3/M3-4/M3-5/M3-6 仍按各自 Issue 验收，F1/生产准确率、跨平台 streaming/recovery 与稳定版门禁不得由本增量推断完成。
+- M3-3/M3-4/M3-5/M3-6 后续均已完成；`v1.0.0` 已发布。F1/生产准确率、跨平台 streaming/recovery 与稳定版门禁仍按各自验收记录执行。

@@ -46,7 +46,7 @@
 
 ## 模块 go-detect — 敏感信息检测组件（#6）
 
-**规范依据**：contracts.md §4（`Detector`、`DetectionRequest`、`Decision`、三态、`Evidence`、`IssueCode`）；[feature-matrix.md](feature-matrix.md) China-first 有界范围；[test-plan.md](test-plan.md) 的专项测试。团队已将原北美 M1 规则调整为 China-first；#12 中的中国检测部分提前在 #6 交付，**#12 的格式约束脱敏仍待实现**。
+**规范依据**：contracts.md §4（`Detector`、`DetectionRequest`、`Decision`、三态、`Evidence`、`IssueCode`）；[feature-matrix.md](feature-matrix.md) China-first 有界范围；[test-plan.md](test-plan.md) 的专项测试。团队已将原北美 M1 规则调整为 China-first；#12 中的中国检测部分提前在 #6 交付，**#12 的格式约束脱敏后续已实现；本句为历史计划记录**。
 
 **允许修改**：`internal/detect/**/*.go`（含本包测试）。其余文件由 Main 协调。
 **依赖**：`Detector`、`DetectionRequest`、`Decision`、`Sensitivity`/`DecisionSource`、`Sample`/`Evidence`/`IssueCode`、`Value`/`Type`。

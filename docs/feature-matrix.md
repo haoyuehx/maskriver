@@ -18,7 +18,7 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 |---|---|---|
 | 共享 DTO/接口 `m1a-v1` | 已实现 | `pkg/contracts` + 契约测试；不是完整引擎 |
 | `database/sql` 驱动版本锁定 | 已实现 | `go.mod`/`go.sum`、database-drivers.md |
-| SQLite 合成环境 | 已实现 | `internal/testenv`、`tools/fixture`；业务 Reader/Writer、分页和事务测试由 #5/PR #21 交付，是否通过以最终 CI 为准 |
+| SQLite 合成环境 | 已实现 | `internal/testenv`、`tools/fixture`；业务 Reader/Writer、分页和事务测试由 #5/PR #21 交付，最终 CI 在本轮继续执行 |
 | MySQL 隔离环境 | 已实现（隔离测试 + 真实 CLI） | 固定 MySQL 8.0.46 私有 socket 容器执行 TestMySQLFixture、TestMySQLAdapter 与真实 TestMySQLCLIWorkflow；其他 MySQL 版本仍未验证 |
 | 可选工作树工具 | 已实现（历史单机） | `scripts/check-native-worktree.mjs` 的旧预检，不是跨平台开发前置条件 |
 | 早期模块任务定义 | 历史文档 | parallel-tasks.md；早期计划不是当前贡献者名单或团队人数 |
@@ -45,7 +45,7 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 
 ## 敏感信息检测
 
-China-first 的 13 种检测规则由 PR #20（Issue #6）实现；其规则是有界、上下文敏感的组件能力，**并不代表全国 PII 全覆盖或 CLI/数据库端到端扫描已经交付**。以下“已实现”仅表示存在对应 Go 代码和合成测试，不代表生产环境准确率或安全批准。#12 的九种**纯内存有界格式约束替换**见 PR #29；这些 CN 策略的 CLI 端到端 Apply、schema/碰撞处理和独立验证尚未完成。
+China-first 的 13 种检测规则由 PR #20（Issue #6）实现；其规则是有界、上下文敏感的组件能力，**并不代表全国 PII 全覆盖或 CLI/数据库端到端扫描已经交付**。以下“已实现”仅表示存在对应 Go 代码和合成测试，不代表生产环境准确率或安全批准。#12 的九种**纯内存有界格式约束替换**见 PR #29；`cn_date` 已通过真实 MySQL CLI E2E；其他 CN 策略仍有组件/合成覆盖，未逐一完成 CLI 级独立验证。
 
 | 功能 | 说明 / 范围 | 状态 | 目标 |
 |---|---|---|---|

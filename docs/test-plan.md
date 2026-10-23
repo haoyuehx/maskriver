@@ -32,7 +32,7 @@ go build -o bin/maskriver ./cmd/maskriver
 
 `.github/workflows/ci.yml` 在 Ubuntu/Windows 执行格式检查、`go test -count=1 -v ./...` 和 `go vet ./...`，Ubuntu 另跑 race。MySQL 隔离业务测试单独在 Ubuntu 禁网容器执行 fixture + adapter，失败即 CI 失败；普通测试无 MySQL socket 时明确 SKIP。macOS 可以本地测试，macOS 非流式 M1 已由 CI 覆盖；macOS/Windows streaming/recovery 仍不支持。
 
-PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，统一 CI 与评审完成后才能合并。本机不支持 race 可由 Ubuntu CI 补齐，不能记成本机通过。#10 的当前适配器用例已在 PR #30 隔离 MySQL 8.0.46 实跑；完整 MySQL CLI workflow 后续由 M3-2/PR #93 验证，其他 MySQL 版本与生产环境仍未验证。
+PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，统一 CI 与评审完成后才能合并。本机不支持 race 可由 Ubuntu CI 补齐，不能记成本机通过。#10 的当前适配器用例已在 PR #30 隔离 MySQL 8.0.46 实跑；完整 MySQL CLI workflow 已由 M3-2/PR #93 验证，其他 MySQL 版本与生产环境仍未验证。
 
 ## 分阶段门禁
 
@@ -135,17 +135,17 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - **审批绑定**：`approve` 用 Ed25519 私钥签发记录，记录绑定 plan_id、source_snapshot_id、target_id、schema_digest、config_digest、strategy/version、key_id 与有序 scope 列表（`newRecord`、`checkBinding`）。`--approved` 只是声明，`--apply` 才是写意图，两者都必需且都不充分；还需要 `history.Store.Lookup` 验证签名、绑定、有效期与撤销后返回记录（`TestE2EInvalidDecisionsRefused`）。
 - **整计划语义**：两表计划必须整体审批；仅批一张表不能授权整计划（`TestE2EPartialDecisionDoesNotAuthorizeWholePlan`）。换序、换策略、改 schema、改源快照、改目标绑定都会生成不同 Plan，原记录因此失效（`TestE2EDecisionBoundFieldChangesRefused`；存储层对应 `TestLookupRejectsScopeReorder`、`TestLookupRejectsChangedBoundField`、`TestLookupRejectsPartialMultiTableApproval`）。
 - **信任边界**：`apply` 只加载部署预置 trust file 中的公钥（`history.LoadTrustFile`），路径上不接收审核私钥；`TestApplyPathTakesNoReviewerPrivateKey` 固定这一接口面，`TestOpenRejectsPrivateKeyThatDoesNotMatchTrustedKey` 拒绝私钥与信任项不匹配。同一操作者同时控制 trust file 与审核私钥时工具不阻止，`ReviewerID` 只是自填标签；这是本地签名边界，不是 RBAC。
-- **`null` 策略**：`Engine.maskColumn` 在 dryRun 中拒绝非 NULL → NULL，Preview 与 Apply 都在打开 Writer 前失败（`TestCLINullStrategyRefusedBeforeWrite`、`TestApplyRefusesNullReplacementBeforeWriter`）。`internal/db` 写入层仍接受该组合（P2-1）。
+- **`null` 策略**：`Engine.maskColumn` 在 dryRun 中拒绝非 NULL → NULL，Preview 与 Apply 都在打开 Writer 前失败（`TestCLINullStrategyRefusedBeforeWrite`、`TestApplyRefusesNullReplacementBeforeWriter`）。M3-1 起 `internal/db` 写入层也拒绝该组合（`ErrUnsafe`，`TestWriteTxRefusesNonNullToNullReplacement`）。
 - **静态门禁**：UNKNOWN 扫描在 Plan 阶段 `ErrUnsafe`；无稳定主键或覆盖不全 `ErrIncomplete`；被脱敏列位于 UNIQUE `ErrUnsafe`、CHECK/FK/被引用 FK/任意触发器 `ErrUnsupported`；非 rollback-journal 源 `ErrIncomplete`（WAL 已由 `TestWALSourceIsRefusedBySnapshotIdentity` 覆盖；MEMORY/OFF 按同一代码路径拒绝，无专项 CLI 用例）；未知策略 `ErrInvalid`；调用方提供的 Plan 与重新计算的 Plan 不一致（快照/schema/策略）`ErrConflict`；截断扫描 `ErrIncomplete`；严格验证覆盖不足（`SchemaCoverage` 缺失、`PartialCoverage`）以 `Warning` + `Coverage.Complete=false` 退出 1。证据：`TestPlanRefusesNonSensitiveColumnEvenWhenApproved`、`TestPreflightRefusesTriggerOnPlannedTable`、`TestPreflightRefusesUniqueConstraintOnModifiedColumn`、`TestPreflightRefusesCheckOnModifiedColumn`、`TestPreflightRefusesForeignKeyOnModifiedColumn`、`TestPreflightRefusesIncomingReferenceFromUnplannedTable`、`TestE2EApprovalDoesNotBypassExistingGates`。
 - **批次语义**：`BatchReceipt` 只在 Commit 成功后追加；失败保留已提交前缀但 `Complete=false`；`ErrCommitUnknown` 标记 `CommitOutcomeUnknown`，不重试也不声称回滚；没有跨批全局原子性；表在运行中被清空使前后 Count 不一致 → `ErrConflict`。证据：`TestApplyRetainsReceiptForEarlierCommittedBatch`、`TestApplyWrappedCommitUnknownIsNotReportedAsRolledBack`、`TestApplyRefusesTableEmptiedBeforeItsTurn`。
-- **`--strict` 现状**：`verify` 忽略 `ValidateRequest.Strict`；所有 Warning 路径已把 `Coverage.Complete` 置 false，因此 `contracts.Passed` 无论 strict 都不接受这些报告。CLI 测试只证明 flag 解析、转发（`validationRequest`）与退出码敏感性（`TestCLIStrictFlagWiring`），以及 `Passed` 对 Warning 的判定（`TestValidationPassedHonorsStrictWarning`）；没有数据库 fixture 能区分 strict 与非 strict。不得把它描述为已具备独立严格语义门禁。
+- **`--strict` 现状**：M3-1 起 `verify` 已执行严格语义：要求 `RowLimit=0`、逐表适配器完整性检查，并拒绝 Warning；证据为 `TestStrictRequiresFullScanAndIntegrityCapability`、`TestStrictIntegrityFailureIsNotPass` 与 MySQL CLI E2E。早期“strict 无独立语义”的记录仅适用于历史快照。
 
 ## 真实支持与仅组件级证据
 
 - **真实 SQLite CLI 端到端**：上节列出的 `cmd/maskriver` 用例，以及 `internal/runner` 中真实 SQLite + Writer/WriteTx 包装 spy 的多表/故障用例。
 - **真实 SQLite 组件级**：`internal/db` 的 Reader/Writer、分页、事务与驱动级 SQL Spy；`internal/history` 的真实文件存储（不连接数据库）；`internal/mask`、`internal/detect` 为纯内存组件；同一表多列的 Plan/Preview/Apply 由 `TestPreviewCoversEveryColumnOfOneTable`、`TestApplyWritesEveryPlannedColumnOfOneTable` 覆盖，不是 CLI 级证据。
-- **fake Reader / 仅适配器**：`internal/verify` 的 schema/行数/keyset 回归使用 fake Reader；MySQL 只有 `TestMySQLAdapter` 适配器组件测试，没有 MySQL CLI。
-- 组件测试通过不等于用户 CLI 路径或生产可用；MySQL CLI 与完整 #11 独立验收不在已测范围。
+- **fake Reader / 仅适配器**：`internal/verify` 的 schema/行数/keyset 回归使用 fake Reader；MySQL 适配器与真实 CLI 由隔离 CI 的 `TestMySQLAdapter` + `TestMySQLCLIWorkflow` 覆盖。
+- 组件测试通过不等于生产可用；MySQL 其他版本与完整 #11 独立验收不在已测范围。
 
 ## Issue #14 本地事务恢复（m2-recovery-v1）
 
@@ -161,7 +161,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 
 - MySQL CLI 端到端：已由 M3-2/PR #93 在隔离 MySQL 8.0.46 完成；其他 MySQL 版本未验证。
 - MySQL/Windows/WAL 恢复、跨存储 mapping commit gap 的恢复、通用 exactly-once：不支持；不得从本地 SQLite 恢复能力推断。
-- 生产级检测准确率：只有 74 条自编样本（38 正、36 负，8 条超出覆盖），姓名 P=0.500/R=0.750；不是独立留出评估。
+- 生产级检测准确率：74 条基础自编样本与 M3-4 的 345 条生成式 holdout；姓名仍有误报，均不是生产或人工外部评测。
 - 持久映射、全局唯一性/匿名化、参照完整性：未实现/未验证。
 - macOS CI：仓库 CI 跑 Ubuntu/Windows/macOS 非流式 M1；macOS/Windows streaming/recovery 仍不支持。
 - `--strict` 的 MySQL 严格完整性路径：M3-2 已实现 `CHECK TABLE ... QUICK` + 可见 FK orphan 检查；其他 MySQL 版本与全服务器一致性仍未验证。
@@ -172,11 +172,11 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 
 | 编号 | 位置/现象 | 影响 | 限制/现状 | 后续 |
 |---|---|---|---|---|
-| P2-1 | `internal/db` 写入层仍接受非 NULL→NULL | 绕过 CLI 直接调用 Writer 的调用者可能写入永远无法通过严格验证的行；CLI 路径已在上游拒绝 | `TestApplyRefusesNullReplacementBeforeWriter` 只固定 CLI/Runner 行为 | 后续 Issue（编号待登记） |
+| P2-1 | 历史：`internal/db` 写入层曾接受非 NULL→NULL | 已由 M3-1 修复：Writer 返回 `ErrUnsafe` | `TestWriteTxRefusesNonNullToNullReplacement` | 已关闭 |
 | P2-2 | 部分扫描拒绝测试的 `spy.opens != 0` 断言无法失败 | `TestPlanRefusesNonSensitiveColumnEvenWhenApproved`、`TestPlanRefusesTruncatedSampleEvenWhenApproved` 在 Plan 失败后仍用空 Plan 调 Apply，Apply 先做形状校验就返回，Writer 计数与扫描闸门无关，不能捕获闸门回归 | 扫描本身结构上不打开 Writer，产品行为未受影响 | 后续 Issue（编号待登记） |
 | P2-3 | 取消测试未覆盖 `gather` 的 ctx 检查 | `TestScanFailsClosedOnMidScanCancellation` 在第二次 `Sample` 内触发并由 Reader 返回 `context.Canceled`；`gather` 循环顶部的 `ctx.Err()` 短路没有单独用例 | 已测取消路径仍有效；取消传播证据不完整 | 后续 Issue（编号待登记） |
 | P2-4 | `main.go` 为测试 seam 引入两个可变包级函数变量 | `TestCLIStrictFlagWiring` 依赖替换 `validationRequest`/`validationPassed`，测试修改全局状态，不能并行 | 生产行为不受影响，只影响测试隔离 | 后续 Issue（编号待登记） |
 | P2-5 | CLI e2e 的 `targetDigest` 忽略 sidecar | 只哈希目标主文件；WAL 目标可能把提交写入 `-wal` 而字节断言不可见 | 当前 fixture 使用 rollback journal；源端 WAL 被拒绝，目标端 journal mode 未校验 | 后续 Issue（编号待登记） |
 | P2-6 | 历史存储不检测整体回滚/撤销回滚 | 能写 store 目录者可恢复旧的有效审批或撤销前文件；过期仍限制窗口 | 本地文件存储不是透明日志；部署需外发记录摘要/过期信息 | 后续 Issue（编号待登记） |
 | P2-7 | typed-nil seam 防护不完整 | runner 的 `ApprovalQuery` 已用 `nilApprovalQuery` 防护；`internal/db` 的注入式连接 seam 只有 `nil` 判断，没有等价的 typed-nil 回归 | 影响限于测试/自定义注入路径；生产使用 `nil` 工厂 | 后续 Issue（编号待登记） |
-| P2-8 | Runner 侧审批时间窗口没有时钟偏移容差 | `internal/runner/approval.go` 要求 `IssuedAt <= now`，而 `internal/history/record.go` 允许 5 分钟未来签发容差；若审核方时钟略快，刚签发的记录在 Runner 复核处被拒绝 | fail-closed，不会误授权写入；仅在时钟轻微漂移时降低可用性（需要等待或重签） | 后续 Issue（编号待登记）；届时统一两处容差语义 |
+| P2-8 | 历史：Runner 审批时间窗口缺少时钟偏移容差 | 已由 M3-1 修复：runner 与 history 使用 5 分钟未来签发容差 | `TestRecordAuthorizesToleratesSmallFutureIssuedSkew` | 已关闭 |

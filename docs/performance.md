@@ -45,7 +45,7 @@ The benchmark CI also runs bounded fuzz targets for CN identity/card/USCC checks
 
 ## Remaining Issue #13 acceptance
 
-- Full-scale **SQLite CLI** comparisons remain unmeasured: phase 5 exercises the Runner API and existing CLI tests are not a 10k–1M performance matrix. The project has no MySQL CLI; MySQL adapter component tests are not MySQL user-workflow benchmarks.
+- Full-scale **SQLite CLI** comparisons remain unmeasured: phase 5 exercises the Runner API and existing CLI tests are not a 10k–1M performance matrix. A MySQL 8.0.46 CLI path now exists and has isolated CI E2E evidence; no MySQL CLI performance benchmark is claimed.
 - Statistically repeated 1M trials, uninstrumented workload comparison, native Windows/macOS runtime performance, additional sustained lock/WAL/cancellation metrics, and evidence that total memory is strictly bounded by batch × workers (receipt capacity currently grows with batch count).
 - Final-head independent QA/Security review and closure of every remaining original Issue #13 acceptance item.
 - Any observed improvement must be justified by measured results instead of presumed parallel speedup.
