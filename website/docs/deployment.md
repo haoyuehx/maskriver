@@ -19,7 +19,7 @@ npx playwright install chromium
 npm test
 ```
 
-`playwright.config.ts` 使用生产预览服务器，覆盖 1440、768、390 三档视口；测试会实际加载 MP4 并检查播放进度、字幕切换、流程切换和恢复状态迁移。
+`playwright.config.ts` 使用生产预览服务器，覆盖 1920、1440、768、390、360 五档视口；测试会实际加载 MP4 并检查播放进度、字幕切换、流程切换和恢复状态迁移。
 
 ## 静态构建
 

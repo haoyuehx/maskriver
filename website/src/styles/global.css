@@ -563,9 +563,10 @@ video::cue { background: #04101ce8; color: #fff; font-family: var(--sans); font-
   .hero-actions .text-link { flex-basis: 100%; margin-top: 4px; }
   .hero-visual { min-height: 420px; padding: 16px; }
   .data-network { height: 195px; top: 50px; }
-  .visual-source { left: 15px; top: 176px; }
-  .visual-target { right: 14px; top: 176px; }
-  .visual-shield { top: 163px; padding: 7px 9px; }
+  .visual-source { left: 12px; top: 148px; }
+  .visual-target { right: 12px; top: 148px; }
+  .visual-shield { top: 187px; padding: 7px 9px; }
+  .visual-source .muted, .visual-target .muted { display: none; }
   .visual-shield div span { display: none; }
   .mini-table { left: 15px; right: 15px; bottom: 46px; }
   .mini-table-head, .mini-table-row { grid-template-columns: .4fr .9fr 1.4fr 1fr; gap: 5px; padding: 9px 8px; font-size: 8px; }
