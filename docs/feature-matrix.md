@@ -35,7 +35,7 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 | 连接生命周期、schema/table/column/type/PK 元数据 | SQLite/MySQL Reader/Writer，元数据与 SchemaCoverage 保守声明；不支持或可能丢精度的映射显式拒绝 | 部分实现（#5 组件） | #5 / PR #21；MySQL 适配器见 #10 / PR #30 |
 | distinct 非空抽样、表/列过滤 | typed、非 NULL distinct 有界抽样；按 DataSetID/Schema/TableRef 限定访问范围 | 部分实现（#5 组件） | #5 / PR #21 |
 | SQLite 连接与真实集成 | SQLite 真实驱动执行 Reader/Writer、只读、类型、复合键分页和安全拒绝测试；以 PR #21 最终 CI 为证据 | 部分实现（#5 组件） | #5 / PR #21 |
-| MySQL 连接与真实集成 | TestMySQLAdapter 在一次性 MySQL 8.0.46 实例真实通过；包含 nine CN 策略的 typed SQL 写入/读回；其他版本与整套 CLI 流程未验收 | 部分实现（适配器实测） | #10 / PR #30 |
+| MySQL 连接与真实集成 | TestMySQLAdapter 与真实 TestMySQLCLIWorkflow 在一次性 MySQL 8.0.46 实例通过；包含 CN 策略的 typed SQL 写入/读回；其他 MySQL 版本未验收 | 已实现（适配器 + MySQL 8.0.46 CLI） | #10 / #86 |
 | MariaDB / PostgreSQL / SQL Server / Oracle | 需独立适配与独立验证 | 未实现 | 后续评估 |
 | SQLite 流式回执 Outbox（WP2，DB 层能力） | `internal/db` 显式 opt-in：预置版本化 outbox schema、同库同事务业务 UPDATE + receipt INSERT、有界 keyset 分页读取、CommitUnknown 保守分类、Linux 本地 SQLite（journal=DELETE，会话 synchronous=FULL）；已接入 Runner/CLI（#13）并被 #14 recovery 复用；未验证断电 durability/MySQL/Windows streaming | 已实现（Linux amd64 本地 SQLite） | #13 / #14 |
 | 参数化更新、批次事务、复合键 keyset 分页 | #5 提供按真实复合主键游标、参数绑定、乐观受影响行数检查与回滚；跨方言独立验证持续进行 | 部分实现（#5 组件） | #5 / PR #21；MySQL 适配器见 #10 / PR #30 |
@@ -127,7 +127,7 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 
 ## 完整性校验
 
-**#8 验证组件边界**：`verify.New()` 只读取两个 `contracts.Reader`，不读取配置或原始密钥、不自动写入，报告不包含明文主键和值。PR #32 的原始实现经 PR #33 补强为每边最多 256 行的有界内存双向 keyset 校验。verify 包自身的回归仍以 fake Reader 为主；真实 SQLite 多表路径由 `cmd/maskriver` 与 `internal/runner` 覆盖，MySQL CLI 仍未验收。对排序语义无法安全对齐的键显式拒绝。
+**#8 验证组件边界**：`verify.New()` 只读取两个 `contracts.Reader`，不读取配置或原始密钥、不自动写入，报告不包含明文主键和值。PR #32 的原始实现经 PR #33 补强为每边最多 256 行的有界内存双向 keyset 校验。verify 包自身的回归仍以 fake Reader 为主；真实 SQLite 多表路径由 `cmd/maskriver` 与 `internal/runner` 覆盖；MySQL 8.0.46 CLI 已由 #86 验收。对排序语义无法安全对齐的键显式拒绝。
 
 
 | 功能 | 说明 / 边界 | 状态 | 目标 |
