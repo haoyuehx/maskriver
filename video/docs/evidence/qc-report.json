@@ -1,0 +1,45 @@
+{
+  "file": "out/maskriver-demo-new.mp4",
+  "bytes": 32415678,
+  "mb": 30.91,
+  "sha256": "f7b3a07b20e26dbfbd28f2087eb5cf34976b98b02a7c53d6323213334b515ff9",
+  "durationSec": 260.054,
+  "video": {
+    "codec": "h264",
+    "profile": "High",
+    "width": 1920,
+    "height": 1080,
+    "fps": "30/1",
+    "frames": 7800,
+    "pixelFormat": "yuvj420p",
+    "bitrate": 671192
+  },
+  "audio": {
+    "codec": "aac",
+    "channels": 2,
+    "sampleRate": "48000",
+    "bitrate": 317374,
+    "durationSec": 260.054
+  },
+  "decode": {
+    "ok": true,
+    "error": ""
+  },
+  "blackFrameStarts": [],
+  "freezeStarts": [],
+  "subtitles": {
+    "file": "subtitles/zh-CN.srt",
+    "cues": 35,
+    "lastCueEndSec": 257.4
+  },
+  "assertions": {
+    "durationInRange180to300": true,
+    "is1080p": true,
+    "is30fps": true,
+    "isH264": true,
+    "hasAudio": true,
+    "decodesCleanly": true,
+    "noBlackSegments": true,
+    "noLongFreezes": true
+  }
+}

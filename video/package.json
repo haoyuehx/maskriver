@@ -1,0 +1,37 @@
+{
+  "name": "maskriver-video",
+  "private": true,
+  "version": "1.0.0",
+  "description": "MaskRiver product demo film built with Remotion",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render MaskRiverDemo out/maskriver-demo-new.mp4",
+    "render:still-test": "remotion render EnvTest out/env-test.mp4",
+    "render:style-test": "remotion render StyleTest out/maskriver-style-test.mp4",
+    "render:scene": "remotion render",
+    "stills": "node scripts/stills.mjs",
+    "review-frames": "node scripts/review-frames.mjs",
+    "sheet": "node scripts/sheet.mjs",
+    "subtitles": "node scripts/build-subtitles.mjs",
+    "qc": "node scripts/qc-video.mjs",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && node scripts/build-subtitles.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.427",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "remotion": "^4.0.427"
+  },
+  "devDependencies": {
+    "@ffmpeg-installer/linux-x64": "4.1.0",
+    "@fontsource/jetbrains-mono": "5.2.8",
+    "@fontsource/noto-sans-sc": "5.2.8",
+    "@types/node": "^22.10.2",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "ffprobe-static": "3.1.0",
+    "sharp": "^0.34.5",
+    "typescript": "5.9.3"
+  }
+}
