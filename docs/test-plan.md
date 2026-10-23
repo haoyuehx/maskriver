@@ -176,7 +176,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 | P2-2 | 部分扫描拒绝测试的 `spy.opens != 0` 断言无法失败 | `TestPlanRefusesNonSensitiveColumnEvenWhenApproved`、`TestPlanRefusesTruncatedSampleEvenWhenApproved` 在 Plan 失败后仍用空 Plan 调 Apply，Apply 先做形状校验就返回，Writer 计数与扫描闸门无关，不能捕获闸门回归 | 扫描本身结构上不打开 Writer，产品行为未受影响 | 后续 Issue（编号待登记） |
 | P2-3 | 取消测试未覆盖 `gather` 的 ctx 检查 | `TestScanFailsClosedOnMidScanCancellation` 在第二次 `Sample` 内触发并由 Reader 返回 `context.Canceled`；`gather` 循环顶部的 `ctx.Err()` 短路没有单独用例 | 已测取消路径仍有效；取消传播证据不完整 | 后续 Issue（编号待登记） |
 | P2-4 | `main.go` 为测试 seam 引入两个可变包级函数变量 | `TestCLIStrictFlagWiring` 依赖替换 `validationRequest`/`validationPassed`，测试修改全局状态，不能并行 | 生产行为不受影响，只影响测试隔离 | 后续 Issue（编号待登记） |
-| P2-5 | CLI e2e 的 `targetDigest` 忽略 sidecar | 只哈希目标主文件；WAL 目标可能把提交写入 `-wal` 而字节断言不可见 | 当前 fixture 使用 rollback journal；源端 WAL 被拒绝，目标端 journal mode 未校验 | 后续 Issue（编号待登记） |
+| P2-5 | 历史：CLI e2e 的 `targetDigest` 忽略 sidecar；legacy apply 曾接受 WAL 目标 | 已由 #102 修复：`OpenForApply` 在打开 Writer 前要求 SQLite 目标通过 `Quiescent`，WAL/MEMORY/OFF 目标返回 `ErrIncomplete`；回归 `TestOpenForApplyRefusesWALTarget` | CLI digest 本身仍只哈希主文件，但目标 WAL 已不可达 | 已关闭（#102） |
 | P2-6 | 历史存储不检测整体回滚/撤销回滚 | 能写 store 目录者可恢复旧的有效审批或撤销前文件；过期仍限制窗口 | 本地文件存储不是透明日志；部署需外发记录摘要/过期信息 | 后续 Issue（编号待登记） |
 | P2-7 | typed-nil seam 防护不完整 | runner 的 `ApprovalQuery` 已用 `nilApprovalQuery` 防护；`internal/db` 的注入式连接 seam 只有 `nil` 判断，没有等价的 typed-nil 回归 | 影响限于测试/自定义注入路径；生产使用 `nil` 工厂 | 后续 Issue（编号待登记） |
 | P2-8 | 历史：Runner 审批时间窗口缺少时钟偏移容差 | 已由 M3-1 修复：runner 与 history 使用 5 分钟未来签发容差 | `TestRecordAuthorizesToleratesSmallFutureIssuedSkew` | 已关闭 |
