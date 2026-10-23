@@ -9,8 +9,8 @@ will be omitted from this request.]". Its review is therefore recorded separatel
 text-only consistency review, and the image-based review below was executed by the
 image-capable sibling model so that no claim of "visual review" is unsupported.
 
-FINAL STATUS (2026-10-23): render #4 is the delivered cut. The independent image review
-at the end of this file records 85/100, PASS, with no P0/P1. The four P2 items remain
+FINAL STATUS (2026-10-23): render #4 is the delivered cut. Round 4 records 85/100 PASS;
+the final delivery re-review at head `b050266` records 88/100 PASS. Both found no P0/P1. The four P2 items remain
 accepted, non-blocking. The earlier Round 3 limitation note below is retained as history
 and is explicitly superseded by Round 4.
 
@@ -334,3 +334,33 @@ render #4 与 render #3 的差异仅限上述文案与一处徽标；场景结�
 - 图像审查（GLM-5.3-Flash，独立上下文，实际读图）：85/100，PASS，**无 P0/P1**。
 - 文本审查（GLM-5.3，无法读图）：发现 1 处屏上事实错误 + 2 处不精确，均已修复（见 Round 4 处置）。
 - 遗留 P2-A…P2-D 已记录、非阻塞，未在交付版本中修复（修复需再次渲染，会使被审查版本与交付版本不一致）。
+
+---
+
+## 第 5 轮 — 交付前独立图像复核（2026-10-23）
+
+- **审查对象：** `video/out/maskriver-demo-new.mp4` 的最终抽帧证据（同一 render #4，SHA-256 `f7b3a07b…5ff9`）
+- **审查模型：** GLM-5.3-Flash（图像输入，独立上下文；本轮实际打开 26 张 JPEG 与 contact sheet）
+- **输入限制：** 未试听音轨；音频技术数据另见 `docs/audio-qc.json`，听感仍为 HUMAN AUDIO REVIEW REQUIRED。
+
+| 维度 | 结果 |
+|---|---|
+| 六幕完整性 | PASS |
+| 中文字形与可读性 | PASS（1080p 无方框/无中文裁切） |
+| 数据前后对比 | PASS（SOURCE/TARGET 与确定性≠匿名化声明均可见） |
+| 审批、事务、恢复 | PASS（UNKNOWN→PASS；SAME TRANSACTION + 批次事务≠整库原子性；Checkpoint/Resume） |
+| 判定态词汇 | PASS（仅 SENSITIVE / NOT_SENSITIVE / UNKNOWN 作为字段判定） |
+| 版本号 / 里程碑 / Issue 编号 | 未出现 |
+| 字幕安全区 / 黑帧 / 冻结 | PASS（无内容压字幕；QC 无黑帧、无 ≥2s 冻结） |
+| 总分 | **88/100** |
+
+**P0：无。P1：无。视觉交付：PASS。**
+
+P2 复核：
+
+- **P2-A（096 s）**：`l***@example.te…` 为有意省略号，遮罩模式仍可读，保留。
+- **P2-B（176 s）**：SAME TRANSACTION 括注不仅早于 cue 26，且短暂与批次队列的 `bounded window` 文本相碰；两者随后在 188/195 s 无遮挡重现。属可读性瑕疵，不影响主线，保留。
+- **P2-C（207/249 s）**：下半个画面留白属于一致的极简品牌构图，保留。
+- **P2-D（044 s）**：审批卡 `UNKNOWN` 与检测判定词汇复用；fail-closed 语义正确，旁白也已消歧，改名属 polish，保留。
+
+本轮未修改画面源码或 MP4；审查的是同一交付产物，因此不产生新的 SHA。

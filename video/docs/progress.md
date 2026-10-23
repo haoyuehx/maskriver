@@ -31,7 +31,7 @@ PHASE I — 完成（render #4 已交付并通过技术验收与第 4 轮视觉�
 | E 正片后半 | 已实现 | `Scene4Streaming.tsx`、`Scene5Recovery.tsx`、`Scene6Closing.tsx` |
 | F 声音 | 技术 QC PASS；**HUMAN AUDIO REVIEW REQUIRED** | `public/audio/narration.mp3`（Piper `zh_CN-huayan-medium`，35 条，260.04s）；成片 AAC 48 kHz / −16.8 LUFS / TP −4.9 dBFS；试听包与清单见 `docs/audio-review.md` |
 | G 成片 | 完成（render #4） | `out/maskriver-demo-new.mp4`：260.054s / 7800 帧 / 30.91 MiB / sha256 f7b3a07b…5ff9 |
-| H 独立 QA | 第 1–4 轮完成（第 4 轮 85/100 PASS，无 P0/P1） | `docs/visual-review.md`、`docs/qc-report.md`、`docs/audio-review.md`、`docs/evidence/` |
+| H 独立 QA | 第 1–4 轮 + 交付前独立复核完成（第 4 轮 85/100；最终复核 88/100 PASS，无 P0/P1） | `docs/visual-review.md`、`docs/qc-report.md`、`docs/audio-review.md`、`docs/evidence/` |
 | I 交付 | PR OPEN，等待门禁 | 分支 `feat/remotion-video-v2`；内容提交 `bd93099`（工程与成片）+ `139dffa`（事实修正与重渲染）+ `bc6b4ed`（交付文档）；音轨人工试听提交随后加入；PR https://github.com/haoyuehx/maskriver/pull/104 |
 
 ## 渲染轮次
