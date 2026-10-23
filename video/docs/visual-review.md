@@ -199,3 +199,132 @@ render is recorded in the same file after that section.
    会使"被审查的成品"与"交付的成品"不一致，因此不在本轮执行，交由后续版本处理。
 4. **证据文件格式**：`docs/evidence/` 中的 26 张逐帧证据以 JPEG（质量 90，原始 1920×1080）保存以控制仓库体积，
    文件名与上述评审引用一致（仅扩展名由 `.png` 改为 `.jpg`）；`contact-sheet-final.png` 保持 PNG。
+
+---
+
+## 事实与一致性审查（GLM-5.3，纯文本；未查看任何图像）
+
+### 已读文件
+
+- 仓库文档：`README.md`、`docs/feature-matrix.md`、`docs/architecture.md`、`docs/guides/approval.md`、`docs/guides/streaming-recovery.md`、`docs/guides/security-model.md`
+- 影片源：`video/src/data/script.ts`、`video/src/data/fixtures.ts`、`video/subtitles/zh-CN.srt`、`video/src/scenes/Scene1Problem.tsx`–`Scene6Closing.tsx`、`video/src/components/Workflow.tsx`/`Primitives.tsx`（grep）
+- 影片文档：`video/docs/storyboard.md`、`narration.md`、`visual-direction.md`（全文）、`visual-review.md`（Round 1–3）、`qc-report.md`、`video/out/qc-report.json`、`video/scripts/qc-video.mjs`
+- CLI 佐证：`cmd/maskriver/main.go` 及各 `*_test.go` 的真实 flag 形态
+
+### 逐项判定
+
+| 检查项 | 判定 | 证据 |
+|---|---|---|
+| 五步工作流命名（scan / dry-run 预览 / approve / apply / validate） | PASS | `script.ts:24-28`（cue 5–9）；`fixtures.ts` STEPS（Scan/Preview/Approve/Apply/Validate）与 README「Scan → Preview → Approve → Apply → Validate」一致；`Scene2Workflow.tsx` 各相位窗口（SCAN 150–330 / PREVIEW 330–510 / APPROVE 510–690 / APPLY 690–870 / VALIDATE 870–1050 场景帧）恰为 30/36/42/48/54s，与旁白节拍一一对应 |
+| 三条件写入门（`--approved` + `--apply` + 有效签名记录） | PASS | `Scene2Workflow.tsx:447-459`（GateLocks 标签 `--approved` / `--apply` / `approval record`）；`Scene3Walkthrough.tsx` CH5 三 chip；与 `docs/guides/approval.md:5` 及 feature-matrix「三者缺一即拒绝」一致；flag 均真实存在（`cmd/maskriver/main.go:127-132`） |
+| Ed25519 记录绑定计划摘要 | PASS | `Scene2Workflow.tsx:361`、`Scene3Walkthrough.tsx:409`（`sha256:9f2c…a41b`）+「计划一旦变化，签名即失效」；与 `approval.md:3-5`（绑定 plan/digest/strategy/scope）一致；`script.ts:26,38` |
+| 执行侧只加载公钥 | PASS | `Scene2Workflow.tsx:405`「执行侧只加载公钥 / public key only」、APPROVE lead「执行侧只加载可信公钥」；`script.ts:38`；与 `approval.md:2-3` 一致 |
+| 「预览零写入」证据表述 | PASS | `Scene2Workflow.tsx:312`、`Scene3Walkthrough.tsx:348`「DRY RUN · WRITES = 0」；cue 16「零写入由驱动级证据证明」对应 feature-matrix 的 SQL Spy + 文件 SHA-256 证据链 |
+| 严格验证内容（行数/键集/Schema/计划字段/适配器完整性 quick_check+foreign_key_check） | PASS | `Scene2Workflow.tsx:514`「适配器完整性检查 / quick_check / foreign_key_check」五项清单；`Scene3Walkthrough.tsx:525`；与 feature-matrix strict 语义（SQLite `quick_check`+数据库级 `foreign_key_check`）逐项吻合 |
+| 有界流式 + Outbox 回执仅 SQLite | PASS | `Scene4Streaming.tsx:215`「范围仅限本地 SQLite；MySQL 流式与恢复不在支持范围」；同事务括注「SAME TRANSACTION」+「批次事务 ≠ 整库原子性」；`script.ts:48`；与 README 支持范围表一致 |
+| Checkpoint/Resume 语义（只读 status、跳过已提交前缀、目标漂移拒绝） | PASS | `Scene5Recovery.tsx:147`（`maskriver status --target target.db --run-id <32-hex>`，与 `main.go:523` 的真实形态一致）、`:256-257`（resume 命令与 `main.go:522` 一致；`verify committed prefix → skip 3 batches`）、`:294-296`（仅本地 SQLite / MySQL 恢复不支持 / 不宣称通用 exactly-once / 目标被外部改动时拒绝继续）；四项 PREFLIGHT 与 manifest CAS/append-only progress/回执协议吻合 |
+| 豁免/边界声明（确定性 ≠ 匿名化、不承诺无碰撞） | PASS | `Scene3Walkthrough.tsx:385`；`Scene5Recovery.tsx:296`；与 security-model.md、architecture.md 口径一致 |
+| 过度宣称排查（MySQL 恢复 / 通用 exactly-once / 法律匿名化 / 无碰撞 / 生产准确率 / 性能数字 / 真实 Web 后台） | PASS（无发现） | 全部为反向声明；Scene 4 指标卡为 BOUNDED/BATCH/BUDGET/OUTBOX 描述性文案，无性能数字；工作区标注 `maskriver · concept workspace` +「流程示意 · 合成数据」+「界面为设计示意」 |
+| 禁止内容（版本号 / 里程碑代号 / Issue-PR / commit SHA / CI 日志 / 已交付后端） | PASS（无发现） | 逐文件 grep 无命中；`sha256:9f2c…a41b` 为省略号占位摘要且 `qc-report.md` §4 明示非真实值；`v1.0.0` 仅出现在 `video/package.json`（非屏上内容） |
+| Cue 表 vs SRT vs 分镜一致性 | PASS（一处 QC 工具缺陷，见错误 2） | `script.ts` 35 条 = SRT 35 条 = `narration.md` 35 行，逐条时间抽验一致；Scene 3 六章窗口（36–228/228–660/660–1326/1326–1776/1776–2256/2256–2550）与 cue 11–21 时间窗一一对应；场景时长 750/1200/2550/1500/1350/450=7800 帧与 storyboard 及 qc-report 一致 |
+| 屏上 CLI flag vs 真实 CLI | PASS | `status --target … --run-id <32-hex>`、`mask --streaming --apply --resume --run-id <32-hex>`、`--approved/--apply/--streaming/--budget-file/--receipt-page-size/--run-id/--trust-file/--history-dir/--key-file` 全部为 `cmd/maskriver/main.go` 及测试中的真实 flag；`<32-hex>` 一律占位 |
+| 音频诚实性 | PASS | 无人宣称 AUDIO PASS：`narration.md`「AUDIO PENDING（未通过人工听感验收），不得宣称 AUDIO PASS」；`qc-report.md` §6.1 同口径；`qc-report.json` 仅事实性 `hasAudio: true`（AAC-LC 48kHz）；TTS 来源（Piper `zh_CN-huayan-medium`、-16 LUFS、`scripts/generate-narration.mjs` + Remotion 渲染命令）可复现。README「当前无配音」指网站侧独立静音版视频（`website/docs/video-review.md`:「无音轨」），与本片（含 AAC 旁白）是两个产物，无矛盾——但建议在文档中显式区分两个视频，避免误读 |
+| 数据安全（全合成、无凭证/DSN） | PASS | `fixtures.ts` 头注与全部值：`*.example.test` 邮箱、`199 0000 00xx`、虚构姓名（林晓/陈雨/赵明/周宁/吴桐/郑一）；全 video/ 目录 grep 无 password/secret/DSN/token 凭证类字符串 |
+
+### 事实错误（含修正措辞）
+
+**错误 1（P1 · 事实性错误）：屏上判定态「REVIEW」是产品中不存在的状态**
+- 错误原文：`{f: 'name', v: 'REVIEW' as const, note: 'cn_person_name · 83%'}`（`video/src/scenes/Scene3Walkthrough.tsx:271`）；`{field: 'name', rule: 'cn_person_name', verdict: 'REVIEW', samples: 6, hit: '83%'}`（`video/src/data/fixtures.ts:139`）；「右侧三态判定（SENSITIVE / REVIEW / UNKNOWN）」（`video/docs/storyboard.md:54`）。
+- 事实依据：冻结契约的三态是 `Unknown / NotSensitive / Sensitive`（`pkg/contracts/contracts.go:125-130`），且无任何「REVIEW」判定态；`internal/detect/detect.go:135-153` 明确：命中率低于 90% 阈值（83% < 90%）即不满足 formatStrong，返回的 Decision 敏感度为零值 `Unknown`。即真实产品中该 name 字段的判定是 **UNKNOWN**，不是 REVIEW。影片自己的规范也写对了：`video/docs/visual-direction.md` §9 S3-B3「字段判定：SENSITIVE / NOT_SENSITIVE / UNKNOWN」，`video/src/components/Primitives.tsx:61` 注释同——实现与 storyboard 偏离了自家规范与产品契约。
+- 修正措辞：把 Scene 3 CH2 判定卡与 `fixtures.ts` FIELD_EVIDENCE 中 name 的 chip 改为 `UNKNOWN`（note 可写「cn_person_name · 83% 低于阈值」），storyboard.md:54 改为「三态判定（SENSITIVE / NOT_SENSITIVE / UNKNOWN）」。旁白本身（cue 13「证据不足的字段标记为需核对」）无需改动。
+
+**错误 2（P2 · QC 报告数值错误）：「末条 252.0 s」实为末条字幕的起始秒，且丢弃毫秒**
+- 错误原文：`"lastCueEndSec": 252`（`video/out/qc-report.json:33`）；「外挂 …zh-CN.srt（35 条，末条 252.0 s）」（`video/docs/qc-report.md:17`）。
+- 事实依据：SRT 第 35 条为 `00:04:12,400 --> 00:04:17,400`，真实末条结束时间为 **257.4 s**；`video/scripts/qc-video.mjs:71-73` 的正则 `(\d\d):(\d\d):(\d\d),(\d\d\d) --> ` 捕获的是 `-->` **前**的起始时间戳，且未计入毫秒，字段名却叫 `lastCueEndSec`。
+- 修正措辞：正则改为捕获 `--> ` 之后的时间戳（含毫秒换算），或把字段改名 `lastCueStartSec`；qc-report.md 对应改为「末条 257.4 s（起始 252.4 s）」。
+
+**错误 3（P2 · 旁白范围表述不精确）：cue 20 在非流式走查场景中宣称批次回执**
+- 错误原文：「每个批次提交时写下事务回执，为中断后的判断留下依据。」（`video/src/data/script.ts:41`，132.2–139.6s，Scene 3 CH5；SRT 第 20 条）。
+- 事实依据：事务性 Outbox 回执仅存在于 `--streaming` 路径（feature-matrix「SQLite 流式回执 Outbox（WP2）…显式 opt-in」；`docs/guides/streaming-recovery.md`），而 Scene 3 CH5 屏上三条件锁只显示 `--approved/--apply/approval record`，无 `--streaming`；普通 M1 apply 不写回执。紧接的 Scene 4 已正确限定范围，但该 cue 单独读会让人以为默认批次提交就有回执。
+- 修正措辞：改为「（在流式路径中，）每个批次提交时同步写下事务回执，为中断后的判断留下依据。」或将该句并入 Scene 4 语境。
+
+### 非错误备注
+
+- `video/src/data/script.ts:74` 的 `SCENE_LABELS`（含「核心能力」与 storyboard「五步核心流程」措辞不同）是未被任何场景渲染的死导出，不影响画面事实；可顺手删除或对齐。
+- 仓库现有两个演示视频（网站静音版 `website/public/media/maskriver-demo.mp4` 与本片含旁白版），README 的「当前无配音」仅描述前者，准确但建议加一句区分。
+
+### 本审查无法判断的内容
+
+纯文本审查，未查看任何图像或视频帧：无法判断画面视觉质量、动效节奏、屏上文字可读性/是否被裁切、免责角标是否实际可见、字幕与画面的实际渲染对齐（仅能核对源码时间轴与视觉评审报告 `visual-review.md` 的记录）；无法试听音轨的听感质量（仅能核对 qc-report 的电平与编码数据）；`out/maskriver-demo-new.mp4` 本体的实际内容以 `qc-report.json` 与视觉评审记录为据，未逐帧复核。
+
+**结论：FAIL（文本层面）** —— 事实与一致性整体良好，但存在 1 处屏上事实性错误（虚构判定态「REVIEW」）与 2 处轻微不准确（QC「末条 252.0 s」数值/字段错位；cue 20 回执声明缺流式限定）。
+**错误计数：共 3 处（1 × P1 事实错误 + 2 × P2）。**
+
+---
+
+## Round 4 处置（事实修正后重渲染）
+
+GLM-5.3 的纯文本审查发现 1 处屏上事实错误与 2 处不精确，均在 render #4 中修正：
+
+| 编号 | 结论 | 处理 |
+|---|---|---|
+| 错误 1（P1）「REVIEW」判定态在产品中不存在 | **已修复** | `src/data/fixtures.ts` 与 `Scene3Walkthrough` 的 name 字段判定改为 `UNKNOWN`（注：「cn_person_name · 83% 低于阈值」）；`VerdictChip` 的 `REVIEW` 类型整体删除，Scene 5 的只读标记改为 `READ ONLY` 徽标；`docs/storyboard.md` 改为「SENSITIVE / NOT_SENSITIVE / UNKNOWN」 |
+| 错误 2（P2）QC 报「末条 252.0 s」 | **已修复** | `scripts/qc-video.mjs` 的正则改为捕获 `-->` 之后的结束时间并计入毫秒，现报 `lastCueEndSec = 257.4` |
+| 错误 3（P2）cue 20 未限定流式路径 | **已修复** | 旁白改为「在流式路径中，每个批次提交都会写下事务回执。」并重新合成配音；SRT 同步重新生成 |
+| 备注：`SCENE_LABELS` 死导出 | **已删除** | 该常量未被任何场景渲染 |
+
+render #4 与 render #3 的差异仅限上述文案与一处徽标；场景结构、镜头、时序未变。
+
+---
+
+所有 26 帧全分辨率帧以及缩略图总表（contact sheet）已打开。以下是完整报告。
+
+## 第 4 轮 — render #4 事实修正复核（GLM-5.3-Flash，图像输入）
+
+**已打开的图像 (27)**：`docs/evidence/contact-sheet-final.png` + 全部 26 张全分辨率帧（003s/012s/020s/023s/031s/038s/044s/051s/057s/062s/070s/082s/096s/114s/130s/144s/156s/176s/188s/195s/207s/224s/236s/243s/249s/256s）。另核对 `out/qc-report.json`：sha256 = `f7b3a07b…5ff9`（与任务口径一致）、260.054s / 1920×1080 / 30fps / h264+aac、`lastCueEndSec: 257.4`（错误 2 的修正已在 QC 数据中体现）、无黑帧无冻结段。
+
+### 核验表
+
+| # | 检查项 | 判定 | 实际所见（帧） |
+|---|---|---|---|
+| 1a | 082s 判定 chip 为 UNKNOWN，非 REVIEW | **PASS** | `082s-s3-02-scan.jpg`：字段判定面板 name 行 chip 为「•UNKNOWN」，注「cn_person_name · 83% 低于阈值」；email/mobile 为「•SENSITIVE」，city 为「•UNKNOWN 上下文不足」，脚注「UNKNOWN 不等于安全」。全面板无 REVIEW 字样，文案连贯 |
+| 1b | 031s 无 REVIEW 残留，UNKNOWN 语境连贯 | **PASS（带说明）** | `031s-s2-01-scan.jpg`：判定面板此时仅 email/mobile 两条「•SENSITIVE」chip 进场，加琥珀色说明行「UNKNOWN 不是安全，需要人工确认后才进入计划」；该帧本就不含 name 判定 chip（031s 为相位早段），故不存在 REVIEW，也不存在 REVIEW→UNKNOWN 的残留。UNKNOWN 语义与旁白「证据不足时保留 UNKNOWN」一致 |
+| 1c | 26 帧内无任何 "REVIEW" 文本 | **PASS** | 逐张检查全部 26 帧 + contact sheet：屏上判定态仅出现 SENSITIVE / NOT_SENSITIVE（070s）/ UNKNOWN / PASS 四种，与冻结契约三态一致；REVIEW 字样零命中 |
+| 2 | 224/236/243s Scene 5 只读标记为 READ ONLY 徽标，无裁切/重叠 | **PASS** | 三帧的 status 卡命令行 `maskriver status --target target.db --run-id <32-hex>` 旁均为独立「READ ONLY」胶囊徽标（琥珀描边），完整在卡内无裁切；224s TASK INTERRUPTED 徽标与红条间距正常；236s resume 终端卡（y≈730–870）完整；243s VALIDATION PASSED 卡（右侧，下缘 ≈y905）与字幕胶囊无碰撞 |
+| 3 | 全片回归（重叠/裁切/y>912/可读性/杂散/无理由空帧） | **PASS** | 最深内容为 243s 卡片下缘 ≈y905，在线上；字幕胶囊稳定 y≈950–1035；1080p 下全部 mono 文本可读；无游离数字或调试残留；无 >45% 无理由空帧（20s/156s 的留白属标题/网格 hero 构图，有叙事理由） |
+| 4 | 与 Round 3 相比无其他变化 | **PASS** | 26 帧逐张对照 Round 3 记录：场景结构、章节轨、镜头节拍、布局、配色、角标（流程示意·合成数据 / 技术原理·本地 SQLite / 本地 SQLite·事务恢复）完全一致；差异仅限于任务声明的四处（UNKNOWN chip、READ ONLY 徽标、cue 20 措辞、字幕重生成）。历史 P2 原样保留（见下），无新增回归 |
+
+### 评分
+
+| 维度 | 满分 | 得分 | 说明 |
+|---|---|---|---|
+| 整体专业质感 | 20 | 17 | 与 render #3 持平；事实修正后 UI 更可信 |
+| 构图与视觉层次 | 20 | 16 | 持平；207s/249s 下半幅留白仍偏大 |
+| 字体与排版 | 15 | 13 | 持平；096s 省略号截断保留 |
+| 动画节奏 | 15 | 13 | 静帧 + 节拍表间接口径，保守计分 |
+| 色彩统一 | 10 | 9 | 语义色系统一致（SENSITIVE 青 / UNKNOWN 琥珀 / NOT_SENSITIVE 灰） |
+| 创意与辨识度 | 10 | 8 | 概念工作区 + 语义色仍是辨识度核心 |
+| 信息可读性 | 10 | 9 | READ ONLY 徽标比原判定 chip 语义更准，略优于 #3 |
+| **总分** | **100** | **85** | |
+
+### 剩余 Findings（均为 Round 3 已记录、未修复、非阻塞项，非本轮 diff 引入）
+
+- **P2-A** · `096s-s3-03-preview.jpg`：迷你表 SOURCE/PLANNED 仍为规范省略号截断 `l***@example.te…`。
+- **P2-B** · `176s-s4-02-pipeline.jpg`：SAME TRANSACTION 括注进场仍早于专用 cue 约 11 秒。
+- **P2-C** · `207s` / `249s`：下半幅留白偏大（内容止于 y≈510/545）。
+- **P2-D** · `044s-s2-03-approve.jpg`：ED25519 APPROVAL RECORD 仍标「•UNKNOWN」（审批语境与检测语义的 UNKNOWN 存在词汇碰撞；114s 同卡为 PASS）。属词汇复用而非契约违规。
+
+无 P0，无 P1。
+
+**最终判定：PASS**
+
+---
+
+**回复摘要**：总分 **85/100**。四项核验全部 **PASS**：(1) 082s name 判定 chip 为 UNKNOWN（83% 低于阈值）、26 帧内 REVIEW 零命中，031s 帧本无 name chip、UNKNOWN 语境连贯；(2) 224/236/243s 均为 READ ONLY 徽标、无裁切无重叠；(3) 回归扫描干净，最深内容 ≈y905 在安全线内；(4) 与 Round 3 相比仅任务声明的四处差异，历史 P2-A…P2-D 原样保留。**无剩余 P0/P1**。
+
+## 交付结论
+
+- 交付版本：render #4，260.054s / 1920×1080 / 30fps / H.264+AAC，SHA-256 `f7b3a07b20e26dbfbd28f2087eb5cf34976b98b02a7c53d6323213334b515ff9`。
+- 图像审查（GLM-5.3-Flash，独立上下文，实际读图）：85/100，PASS，**无 P0/P1**。
+- 文本审查（GLM-5.3，无法读图）：发现 1 处屏上事实错误 + 2 处不精确，均已修复（见 Round 4 处置）。
+- 遗留 P2-A…P2-D 已记录、非阻塞，未在交付版本中修复（修复需再次渲染，会使被审查版本与交付版本不一致）。

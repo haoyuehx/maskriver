@@ -5,7 +5,7 @@ import {Backdrop} from '../components/Backdrop';
 import {Eyebrow, Reveal} from '../components/Reveal';
 import {BatchTimeline, BatchState} from '../components/Workflow';
 import {FaultOverlay} from '../components/Compare';
-import {CommandCard, VerdictChip} from '../components/Primitives';
+import {CommandCard} from '../components/Primitives';
 import {DisclaimerTag} from '../components/Subtitles';
 
 const clamp = {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'} as const;
@@ -146,7 +146,20 @@ export const Scene5Recovery: React.FC = () => {
             <span style={{fontFamily: FONT.mono, fontSize: 15, letterSpacing: 2, color: COLORS.amber}}>
               maskriver status --target target.db --run-id &lt;32-hex&gt;
             </span>
-            <VerdictChip kind="REVIEW" size={13} />
+            <span
+              style={{
+                fontFamily: FONT.mono,
+                fontSize: 12,
+                letterSpacing: 1.4,
+                color: COLORS.amber,
+                border: `1px solid ${COLORS.amber}55`,
+                background: 'rgba(255,153,106,0.10)',
+                borderRadius: 6,
+                padding: '3px 8px',
+              }}
+            >
+              READ ONLY
+            </span>
           </div>
           <div
             style={{

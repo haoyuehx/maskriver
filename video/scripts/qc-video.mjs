@@ -68,9 +68,12 @@ const size = statSync(file).size;
 
 const srtText = readFileSync(srt, 'utf8');
 const srtCues = srtText.trim().split(/\n\n+/).length;
-const lastStamp = [...srtText.matchAll(/(\d\d):(\d\d):(\d\d),(\d\d\d) --> /g)].pop();
+const lastStamp = [...srtText.matchAll(/ --> (\d\d):(\d\d):(\d\d),(\d\d\d)/g)].pop();
 const lastCueEnd = lastStamp
-  ? Number(lastStamp[1]) * 3600 + Number(lastStamp[2]) * 60 + Number(lastStamp[3])
+  ? Number(lastStamp[1]) * 3600 +
+    Number(lastStamp[2]) * 60 +
+    Number(lastStamp[3]) +
+    Number(lastStamp[4]) / 1000
   : 0;
 
 const report = {

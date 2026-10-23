@@ -1,8 +1,8 @@
 {
   "file": "out/maskriver-demo-new.mp4",
-  "bytes": 32438238,
-  "mb": 30.94,
-  "sha256": "27c51947713888fd797c667f552822a8e1c4375e86ccf304e1d90d46c0bc1ed7",
+  "bytes": 32415678,
+  "mb": 30.91,
+  "sha256": "f7b3a07b20e26dbfbd28f2087eb5cf34976b98b02a7c53d6323213334b515ff9",
   "durationSec": 260.054,
   "video": {
     "codec": "h264",
@@ -12,7 +12,7 @@
     "fps": "30/1",
     "frames": 7800,
     "pixelFormat": "yuvj420p",
-    "bitrate": 671887
+    "bitrate": 671192
   },
   "audio": {
     "codec": "aac",
@@ -30,7 +30,7 @@
   "subtitles": {
     "file": "subtitles/zh-CN.srt",
     "cues": 35,
-    "lastCueEndSec": 252
+    "lastCueEndSec": 257.4
   },
   "assertions": {
     "durationInRange180to300": true,

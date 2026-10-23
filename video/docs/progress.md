@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-PHASE H — 独立 QA 与交付（render #3 渲染中；render #1/#2 已产出并完成两轮视觉审查）
+PHASE I — 交付（render #4 已产出并通过技术验收；第 4 轮视觉复核进行中；分支已提交，推送因网络受阻待重试）
 
 ## 环境（实测）
 
@@ -30,9 +30,9 @@ PHASE H — 独立 QA 与交付（render #3 渲染中；render #1/#2 已产出�
 | D 正片前半 | 已实现 | `src/scenes/Scene1Problem.tsx`、`Scene2Workflow.tsx`、`Scene3Walkthrough.tsx` |
 | E 正片后半 | 已实现 | `Scene4Streaming.tsx`、`Scene5Recovery.tsx`、`Scene6Closing.tsx` |
 | F 声音 | AUDIO PENDING（已生成，未做人工听感验收） | `public/audio/narration.mp3`（Piper `zh_CN-huayan-medium`，35 条，260.04s，−16 LUFS） |
-| G 成片 | render #1/#2 完成，render #3 渲染中 | `out/maskriver-demo-new.mp4`（render #2：260.054s / 7800 帧 / 30.52 MiB / sha256 f5d0e93f…） |
-| H 独立 QA | 第 1、2 轮完成；第 3 轮待 render #3 | `docs/visual-review.md`、`docs/qc-report.md`、`docs/evidence/` |
-| I 交付 | 待执行 | 分支 `feat/remotion-video-v2` |
+| G 成片 | 完成（render #4） | `out/maskriver-demo-new.mp4`：260.054s / 7800 帧 / 30.91 MiB / sha256 f7b3a07b…5ff9 |
+| H 独立 QA | 第 1–3 轮完成；第 4 轮（事实修正复核）进行中 | `docs/visual-review.md`、`docs/qc-report.md`、`docs/evidence/` |
+| I 交付 | 提交完成，推送受阻待重试 | 分支 `feat/remotion-video-v2`，提交 `bd93099` + 事实修正提交 |
 
 ## 渲染轮次
 
@@ -40,7 +40,8 @@ PHASE H — 独立 QA 与交付（render #3 渲染中；render #1/#2 已产出�
 |---|---|---|
 | render #1 | 六幕首版 | 260.05s，QC 通过；视觉评审 79/100，2×P1（字幕节拍错位、邮箱硬裁切） |
 | render #2 | 重排 Scene 2 旁白 cue 与 Scene 3 章节窗口；缩短合成邮箱；修 5 项 P2；加入 TTS 旁白 | QC 通过（含音轨）；视觉评审 82/100，P1-1/P1-2 判 PASS，新增 2×P1（PREFLIGHT 面板被裁、游离数字 780） |
-| render #3 | 移除泄漏到画布的调试文本节点；PREFLIGHT 改 2×2 紧凑布局；resume/PASS 卡下移；故障遮罩在 resume 时撤除；删除冗余 chip 与游离 token；SCAN 相位内容提前进场 | 渲染中 |
+| render #3 | 移除泄漏到画布的调试文本节点；PREFLIGHT 改 2×2 紧凑布局；resume/PASS 卡下移；故障遮罩在 resume 时撤除；删除冗余 chip 与游离 token；SCAN 相位内容提前进场 | QC 通过；视觉评审 85/100 **PASS**（无 P0/P1），剩 4 项 P2 |
+| render #4 | 纯文本审查（GLM-5.3）发现屏上「REVIEW」判定态与产品契约不符：改为 `UNKNOWN`，删除 `VerdictChip` 的 REVIEW 类型，Scene 5 只读标记改 `READ ONLY`；cue 20 增加流式限定并重新合成配音；QC 脚本修正末条字幕时间 | 交付版本：260.054s / 30.91 MiB / sha256 f7b3a07b…5ff9；QC 通过 |
 
 ## 模型分工（实际）
 

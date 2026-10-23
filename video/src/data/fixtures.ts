@@ -136,7 +136,7 @@ export const STEPS = [
 export const FIELD_EVIDENCE = [
   {field: 'email', rule: 'email', verdict: 'SENSITIVE', samples: 6, hit: '100%'},
   {field: 'mobile', rule: 'cn_mobile', verdict: 'SENSITIVE', samples: 6, hit: '100%'},
-  {field: 'name', rule: 'cn_person_name', verdict: 'REVIEW', samples: 6, hit: '83%'},
+  {field: 'name', rule: 'cn_person_name', verdict: 'UNKNOWN', samples: 6, hit: '83% < 90%'},
   {field: 'city', rule: 'cn_city', verdict: 'UNKNOWN', samples: 6, hit: '—'},
 ];
 

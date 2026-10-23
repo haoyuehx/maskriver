@@ -247,16 +247,7 @@ export const Scene2Workflow: React.FC = () => {
                   {f.rule}
                 </span>
                 <span style={{marginLeft: 'auto'}}>
-                  <VerdictChip
-                    kind={
-                      f.verdict === 'SENSITIVE'
-                        ? 'SENSITIVE'
-                        : f.verdict === 'REVIEW'
-                          ? 'REVIEW'
-                          : 'UNKNOWN'
-                    }
-                    size={15}
-                  />
+                  <VerdictChip kind={f.verdict === 'SENSITIVE' ? 'SENSITIVE' : 'UNKNOWN'} size={15} />
                 </span>
               </div>
             );

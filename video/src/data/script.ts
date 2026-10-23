@@ -38,7 +38,7 @@ export const CUES: Cue[] = [
   {id: 17, start: 109.2, end: 116.6, scene: 3, text: '审批把计划摘要签进 Ed25519 记录，执行侧只加载公钥。'},
   {id: 18, start: 117.2, end: 123.6, scene: 3, text: '没有有效审批，写入通道保持锁定。'},
   {id: 19, start: 124.2, end: 131.6, scene: 3, text: '授权之后，敏感值按批次替换，非计划字段保持不变。'},
-  {id: 20, start: 132.2, end: 139.6, scene: 3, text: '每个批次提交时写下事务回执，为中断后的判断留下依据。'},
+  {id: 20, start: 132.2, end: 139.6, scene: 3, text: '在流式路径中，每个批次提交都会写下事务回执。'},
   {id: 21, start: 140.2, end: 148.6, scene: 3, text: '最后是严格验证：行数、主键集合、Schema 与计划字段。'},
 
   // Scene 4 — 2:30-3:20
@@ -70,12 +70,3 @@ export const ONSCREEN = {
   github: 'github.com/haoyuehx/maskriver',
   disclaimer: '流程示意 · 合成数据',
 } as const;
-
-export const SCENE_LABELS = [
-  '问题与品牌',
-  '核心能力',
-  '完整脱敏流程',
-  '有界流式处理',
-  '中断与恢复',
-  '产品总结',
-] as const;

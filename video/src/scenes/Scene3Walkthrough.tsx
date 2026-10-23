@@ -268,7 +268,7 @@ export const Scene3Walkthrough: React.FC = () => {
             />
             <div style={{position: 'absolute', right: 6, top: 24, width: 290}}>
               {[
-                {f: 'name', v: 'REVIEW' as const, note: 'cn_person_name · 83%'},
+                {f: 'name', v: 'UNKNOWN' as const, note: 'cn_person_name · 83% 低于阈值'},
                 {f: 'email', v: 'SENSITIVE' as const, note: 'email · 100%'},
                 {f: 'mobile', v: 'SENSITIVE' as const, note: 'cn_mobile · 100%'},
                 {f: 'city', v: 'UNKNOWN' as const, note: '上下文不足'},

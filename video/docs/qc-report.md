@@ -7,14 +7,14 @@
 | 项 | 值 |
 |---|---|
 | 文件 | `video/out/maskriver-demo-new.mp4` |
-| 大小 | 32,438,238 bytes（30.94 MiB） |
-| SHA-256 | `27c51947713888fd797c667f552822a8e1c4375e86ccf304e1d90d46c0bc1ed7` |
+| 大小 | 32,415,678 bytes（30.91 MiB） |
+| SHA-256 | `f7b3a07b20e26dbfbd28f2087eb5cf34976b98b02a7c53d6323213334b515ff9` |
 | 时长 | 260.054 s（7800 帧 @30fps） |
 | 分辨率 | 1920 × 1080 |
 | 帧率 | 30/1 |
 | 视频编码 | H.264 High，pixel format `yuvj420p`（与仓库现有 `website/public/media/maskriver-demo.mp4` 一致），码率 ≈ 672 kbps |
 | 音频编码 | AAC-LC，48 kHz，2 声道，≈ 317 kbps，时长 260.054 s |
-| 字幕 | 画面烧录简体中文（35 条）+ 外挂 `video/subtitles/zh-CN.srt`（35 条，末条 252.0 s） |
+| 字幕 | 画面烧录简体中文（35 条）+ 外挂 `video/subtitles/zh-CN.srt`（35 条，末条结束 257.4 s，起始 252.4 s） |
 
 ## 2. 命令
 
@@ -65,5 +65,5 @@ ffmpeg -i out/maskriver-demo-new.mp4 -map 0:a -af volumedetect -f null -      # 
 
 1. **音频状态：AUDIO PENDING**。旁白由本地 Piper TTS（`zh_CN-huayan-medium`）合成，已并入成片并有可听电平；但未做人工听感验收，自然度低于专业配音，不能报告 AUDIO PASS。
 2. **视觉审查模型限制**：任务指定的 `opencode-go/glm-5.3` 在本部署中 `input: ["text"]`，**无法读取图片**（已用 PNG 探测复现）。图像审查由同族、支持图片的 `glm-5.3-flash` 在独立上下文中执行，记录见 `docs/visual-review.md`；GLM-5.3 只做纯文本一致性审查。
-3. **三轮渲染记录**：render #1（79/100，2×P1）→ render #2（82/100，2×P1）→ render #3（本轮，见 `docs/visual-review.md` 的 Round 3）。P1 均已按评审意见修复后再出片。
+3. **四轮渲染记录**：render #1（79/100，2×P1）→ render #2（82/100，2×P1）→ render #3（85/100 PASS）→ render #4（修复纯文本审查发现的 1 处屏上事实错误 + 2 处不精确后重渲染，见 `docs/visual-review.md` 的 Round 4 处置与复核）。
 4. `yuvj420p` 为全范围 JPEG 采样；与仓库既有视频一致，主流播放器可正常解码。

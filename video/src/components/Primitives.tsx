@@ -60,7 +60,7 @@ export const RingMark: React.FC<{
 
 /** Three-state verdict chip: SENSITIVE / NOT_SENSITIVE / UNKNOWN. */
 export const VerdictChip: React.FC<{
-  kind?: 'SENSITIVE' | 'NOT_SENSITIVE' | 'UNKNOWN' | 'MASKED' | 'PASS' | 'REVIEW';
+  kind?: 'SENSITIVE' | 'NOT_SENSITIVE' | 'UNKNOWN' | 'MASKED' | 'PASS';
   size?: number;
   progress?: number;
 }> = ({kind = 'SENSITIVE', size = 18, progress = 1}) => {
@@ -68,7 +68,6 @@ export const VerdictChip: React.FC<{
     SENSITIVE: {fg: COLORS.cyan, label: 'SENSITIVE'},
     NOT_SENSITIVE: {fg: COLORS.muted, label: 'NOT_SENSITIVE'},
     UNKNOWN: {fg: COLORS.amber, label: 'UNKNOWN'},
-    REVIEW: {fg: COLORS.amber, label: 'REVIEW'},
     MASKED: {fg: COLORS.teal, label: 'MASKED'},
     PASS: {fg: COLORS.teal, label: 'PASS'},
   };
