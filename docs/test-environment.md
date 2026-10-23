@@ -32,7 +32,7 @@ python3 scripts/test_mysql_container.py
 
 复用 `TestMySQLFixture` 的 marker、目录权限和 socket guard；启动失败/超时、SQL 失败均报失败。finally 删除本次唯一容器及其匿名卷；成功后删除合成目录，失败诊断仅留在忽略的 `.local`，不上传数据文件。取消 CI 时 runner 为一次性环境；本机强制中断后由设备持有人确认残留资源，不自动处理其他容器。
 
-自 PR #30 起，容器入口同时执行 `TestMySQLFixture` 与 `TestMySQLAdapter`，MySQL 8.0.46 业务适配器测试不再被静默 SKIP。真实 typed 日期/数字/二进制、分页与事务及九种 CN 策略通过相同私有 socket 验证；其他 MySQL/MariaDB 版本、生产凭证权限、用户 CLI 全流程仍未验收。不得以 fixture、Mock 或编译结果冒充未运行的测试。
+自 PR #30/#93 起，容器入口执行 `TestMySQLFixture`、`TestMySQLAdapter` 与真实 `TestMySQLCLIWorkflow`。真实 typed 日期/数字/二进制、分页与事务及九种 CN 策略通过相同私有 socket 验证；其他 MySQL/MariaDB 版本、生产凭证权限仍未验收。不得以 fixture、Mock 或编译结果冒充未运行的测试。
 
 ### 已取得的 CI 证据
 

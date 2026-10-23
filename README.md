@@ -115,7 +115,7 @@ SQLite 快速开始见 [Quick Start](docs/guides/quickstart.md)；MySQL 见 [MyS
 | [HerrscherofSentience555](https://github.com/HerrscherofSentience555) | SQLite/MySQL 数据库适配器 | PR #16（已合并）；commit `b8c9c5f`（Git author `szh`） |
 | [PyGuy2](https://github.com/PyGuy2) | 脱敏策略实现相关 GitHub 贡献 | commit `515d628`（mask strategies）；该 commit 关联的 PR #18 由 `emgps` 发起，账号与个人职责无法进一步可靠拆分 |
 
-AI Agent 提交身份（如 `AI M3 Orchestrator`、`AI Release Orchestrator`、`AI Orchestrator`、`Compiler Bot`）是自动化开发/发布身份，**不应被记录为未经核实的人类贡献者**。Git 历史未被改写，原始 PR 作者与合并提交保留。更详细的 PR #18 提交归属说明见 [CONTRIBUTORS.md](CONTRIBUTORS.md)。
+AI Agent 提交身份（如 `AI M3 Orchestrator`、`AI Release Orchestrator`、`AI Orchestrator`、`Compiler Bot`）是自动化开发/发布身份，**不应被记录为人类贡献者**。Git 历史未被改写，原始 PR 作者与合并提交保留。更详细的 PR #18 提交归属说明见 [CONTRIBUTORS.md](CONTRIBUTORS.md)。
 
 ## Development & Contribution
 

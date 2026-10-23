@@ -1,8 +1,10 @@
-# M1-B 四个独立组件任务
+# M1-B 四个独立组件任务（历史计划）
 
-四位成员各自认领无重叠的模块责任，组件通过 PR 后由 Main 协调集成，不同时改 runner；不强制使用 Agent。
+> **历史快照。** 本文描述早期 M1-B 的模块计划，不是当前贡献者名单或团队人数。当前状态见 [Feature Matrix](feature-matrix.md)。
 
-共同契约：`pkg/contracts` 的 `APIRevision=m1a-v1`。从 main 创建个人功能分支，PR 记录完整基线 SHA；更新分支后重新测试，不要求四人同机或同时启动。
+贡献者通过 fork/分支/PR 认领无重叠的模块责任，组件通过 PR 后由 Main 协调集成，不同时改 runner。
+
+共同契约：`pkg/contracts` 的 `APIRevision=m1a-v1`。从 main 创建个人功能分支，PR 记录完整基线 SHA；更新分支后重新测试，不要求所有参与者同机或同时启动。
 规范依据：本仓库的 [contracts.md](contracts.md)（接口与安全不变量）、[architecture.md](architecture.md)（执行模型）、[test-plan.md](test-plan.md)（验收用例）、[roadmap.md](roadmap.md)（里程碑范围）。
 本项目不再以复现或翻译其他项目的内部实现为验收目标；所有实现与验收以本仓库的接口、需求与测试为依据。
 
@@ -102,4 +104,4 @@
 
 Main 通过模块 PR 协调集成：审查文件范围、接口变化与敏感内容，统一 CI 跑 `go test ./...`、`go vet ./...`、race 和适用的真实数据库测试；集成后补齐 SQLite 端到端。
 独立评审允许人类成员或获授权的 AI Reviewer，维护者审核后合并，不自动合并。
-M1-B 组件完成不等于 M1 完成：runner/config/history/CLI 集成、持久映射、其余策略与端到端安全门属于后续阶段。
+M1-B 组件完成不等于 M1 完成：后续 runner/config/history/CLI、严格验证与 v1.0.0 验收已完成；持久映射等仍不支持。

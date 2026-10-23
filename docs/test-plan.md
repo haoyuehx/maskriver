@@ -32,7 +32,7 @@ go build -o bin/maskriver ./cmd/maskriver
 
 `.github/workflows/ci.yml` 在 Ubuntu/Windows 执行格式检查、`go test -count=1 -v ./...` 和 `go vet ./...`，Ubuntu 另跑 race。MySQL 隔离业务测试单独在 Ubuntu 禁网容器执行 fixture + adapter，失败即 CI 失败；普通测试无 MySQL socket 时明确 SKIP。macOS 可以本地测试，macOS 非流式 M1 已由 CI 覆盖；macOS/Windows streaming/recovery 仍不支持。
 
-PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，统一 CI 与评审完成后才能合并。本机不支持 race 可由 Ubuntu CI 补齐，不能记成本机通过。#10 的当前适配器用例已在 PR #30 隔离 MySQL 8.0.46 实跑；尚未验证完整用户 CLI workflow、其他版本及生产环境。
+PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，统一 CI 与评审完成后才能合并。本机不支持 race 可由 Ubuntu CI 补齐，不能记成本机通过。#10 的当前适配器用例已在 PR #30 隔离 MySQL 8.0.46 实跑；完整 MySQL CLI workflow 后续由 M3-2/PR #93 验证，其他 MySQL 版本与生产环境仍未验证。
 
 ## 分阶段门禁
 

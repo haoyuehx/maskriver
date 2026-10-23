@@ -1,17 +1,18 @@
 # MaskRiver Roadmap
 
-MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段目标是：在授权且隔离的测试数据库中，以可复现方式完成发现、审核计划、预览、显式脱敏写入和严格验证。本路线图按 **2026-10-18 的 `main` 状态** 编写；实现证据详见 [Feature Matrix](feature-matrix.md)、[测试计划](test-plan.md)、[契约](contracts.md) 与对应 PR/CI。
+MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段目标是：在授权且隔离的测试数据库中，以可复现方式完成发现、审核计划、预览、显式脱敏写入和严格验证。**当前状态（2026-10-22）：`v1.0.0` 已发布，支持范围见 [发行说明](releases/v1.0.0.md)。** 本路线图保留 2026-10-18 起的历史里程碑记录；实现证据详见 [Feature Matrix](feature-matrix.md)、[测试计划](test-plan.md)、[契约](contracts.md) 与对应 PR/CI。
 
 ## 现状与里程碑
 
 | 阶段 | 状态 | 验证过的边界 / 尚缺能力 |
 | --- | --- | --- |
-| M0 · 项目基座 | 完成 | 独立 Go module、MIT 授权、help/version、跨平台 CI；数据库业务 CLI 仍只会安全拒绝 |
+| M0 · 项目基座 | 完成（历史基线） | 独立 Go module、MIT 授权、help/version、跨平台 CI；当时数据库业务 CLI 只会安全拒绝，后续由 M1/M3 交付 |
 | M1-A · 共享契约 | 完成 | `pkg/contracts` 冻结 `APIRevision=m1a-v1`、SQLite/MySQL 测试环境及基础类型 |
 | M1-B · 四个核心组件 | 已合并 | #5/#10 数据库、#6 检测、#7/#12 脱敏、#8 验证；有真实 SQLite/MySQL 适配器与 CN 策略 SQL 组件集成、fake Reader 验证器回归。**不等于端到端 CLI** |
 | M1-C · 全流程集成 [#9](https://github.com/haoyuehx/maskriver/issues/9) | **已关闭（CLOSED）** | SQLite 多表真实 Scan/Preview/签名审批/新进程 Apply/Validate 已测，AC 已由独立上下文签署，证据见 [Issue #9 验收报告](issue9-acceptance-report.md)；`--strict` 独立严格语义与 MySQL CLI 后由 M3-1/M3-2 补齐 |
-| M1-D · 独立安全验收 [#11](https://github.com/haoyuehx/maskriver/issues/11) | **已裁定 ACCEPT WITH RESTRICTIONS** | 独立非作者审查已完成：P0=0、P1=0（原 P1 为许可/署名，已由 PR #58 修复并经第二独立上下文复核）；六条 P2 仍开放。**M1 未发布**，可宣称与不可宣称的范围须按裁定执行 |
+| M1-D · 独立安全验收 [#11](https://github.com/haoyuehx/maskriver/issues/11) | **已裁定 ACCEPT WITH RESTRICTIONS** | 独立非作者审查已完成：P0=0、P1=0（原 P1 为许可/署名，已由 PR #58 修复并经第二独立上下文复核）；六条 P2 仍开放。当时 M1 尚未发布；后续 `v1.0.0` 已按支持范围发布 |
 | M2 · 增强能力 | **本地 SQLite 预览已交付** | [#13](https://github.com/haoyuehx/maskriver/issues/13) 已关闭（SQLite 有界流式 Apply + Outbox）；[#14](https://github.com/haoyuehx/maskriver/issues/14) 本地 SQLite `m2-recovery-v1` 已实现并验收，并纳入 `v0.2.0-preview.1` 发布候选。MySQL/Windows/WAL 恢复、跨库映射与通用 exactly-once 仍不支持 |
+| M3 · MySQL CLI / 稳定版 | **已发布 v1.0.0** | M3-1 strict/安全、M3-2 MySQL 8.0.46 CLI、M3-3 UX、M3-4 生成式评测、M3-5 跨平台 CI 完成；Linux amd64 + SQLite/MySQL M1，SQLite-only streaming/recovery。证据见 [M3 验收](m3/acceptance-matrix.md) |
 
 ## 已交付核心能力（M1-B）
 
@@ -80,7 +81,7 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 - **#9 已 CLOSED**：AC 已由独立上下文签署（[Issue #9 验收报告](issue9-acceptance-report.md)，2026-10-18）。该报告的历史结论不改写。
 - **#11 已裁定 ACCEPT WITH RESTRICTIONS**：第三方或团队内非作者审查已完成，P0=0、P1=0。原 P1（第三方许可/署名）由 PR #58 修复，并已由第二个独立上下文复核；合并记录见 PR #58。裁定、六条 P2 与发布范围见 [Issue #11 验收裁定](m1-acceptance-issue11.md)。
 - **六条 P2 仍开放**，均需后续 Issue 关闭，登记表中的编号与内容不改。
-- **M1 未发布**。裁定不等于发布批准：发布门禁（NOTICE/发行包载体、内置第三方许可文本、可宣称与不可宣称范围）仍未完成，见 [测试计划](test-plan.md) 的 UNVERIFIED 清单与已接受 P2 表。
+- **历史时点：M1 尚未发布。** 发布门禁后续由 v0.1.0-dev/v0.2.x preview 与 v1.0.0 逐步完成；历史限制不因新版本消失，见 [测试计划](test-plan.md) 与 [v1.0.0 验收](releases/v1.0.0-acceptance.md)。
 
 ## 2026-10-19 发行增量
 
@@ -91,5 +92,5 @@ M1 限定预览版已作为 **GitHub Pre-release** 发布：tag `v0.1.0-dev` →
 ## 2026-10-21/22 增量：M3-1 与 M3-2
 
 - **M3-1 已合并 `cc178aa`**：strict 全量+适配器完整性检查、Writer 非 NULL→NULL 拒绝、审批时钟偏差对齐；`v0.2.1-preview` 已发布。
-- **M3-2 已实现并进入合并评审**：MySQL 8.0.46 CLI `Scan→Preview→Approve→Apply→Validate`，真实隔离 CI E2E；MySQL streaming/recovery 明确拒绝。MySQL 恢复仍无协议，不得宣称支持。
+- **M3-2 已合并 `71e85fd`（PR #93）**：MySQL 8.0.46 CLI `Scan→Preview→Approve→Apply→Validate`，真实隔离 CI E2E；MySQL streaming/recovery 明确拒绝。MySQL 恢复仍无协议，不得宣称支持。
 - M3-3/M3-4/M3-5/M3-6 仍按各自 Issue 验收，F1/生产准确率、跨平台 streaming/recovery 与稳定版门禁不得由本增量推断完成。
