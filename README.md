@@ -111,11 +111,11 @@ SQLite 快速开始见 [Quick Start](docs/guides/quickstart.md)；MySQL 见 [MyS
 | --- | --- | --- |
 | [haoyuehx](https://github.com/haoyuehx) | 核心 CLI 与 Runner、数据库适配器集成、检测/脱敏集成、验证、Streaming/Recovery、文档与发布、展示网站 | 317 个 Git 提交；PR #35–#99 的主要作者；`cmd/`、`internal/`、`docs/`、`website/` 主要变更 |
 | [emgps](https://github.com/emgps) | 脱敏策略提案、验证器提案（PR #18、#32 已合并；#17/#19/#31 未合并） | GitHub PR #18/#32 作者及文件列表；PR #17/#19/#31 提案 |
-| [whh-true](https://github.com/whh-true) | 确定性脱敏策略 | PR #26（已合并）；commit `498dd7f` |
+| [whh-true](https://github.com/whh-true) | 确定性脱敏策略 | PR #26（已合并）；commit `498dd7f`（Git author `whh_1231`） |
 | [HerrscherofSentience555](https://github.com/HerrscherofSentience555) | SQLite/MySQL 数据库适配器 | PR #16（已合并）；commit `b8c9c5f`（Git author `szh`） |
 | [PyGuy2](https://github.com/PyGuy2) | 脱敏策略实现相关 GitHub 贡献 | commit `515d628`（mask strategies）；该 commit 关联的 PR #18 由 `emgps` 发起，账号与个人职责无法进一步可靠拆分 |
 
-AI Agent 提交身份（如 `AI M3 Orchestrator`、`AI Release Orchestrator`、`AI Orchestrator`）是自动化开发/发布身份，**不是未经核实的人类贡献者**。Git 历史未被改写，原始 PR 作者与合并提交保留。
+AI Agent 提交身份（如 `AI M3 Orchestrator`、`AI Release Orchestrator`、`AI Orchestrator`、`Compiler Bot`）是自动化开发/发布身份，**不应被记录为未经核实的人类贡献者**。Git 历史未被改写，原始 PR 作者与合并提交保留。更详细的 PR #18 提交归属说明见 [CONTRIBUTORS.md](CONTRIBUTORS.md)。
 
 ## Development & Contribution
 

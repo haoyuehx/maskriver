@@ -13,11 +13,11 @@ MaskRiver 的测试目标：证明组件在真实数据库上按其契约工作�
 - `internal/config/config_test.go`：零值只读与显式 Apply 意图。
 - `tools/fixture`：生成 `.local/m1a-synthetic.db`，拒绝覆盖已有文件。
 - `scripts/test_mysql.py`：可选 POSIX 本机专用禁网 MySQL；历史宿主机权限失败不是通用开发阻塞。
-- `scripts/test_mysql_container.py`：Linux 或 Ubuntu CI 一次性禁网 MySQL 8.0.46 容器，复用 marker + 私有 socket guard；现执行 TestMySQLFixture + TestMySQLAdapter 业务测试（PR #30）。
+- `scripts/test_mysql_container.py`：Linux 或 Ubuntu CI 一次性禁网 MySQL 8.0.46 容器，复用 marker + 私有 socket guard；现执行 TestMySQLFixture、TestMySQLAdapter 与真实 TestMySQLCLIWorkflow（PR #30、#93）。
 
 `internal/detect`、`internal/db`（SQLite/MySQL Reader/Writer、keyset 分页与事务）、`internal/mask`（五种 M1 策略、内存映射与九种中国格式替换）和 `internal/verify` 均已在 `main` 交付，测试证据见各自包内测试。`internal/db/mysql_test.go` 的 `TestMySQLAdapter` 只有在传入隔离 MySQL socket 时执行；Ubuntu CI 的一次性 MySQL 8.0.46 容器会执行这一适配器业务测试，本地普通测试无 socket 时仍会 SKIP。
 
-当前真实 SQLite CLI 证据覆盖单表与多表：`cmd/maskriver/main_test.go` 的 `TestCLIRealSQLiteWorkflow`、`TestCLIMultiTableWorkflow`、`TestCLINullStrategyRefusedBeforeWrite`、`TestCLIStrictFlagWiring`、`TestCLIScanFailureExitsNonZeroWithoutWrite`，以及 `cmd/maskriver/approval_e2e_test.go` 的子进程审批/新进程 apply 用例。MySQL 仍只有适配器组件测试，用户 CLI 全流程未实现/未验证；`--strict` 目前没有可区分的严格语义（见下文“#9 真实 SQLite CLI 与签名审批（当前证据）”）。因此这些证据不代表 #9/#11 的全部验收，也不代表 M1 完成或发布。
+当前真实 SQLite CLI 证据覆盖单表与多表：`cmd/maskriver/main_test.go` 的 `TestCLIRealSQLiteWorkflow`、`TestCLIMultiTableWorkflow`、`TestCLINullStrategyRefusedBeforeWrite`、`TestCLIStrictFlagWiring`、`TestCLIScanFailureExitsNonZeroWithoutWrite`，以及 `cmd/maskriver/approval_e2e_test.go` 的子进程审批/新进程 apply 用例。MySQL 8.0.46 CLI 与 strict 语义后由 M3-2/PR #93 补齐；本节早期 SQLite 证据不代表 #9/#11 的全部验收，也不代表 M1 的最终发布结论。
 
 ```sh
 gofmt -l cmd internal pkg tools
@@ -28,7 +28,7 @@ go build -o bin/maskriver ./cmd/maskriver
 
 ## 跨平台与统一 CI
 
-四位成员各自 clone、认领 Issue、开分支并提交 PR。纯内存模块可在 Windows/Linux/macOS 独立测试；不依赖本地 Agent smoke。共享测试环境变动由 Main 协调。
+贡献者通过 fork/分支/PR 参与；角色名称不预设固定人数。纯内存模块可在 Windows/Linux/macOS 独立测试；不依赖本地 Agent smoke。共享测试环境变动由 Main 协调。
 
 `.github/workflows/ci.yml` 在 Ubuntu/Windows 执行格式检查、`go test -count=1 -v ./...` 和 `go vet ./...`，Ubuntu 另跑 race。MySQL 隔离业务测试单独在 Ubuntu 禁网容器执行 fixture + adapter，失败即 CI 失败；普通测试无 MySQL socket 时明确 SKIP。macOS 可以本地测试，macOS 非流式 M1 已由 CI 覆盖；macOS/Windows streaming/recovery 仍不支持。
 
@@ -159,12 +159,12 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 
 ## UNVERIFIED 清单
 
-- MySQL CLI 端到端：未实现/未验证；只有隔离 MySQL 8.0.46 适配器测试。
+- MySQL CLI 端到端：已由 M3-2/PR #93 在隔离 MySQL 8.0.46 完成；其他 MySQL 版本未验证。
 - MySQL/Windows/WAL 恢复、跨存储 mapping commit gap 的恢复、通用 exactly-once：不支持；不得从本地 SQLite 恢复能力推断。
 - 生产级检测准确率：只有 74 条自编样本（38 正、36 负，8 条超出覆盖），姓名 P=0.500/R=0.750；不是独立留出评估。
 - 持久映射、全局唯一性/匿名化、参照完整性：未实现/未验证。
-- macOS CI：仓库 CI 跑 Ubuntu/Windows/macOS（非流式 M1）；未宣称 macOS 覆盖。
-- `--strict` 的 MySQL 严格完整性路径：M3-1 未实现，MySQL `IntegrityCheck` 返回 `ErrUnsupported`，因此 strict MySQL 失败关闭；标记 UNVERIFIED，直到 M3-2 的完整实现。
+- macOS CI：仓库 CI 跑 Ubuntu/Windows/macOS 非流式 M1；macOS/Windows streaming/recovery 仍不支持。
+- `--strict` 的 MySQL 严格完整性路径：M3-2 已实现 `CHECK TABLE ... QUICK` + 可见 FK orphan 检查；其他 MySQL 版本与全服务器一致性仍未验证。
 
 ## 已知残余缺陷（已接受 P2）
 

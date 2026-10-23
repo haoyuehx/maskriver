@@ -32,18 +32,11 @@ MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具。阶段
 | 4 | **Strict Validate 和 CLI 出口**：从脱敏前独立快照与目标比较，报告安全摘要、可靠退出码 | A 接入 CLI；D 主责验证用例，B 提供隔离库 | 真实 SQLite 合成库 `scan → preview → apply → strict validate` 完整通过；失败/部分覆盖不能返回成功 |
 | 5 | **回归与文档**：错误注入、CI、演示脚本、真实输出证据、更新功能矩阵 | A 发布协调；B/C/D 各自交付证据 | Ubuntu/Windows Go CI、Ubuntu race、真实 SQLite 端到端；日志无原值/密钥/DSN；列出尚未验证的情况 |
 
-首版只承诺**经测试的 SQLite CLI 全流程**；MySQL 8.0.46 业务适配器已测试，但 MySQL 的用户 CLI 全流程仍须单独验收，不得借组件测试宣称已完成。
+首版只承诺**经测试的 SQLite CLI 全流程**。该历史门禁后续由 M3-2 补齐 MySQL 8.0.46 CLI；当前状态见 [Feature Matrix](feature-matrix.md)。
 
-## 四人分工与文件所有权
+## 早期分工（历史）
 
-| 人员（待认领） | 主要责任 | 允许主写的范围 | 近期可并行交付 |
-| --- | --- | --- | --- |
-| **A — Main / 集成与发布** | #9 owner、Config/Plan、Runner、CLI、共享契约协调、最后合并 | `cmd/maskriver/**`、`internal/config/**`、`internal/runner/**`、`internal/history/**`、根文档/CI/`pkg/contracts`（后者仅经审批） | 先发布安全配置与 Plan PR，再依次落 Scan/Preview、Apply、Validate；制定退出码与演示命令 |
-| **B — 数据库与 SQL 安全** | 来源快照、只读连接、事务/回滚、复合键、SQL Spy、真实 SQLite/MySQL 回归 | `internal/db/**`；协作测试文件由 A 授权后认领 | 交付快照复制与哈希校验、只读/写入 SQL Spy、冲突/取消/提交歧义测试；审查 A 的 DB 写入边界 |
-| **C — 敏感检测与脱敏策略** | UNKNOWN/人工覆盖门禁、密钥/Scope/格式边界、确定性与安全回归 | `internal/detect/**`、`internal/mask/**` | 扩充合成负例和分类门禁，验证策略输出型别/长度/未变化拒绝与映射局限；帮助 A 制定 Plan 规则 |
-| **D — 完整性验证与 QA** | `verify` 契约、真实 SQLite 端到端测试、失败注入与 #11 独立验收证据 | `internal/verify/**`、`tests/**`；审查阶段保持只读 | 先构造合成场景和验收矩阵，后接入真实 Workflow，完成覆盖率/坏主键/错误报告验证、独立报告 |
-
-**规则：** 这四个角色由四位实际成员认领，Main 不是第五个人。只有 A 修改 Runner/CLI/共享配置，B/C/D 通过独立的组件 PR 与测试接口协作；任何跨模块改动先得到 owner 同意，不直接互相覆盖。建议 D 评审 A/B 的实现，B 评审 C，C 评审 D。D 如果编写了某项实现，就不能为该项提供独立的非作者批准。团队 PR 原作者的 Git 身份应保留，尽量使用正常 Merge 而非 Squash。
+早期四人 A/B/C/D 分工是计划占位，不是当前贡献者名单。该表已迁移到 [历史快照](history/four-person-collaboration-plan.md)；当前可核实贡献者见根目录 [README](../README.md#contributors--项目贡献者)。仓库不再依据“四人”推定团队人数或职责。
 
 ## M1-D：Issue #11 的最终验收
 
