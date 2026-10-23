@@ -1,5 +1,7 @@
 # 比赛提交检查清单
 
+> 本文件是参赛研发准备材料，不代表已报名、入选或获官方背书。
+
 - [x] v1.0.0 稳定版 Release 与 Linux amd64 资产
 - [x] SQLite 多表 CLI：Scan/Preview/Approve/Apply/Validate
 - [x] MySQL 8.0.46 真实隔离 CI CLI E2E
