@@ -50,7 +50,28 @@ func OpenForApply(ctx context.Context, cfg config.Runtime, key contracts.Value) 
 			return nil, err
 		}
 	}
-	return Open(ctx, cfg, key)
+	engine, err := Open(ctx, cfg, key)
+	if err != nil {
+		return nil, err
+	}
+	// A successful apply must update the target file whose identity the plan
+	// binds. A WAL target can commit only to its -wal sidecar while the main
+	// .db stays byte-identical, so a copied single file would still contain the
+	// old data even though the run reports Complete. The streaming/outbox path
+	// already pins rollback journal; enforce the same precondition on the legacy
+	// apply path before a Writer is allowed to open.
+	if targetOpts.Dialect == contracts.SQLite {
+		caps, capErr := sourceCapabilities(engine.target)
+		if capErr != nil {
+			_ = engine.Close()
+			return nil, capErr
+		}
+		if capErr = caps.Quiescent(ctx); capErr != nil {
+			_ = engine.Close()
+			return nil, capErr
+		}
+	}
+	return engine, nil
 }
 
 // Open requires two independent SQLite files or MySQL databases and opens
