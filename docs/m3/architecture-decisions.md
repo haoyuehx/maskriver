@@ -27,8 +27,10 @@ unless a separate protocol is approved and tested.
 - #9 P2-1 (Writer accepted non-NULL -> NULL) is closed at the writer layer.
 - #9 P2-8 (runner rejected a record dated a few minutes in the future while
   history tolerated 5 minutes) is closed by using the same 5-minute skew.
-- #9 P2-5 (CLI e2e digest ignored sidecars) and #9 P2-3 (gather cancellation)
-  remain accepted/documentation-only unless a regression is found.
+- This ADR is a historical M3-1 record. #9 P2-5 target-WAL legacy apply was
+  fixed by #102 (`OpenForApply` rejects non-quiescent SQLite targets); the CLI
+  e2e digest sidecar limitation and #9 P2-3 (gather cancellation) remain
+  documentation-only unless a regression is found.
 - #11's historical two lost P2 items are not reconstructed; the M3 independent
   review covers the reviewed release candidate `b073d88` and preserves that evidence gap.
 
