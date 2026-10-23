@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-PHASE I — 完成（render #4 已交付并通过技术验收与第 4 轮视觉复核；PR #104 仍为 OPEN，等待本次合并门禁）
+PHASE I — 完成（render #4 已交付并通过技术验收与第 4/5 轮视觉复核；PR #104 已合并，merge `03d49a31e1e208ce4d7f5cf49e5896ceab98a59f`）
 
 ## 环境（实测）
 
@@ -32,7 +32,7 @@ PHASE I — 完成（render #4 已交付并通过技术验收与第 4 轮视觉�
 | F 声音 | 技术 QC PASS；**HUMAN AUDIO REVIEW REQUIRED** | `public/audio/narration.mp3`（Piper `zh_CN-huayan-medium`，35 条，260.04s）；成片 AAC 48 kHz / −16.8 LUFS / TP −4.9 dBFS；试听包与清单见 `docs/audio-review.md` |
 | G 成片 | 完成（render #4） | `out/maskriver-demo-new.mp4`：260.054s / 7800 帧 / 30.91 MiB / sha256 f7b3a07b…5ff9 |
 | H 独立 QA | 第 1–4 轮 + 交付前独立复核完成（第 4 轮 85/100；最终复核 88/100 PASS，无 P0/P1） | `docs/visual-review.md`、`docs/qc-report.md`、`docs/audio-review.md`、`docs/evidence/` |
-| I 交付 | PR OPEN，等待门禁 | 分支 `feat/remotion-video-v2`；内容提交 `bd93099`（工程与成片）+ `139dffa`（事实修正与重渲染）+ `bc6b4ed`（交付文档）；音轨人工试听提交随后加入；PR https://github.com/haoyuehx/maskriver/pull/104 |
+| I 交付 | **已合并** | 分支 `feat/remotion-video-v2`；内容提交 `bd93099`（工程与成片）+ `139dffa`（事实修正与重渲染）+ `b050266`/`cd80106`/`5642b0b`（音轨 QC、最终复核、文档）；PR https://github.com/haoyuehx/maskriver/pull/104；merge `03d49a3` |
 
 ## 渲染轮次
 
@@ -62,7 +62,7 @@ PHASE I — 完成（render #4 已交付并通过技术验收与第 4 轮视觉�
 
 1. 人工试听 `review/audio-review.mp3` 或完整 MP4，并按 `docs/audio-review.md` 填写 PASS/CONDITIONAL/FAIL。
 2. 若音轨需要修复，单独做音频重混与 QC；若保留，记录试听结论。
-3. PR #104 合并后，按 `docs/website-handoff.md` 执行网站替换（需用户确认）。
+3. PR #104 已合并；按 `docs/website-handoff.md` 执行网站替换（需用户确认）。
 4. 不修改 Go、v1.0.0 Tag、Release 资产或旧网站视频，直到网站替换步骤被授权。
 
 ## 交付状态（最终）
