@@ -18,7 +18,7 @@ MaskRiver 是一个独立研发的 Go 数据脱敏与敏感信息治理工具，
 |---|---|---|
 | 共享 DTO/接口 `m1a-v1` | 已实现 | `pkg/contracts` + 契约测试；不是完整引擎 |
 | `database/sql` 驱动版本锁定 | 已实现 | `go.mod`/`go.sum`、database-drivers.md |
-| SQLite 合成环境 | 已实现 | `internal/testenv`、`tools/fixture`；业务 Reader/Writer、分页和事务测试由 #5/PR #21 交付，最终 CI 在本轮继续执行 |
+| SQLite 合成环境 | 已实现 | `internal/testenv`、`tools/fixture`；业务 Reader/Writer、分页和事务测试由 #5/PR #21 交付，最终 CI 已在 v1.0.0 验收中执行 |
 | MySQL 隔离环境 | 已实现（隔离测试 + 真实 CLI） | 固定 MySQL 8.0.46 私有 socket 容器执行 TestMySQLFixture、TestMySQLAdapter 与真实 TestMySQLCLIWorkflow；其他 MySQL 版本仍未验证 |
 | 可选工作树工具 | 已实现（历史单机） | `scripts/check-native-worktree.mjs` 的旧预检，不是跨平台开发前置条件 |
 | 早期模块任务定义 | 历史文档 | parallel-tasks.md；早期计划不是当前贡献者名单或团队人数 |
@@ -148,7 +148,7 @@ M1 首批切片（`null` / `blank` / `redact` / `format_random` / `fake_email`�
 | SQLite 同事务流式 Apply + M2 审批 + CLI | 已实现并验收（Linux amd64 SQLite；DB 层物化前字节预检、Runner dry-run/apply/validate 统一受 MaxRowBytes 约束；ADR-08 已按 delegated technical direction 批准，生产默认仍显式 opt-in） | 显式 `--streaming --apply` + 独立 `--streaming` Ed25519 审批 + canonical plan 绑定 + WP2 outbox 同事务回执 + 有界分页 + 独立 Validate；Issue #14 增加可选 recovery schema 与 `--resume`，不改变无 recovery schema 时的 #13 事务。证据见 [WP3 设计与证据](design/issue13-wp3-streaming-apply.md)、[规模数据](perf/issue13-wp3-a4a2e41/summary.md)、[Issue #14 验收](issue14-acceptance-report.md)。G5/G7/G9 残余风险、MySQL/Windows streaming 与 1M 单次样本仍未验证 |
 | 有界流式并发、背压、取消 | 部分实现（PR #36） | SQLite：每页有界 1–16 Worker、固定队列、顺序输出、取消与故障注入回归；SQL 读写仍顺序执行；多表 + 多 Worker 的 CLI 证据与 DB 性能评估未交付 |
 | 故障恢复、版本化 checkpoint、幂等重放 | 已实现（Linux amd64 本地 SQLite） | `m2-recovery-v1`：manifest + append-only progress + 同事务 checkpoint/receipt/业务 UPDATE + 显式 `--resume` + 只读 `status`；纯确定性策略 allowlist、KCV 绑定、冲突/commit_unknown fail closed；真实 CLI 子进程在 1/10/100/500 批、跨表、Validate 前后中断均恢复且 A/B 结果一致。MySQL/Windows/WAL、跨库映射与通用 exactly-once 不支持 |
-| precision/recall 与吞吐/内存基准、可视化 | 部分实现（有实测合成值） | #6 的 74 条检测合成评估；PR #36 的 128 条 HMAC 合成批次 3 次重复基准；#13 phase 5 在 Linux 对真实 SQLite Runner 执行 10k/100k/1M 合成矩阵（42 次、BatchSize=64），含分阶段耗时、rows/s、采样 RSS/CPU/连接、收据容量与正确性核验，证据见 [phase-5 报告](perf/issue13-phase5-20261019-final/summary.md)。仅 1M 为单次，矩阵非 CLI、无 MySQL CLI、非未插桩生产吞吐；结果不证明严格的 batch×workers 内存上界，也未支持并行优化或关闭 #13。详见 [性能证据](performance.md) |
+| precision/recall 与吞吐/内存基准、可视化 | 部分实现（有实测合成值） | #6 的 74 条检测合成评估；PR #36 的 128 条 HMAC 合成批次 3 次重复基准；#13 phase 5 在 Linux 对真实 SQLite Runner 执行 10k/100k/1M 合成矩阵（42 次、BatchSize=64），含分阶段耗时、rows/s、采样 RSS/CPU/连接、收据容量与正确性核验，证据见 [phase-5 报告](perf/issue13-phase5-20261019-final/summary.md)。仅 1M 为单次，矩阵非 CLI、当时无 MySQL CLI 基准、非未插桩生产吞吐；结果不证明严格的 batch×workers 内存上界，也未支持并行优化或关闭 #13。详见 [性能证据](performance.md) |
 | 数据目录/治理平台导出 | 未实现 | 未纳入当前承诺 |
 
 任何状态升级必须附可复现测试与文档更新。只创建包、类型、配置或让空包通过编译，都不能算业务功能已实现。

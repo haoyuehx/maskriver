@@ -19,4 +19,3 @@ MaskRiver 是独立开发的 Go 数据脱敏与敏感信息治理工具，面向
 项目采用 GitHub Issue/PR 与独立 AI Agent 开发、审查和 CI 验收；人类维护者负责集成、发布与合并。Git 历史保留真实提交作者，AI Agent 身份不冒充人类贡献者。
 
 **边界：** 仅处理授权、隔离、可丢弃的副本；不宣称生产级 PII 识别准确率、法律匿名化、通用 exactly-once、MySQL Recovery、Windows/macOS Streaming/Recovery 或 WAL Recovery。
-

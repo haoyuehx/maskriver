@@ -9,6 +9,8 @@ MaskRiver 是独立开发的 Go 数据脱敏与敏感信息治理项目，面向
 - **许可：** MIT
 - **状态：** 支持范围内稳定；不是生产级 PII 准确率或法律匿名化认证
 
+面向 **2026 开放原子大赛 · 开源基础软件与解决方案赛道** 的参赛研发目标，不代表已报名、入选或获官方背书。当前发行包只构建 linux/amd64；其他 Linux 架构未构建、未测试。
+
 ## 官网与演示视频
 
 产品展示网站提供可交互的产品介绍、五步流程、Streaming 与 Recovery 演示：
@@ -134,7 +136,7 @@ AI Agent 提交身份（如 `AI M3 Orchestrator`、`AI Release Orchestrator`、`
 - [Feature Matrix](docs/feature-matrix.md) / [测试计划](docs/test-plan.md)
 - [v1.0.0 发行说明](docs/releases/v1.0.0.md) / [验收记录](docs/releases/v1.0.0-acceptance.md)
 - [M3 进度](docs/m3/progress.md) / [验收矩阵](docs/m3/acceptance-matrix.md)
-- [竞赛交付材料](docs/competition/submission-checklist.md)
+- [竞赛交付材料](docs/competition/project-overview.md)：[概览](docs/competition/project-overview.md)、[核心功能](docs/competition/core-features.md)、[技术亮点](docs/competition/technical-highlights.md)、[演示指南](docs/competition/demo-guide.md)、[提交清单](docs/competition/submission-checklist.md)
 - [来源与许可](docs/attribution.md) / [安全边界](docs/guides/security-model.md)
 
 ## License 与安全边界

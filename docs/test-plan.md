@@ -17,7 +17,7 @@ MaskRiver 的测试目标：证明组件在真实数据库上按其契约工作�
 
 `internal/detect`、`internal/db`（SQLite/MySQL Reader/Writer、keyset 分页与事务）、`internal/mask`（五种 M1 策略、内存映射与九种中国格式替换）和 `internal/verify` 均已在 `main` 交付，测试证据见各自包内测试。`internal/db/mysql_test.go` 的 `TestMySQLAdapter` 只有在传入隔离 MySQL socket 时执行；Ubuntu CI 的一次性 MySQL 8.0.46 容器会执行这一适配器业务测试，本地普通测试无 socket 时仍会 SKIP。
 
-当前真实 SQLite CLI 证据覆盖单表与多表：`cmd/maskriver/main_test.go` 的 `TestCLIRealSQLiteWorkflow`、`TestCLIMultiTableWorkflow`、`TestCLINullStrategyRefusedBeforeWrite`、`TestCLIStrictFlagWiring`、`TestCLIScanFailureExitsNonZeroWithoutWrite`，以及 `cmd/maskriver/approval_e2e_test.go` 的子进程审批/新进程 apply 用例。MySQL 8.0.46 CLI 与 strict 语义后由 M3-2/PR #93 补齐；本节早期 SQLite 证据不代表 #9/#11 的全部验收，也不代表 M1 的最终发布结论。
+当前真实 SQLite CLI 证据覆盖单表与多表：`cmd/maskriver/main_test.go` 的 `TestCLIRealSQLiteWorkflow`、`TestCLIMultiTableWorkflow`、`TestCLINullStrategyRefusedBeforeWrite`、`TestCLIStrictFlagWiring`、`TestCLIScanFailureExitsNonZeroWithoutWrite`，以及 `cmd/maskriver/approval_e2e_test.go` 的子进程审批/新进程 apply 用例。strict 语义由 M3-1/PR #91 补齐，MySQL 8.0.46 CLI 由 M3-2/PR #93 补齐；本节早期 SQLite 证据不代表 #9/#11 的全部验收，也不代表 M1 的最终发布结论。
 
 ```sh
 gofmt -l cmd internal pkg tools
@@ -61,7 +61,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - 代码证据：`internal/detect/detect_test.go`、`cn_test.go`、`cn_geo_test.go`、`eval_test.go`；不依赖数据库，应用 `go test -count=1 ./internal/detect/...`、`go test -race ./internal/detect/...`、全仓 `go test ./...` 和 `go vet ./...`。
 - 合成评估：74 条自行构造的 `(value,column)` 样本（38 正、36 负；8 条超出本轮规则覆盖）；`MinSamples=1` 用于测试匹配器与列上下文，而非默认聚合阈值。报告每条规则的 TP/FP/FN、Precision、Recall、F1 和明确的覆盖界限。样本同时用于开发与评估，**不宣称独立验证或生产准确率**。
 - 姓名误报：开发时数据 `cn_person_name` 的 TP=3、FP=3、FN=1（P=0.500、R=0.750、F1=0.600）。在独立负例扩充、评审和业务级不确定处理完成前，姓名检测只作实验性提示，不能自动推导写入批准。
-- 测试与范围分离：组件测试不能替代真实 SQLite/MySQL 端到端扫库、策略映射、Dry Run、Apply 和严格验证。中国身份证/手机号/银行卡/USCC 的**格式约束替换**仍是 #12 与 go-mask 的待完成范围。
+- 测试与范围分离：组件测试不能替代真实 SQLite/MySQL 端到端扫库、策略映射、Dry Run、Apply 和严格验证。中国身份证/手机号/银行卡/USCC 的格式约束替换已由 PR #29 交付；其真实 SQL 组件集成与合成评测见下节。
 - GitHub CI 的 Ubuntu/Windows 格式、测试与 vet 以及 Ubuntu race 需针对**最终 PR Head**重新执行；MySQL fixture 绿灯不是业务 Adapter 验收。所有 SKIP/UNVERIFIED 需明确记录。
 
 ## 数据库适配器专项验收（#5 / PR #21）
@@ -86,7 +86,7 @@ PR 记录 OS、Go 版本、命令、退出码、跳过原因和剩余风险，�
 - **逐规则评估**：`TestCNFormatSyntheticEvaluation` 的开发时手工构造集合含 21 个正例、28 个负例（九条规则），测试格式接受结果并校验替换输出能再次通过对应格式规则。初轮 PR #29 CI 实测九条规则总 TP=21、FP=0、FN=0；逐规则 P/R 均为 1.000。这个小规模自编集合不是独立留出评估，更不是生产 PII 检测准确率或匿名化证明；检测规则的独立指标仍见 `internal/detect/eval_test.go`。
 - **可复现命令**：`go test -count=1 -v ./internal/mask/...`、`go test -count=1 ./...`、`go vet ./...`、`go test -race ./internal/mask/...`、`gofmt -l internal/mask`；最终 PR Head 的 Ubuntu/Windows GitHub CI 应全部成功。先前通过的旧 SHA 不算最新提交通过。
 - **真实 SQL 组件集成**：PR #30 在 SQLite 真实快照做日期策略的只读文件哈希对比、optimistic UPDATE/COMMIT、独立 SQL 回读和源快照不变性校验；另对全部九种策略在实际 SQLite 和 MySQL 8.0.46 表上做 typed Page → mask → WriteTx → 持久化读回及行数/主键检查。
-- **仍未验证**：九种 CN 策略经 CLI 全链路的 Scan/Preview/Apply/strict Validate、针对 CN 策略的 SQL Spy 断言、跨列唯一/PK-FK、持久映射及所有目标列的字节长度限制，属于 #9/#11；通用 SQL Spy 已由 `internal/db` 与 `internal/runner` 的预览回归覆盖，但不是 CN 策略专项证据。生成格式有效的身份证、银行卡、手机号等号码并不保证无人持有、不会被投递/联系，也不保证匿名性；只能处理授权的合成/隔离测试数据。
+- **CLI 覆盖边界**：`cn_date` 已经由真实 MySQL 8.0.46 CLI E2E 覆盖；其余 CN 策略尚未逐一完成 CLI 全链路、CN 专用 SQL Spy、跨列唯一/PK-FK、持久映射及所有目标列字节长度限制的独立验证。通用 SQL Spy 已由 `internal/db` 与 `internal/runner` 预览回归覆盖，但不是 CN 专项证据。生成格式有效的身份证、银行卡、手机号等号码并不保证无人持有、不会被投递/联系，也不保证匿名性；只能处理授权的合成/隔离测试数据。
 
 更多覆盖范围与限制见 [#12 中国格式组件说明](issue12-cn-replacement.md)。
 
