@@ -12,9 +12,6 @@
 | SQLite / MySQL 适配 | 本地 SQLite 与 MySQL 8.0.46 CLI；MySQL 同一物理库拒绝 | 隔离 MySQL CI `TestMySQLCLIWorkflow` |
 | 产品展示网站 | 面向评委的流程、架构、视频、限制与快速开始 | https://haoyuehx.github.io/maskriver/ |
 
-## 不宣称
+## 支持范围
 
-- 生产级 PII 检测准确率、无碰撞、不可关联或法律意义上的匿名化。
-- MySQL Recovery、Windows/macOS Streaming/Recovery、WAL Recovery。
-- 持久映射、跨存储原子性、通用分布式 Exactly-once、真实断电 durability。
-- 本地 trust file + reviewer key 构成完整 RBAC。
+SQLite 支持完整核心 CLI 和指定 Linux 环境中的 Streaming/Recovery；MySQL 8.0.46 支持核心 CLI 工作流。详细功能说明见项目文档。
