@@ -8,7 +8,7 @@ export default function Footer() {
       <div className="footer-inner section-shell">
         <div className="footer-brand">
           <Logo />
-          <p>安全、可验证、可恢复的数据脱敏工具。面向授权的隔离副本，不宣称生产级 PII 准确率或法律匿名化。</p>
+          <p>安全、可验证、可恢复的数据脱敏工具，面向开发、测试与数据共享场景。</p>
           <a href={GITHUB} target="_blank" rel="noreferrer"><Github size={16} /> github.com/haoyuehx/maskriver</a>
         </div>
         <div className="footer-col">

@@ -16,7 +16,7 @@ export default function StreamingPipeline() {
       <div className="section-heading">
         <span className="section-kicker">BOUNDED STREAMING</span>
         <h2 id="streaming-title">让数据按批次流动，而不是一次载入全部</h2>
-        <p>面向较大数据规模的分批读取、资源预算与事务回执。范围仅限 SQLite；不宣称任何情况下内存永远固定。</p>
+        <p>面向较大数据规模的分批读取、资源预算与事务回执。范围仅限 SQLite。</p>
       </div>
       <Reveal className="pipeline-wrap">
         <div className="pipeline">

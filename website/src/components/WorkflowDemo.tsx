@@ -13,7 +13,7 @@ export default function WorkflowDemo() {
       <div className="section-heading">
         <span className="section-kicker">CORE WORKFLOW</span>
         <h2 id="workflow-title">五个步骤，把一次脱敏变成可追踪的任务</h2>
-        <p>点击任意步骤查看它解决的问题。实际工具通过 CLI 执行，这里的界面是流程可视化，不是 Web 管理后台。</p>
+        <p>点击任意步骤，查看它解决的问题、处理过程与关键能力。</p>
       </div>
       <div className="workflow-shell">
         <div className="workflow-tabs" role="tablist" aria-label="MaskRiver 五步流程">
@@ -69,7 +69,7 @@ export default function WorkflowDemo() {
           <WorkflowVisual stepId={step.id} />
         </div>
       </div>
-      <p className="fine-print">交互式流程示意，实际工具通过 CLI 执行；不会在本页面连接或修改任何数据库。</p>
+      <p className="fine-print">MaskRiver 五步脱敏工作流：从敏感字段识别到结果验证。</p>
     </section>
   );
 }
