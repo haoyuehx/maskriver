@@ -29,7 +29,7 @@ export default function Architecture() {
     <section id="architecture" className="section section-shell architecture-section" aria-labelledby="architecture-title">
       <div className="section-heading">
         <span className="section-kicker">ARCHITECTURE</span>
-        <h2 id="architecture-title">单机、可审计的处理链，而不是想象中的云平台</h2>
+        <h2 id="architecture-title">清晰可靠的数据脱敏处理架构</h2>
         <p>从 CLI 配置到检测、计划、审批、执行、适配器与验证；Streaming 和本地恢复只在支持的 SQLite 范围内增量存在。</p>
       </div>
       <Reveal className="architecture-frame" tabIndex={0} role="region" aria-label="MaskRiver 架构图，可横向滚动">
@@ -74,7 +74,7 @@ export default function Architecture() {
           <span><i className="legend-dot amber" /> 本地恢复</span>
         </div>
       </Reveal>
-      <p className="fine-print">架构图基于仓库中已实现组件；没有画入 Kubernetes、Kafka、微服务网关或多节点分布式事务。</p>
+      <p className="fine-print">MaskRiver 由检测、计划、审批、脱敏执行与结果验证等模块组成。</p>
     </section>
   );
 }
