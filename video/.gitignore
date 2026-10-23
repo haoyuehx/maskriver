@@ -1,0 +1,6 @@
+node_modules/
+out/
+out/narration/
+public/audio/*.m4a
+.remotion/
+*.log
