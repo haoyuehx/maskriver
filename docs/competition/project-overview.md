@@ -1,6 +1,6 @@
 # MaskRiver 项目概览
 
-MaskRiver 是独立开发的 Go 数据脱敏与敏感信息治理工具，面向开发、测试与数据共享场景。本文是参赛研发材料，不代表已报名、入选或获官方背书。目标不是提供一个“点一下就把生产库变匿名”的黑盒，而是把一次脱敏组织成可验证的工程流程：
+MaskRiver 是独立开发的 Go 数据脱敏与敏感信息治理工具，面向开发、测试与数据共享场景。它把一次脱敏组织成可验证的工程流程：
 
 `Scan → Preview → Approve → Apply → Validate`
 
@@ -16,6 +16,6 @@ MaskRiver 是独立开发的 Go 数据脱敏与敏感信息治理工具，面向
 
 ## 开发方式
 
-项目采用 GitHub Issue/PR 与独立 AI Agent 开发、审查和 CI 验收；人类维护者负责集成、发布与合并。Git 历史保留真实提交作者，AI Agent 身份不冒充人类贡献者。
+项目通过 GitHub Issue、PR 与 CI 推进开发和验证。
 
-**边界：** 仅处理授权、隔离、可丢弃的副本；不宣称生产级 PII 识别准确率、法律匿名化、通用 exactly-once、MySQL Recovery、Windows/macOS Streaming/Recovery 或 WAL Recovery。
+**支持范围：** SQLite 核心 CLI 与本地 Streaming/Recovery；MySQL 8.0.46 核心 CLI。具体环境和功能要求见使用指南。
