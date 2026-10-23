@@ -9,6 +9,11 @@ will be omitted from this request.]". Its review is therefore recorded separatel
 text-only consistency review, and the image-based review below was executed by the
 image-capable sibling model so that no claim of "visual review" is unsupported.
 
+FINAL STATUS (2026-10-23): render #4 is the delivered cut. The independent image review
+at the end of this file records 85/100, PASS, with no P0/P1. The four P2 items remain
+accepted, non-blocking. The earlier Round 3 limitation note below is retained as history
+and is explicitly superseded by Round 4.
+
 Round 1 reviewed the FIRST full render (render #1, 260.05s). Fixes applied afterwards
 are listed in section "Round 1 处置". A second, independent image review of the final
 render is recorded in the same file after that section.
@@ -18,7 +23,7 @@ render is recorded in the same file after that section.
 
 - 评审对象：`out/maskriver-demo-new.mp4`（260.05s · 1920×1080 · 30fps · 7800 帧）
 - 评审模型：GLM-5.3-Flash（图像输入，独立上下文）
-- 评审日期：2026-05-27
+- 评审日期：2026-10-23（文件首轮记录；最终交付以本文件末尾 Round 4 为准）
 
 ## 实际打开的证据文件
 
@@ -192,11 +197,12 @@ render is recorded in the same file after that section.
    GLM-5.3 另行执行纯文本的事实与一致性审查。任何"视觉确认"的结论都只来自实际读图的那一轮。
 2. **轮次**：render #1 → 79/100（2×P1）；render #2 → 82/100（2×P1）；render #3 → **85/100，PASS，无 P0/P1**。
    三轮均按评审意见修改后重新渲染，未通过删除断言或跳过检查提高分数。
-3. **交付一致性**：本报告审查的成品是 **render #3**，其 SHA-256 为
-   `27c51947713888fd797c667f552822a8e1c4375e86ccf304e1d90d46c0bc1ed7`，
-   与 `docs/qc-report.md` 及仓库中交付的 `out/maskriver-demo-new.mp4` 完全相同。
-   Round 3 剩余的 P2-A…P2-D 为**已记录但未修复**的非阻塞项：修复它们需要再渲染一次，
-   会使"被审查的成品"与"交付的成品"不一致，因此不在本轮执行，交由后续版本处理。
+3. **交付一致性（历史段落，已由 Round 4 取代）**：该段写于 Round 3，当时审查的成品是
+   render #3，SHA-256 为 `27c51947713888fd797c667f552822a8e1c4375e86ccf304e1d90d46c0bc1ed7`。
+   最终交付是 **render #4**，SHA-256 为
+   `f7b3a07b20e26dbfbd28f2087eb5cf34976b98b02a7c53d6323213334b515ff9`，见本文件末尾 Round 4
+   与 `docs/evidence/qc-report.json`。Round 3 的 P2-A…P2-D 在 render #4 中仍作为已记录、
+   未修复的非阻塞项保留；修复它们需要再次完整渲染并重新审查，本轮未执行。
 4. **证据文件格式**：`docs/evidence/` 中的 26 张逐帧证据以 JPEG（质量 90，原始 1920×1080）保存以控制仓库体积，
    文件名与上述评审引用一致（仅扩展名由 `.png` 改为 `.jpg`）；`contact-sheet-final.png` 保持 PNG。
 

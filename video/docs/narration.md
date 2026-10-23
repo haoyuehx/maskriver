@@ -50,10 +50,15 @@
 
 ## 配音状态
 
-**AUDIO PENDING（已生成，未做人工听感验收）**
+**技术 QC PASS；HUMAN AUDIO REVIEW REQUIRED（未做人工听感验收）**
+
+技术实测：AAC-LC 48 kHz 双声道，−16.8 LUFS，True Peak −4.9 dBFS，35/35 条 cue 窗口内有语音，
+无削波、无越界、无 >10 s 异常静音。完整数据见 `docs/evidence/audio-qc.json`，试听包与清单见
+`docs/audio-review.md`。技术数值不能替代人耳对发音、自然度和画面匹配的判断。
 
 - 由 `scripts/generate-narration.mjs` 调用本地 Piper TTS（`zh_CN-huayan-medium`）合成，35 条 cue，
   按 `src/data/script.ts` 的时间窗自动对齐，输出 `video/public/audio/narration.mp3`（260s，AAC 源 → MP3 容器，-16 LUFS 归一化）。
 - 该音轨已并入 Remotion 合成（`<Audio src={staticFile('audio/narration.mp3')} />`）并随成片渲染。
+- 已知重点：cue 7 为适配窗口做过 1.18× 时间压缩；cue 35 约 7.22 字/秒，偏快；均需人工试听确认。
 - 模型为开源神经网络 TTS，非真人录音、未做声音克隆；自然度未达专业配音水准，属"可用但不是最优"。
   因此音频状态记为 **AUDIO PENDING**（未通过人工听感验收），不得宣称 AUDIO PASS。

@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-PHASE I — 完成（render #4 已交付并通过技术验收与第 4 轮视觉复核；分支已推送，PR #104 已创建，未合并）
+PHASE I — 完成（render #4 已交付并通过技术验收与第 4 轮视觉复核；PR #104 仍为 OPEN，等待本次合并门禁）
 
 ## 环境（实测）
 
@@ -29,10 +29,10 @@ PHASE I — 完成（render #4 已交付并通过技术验收与第 4 轮视觉�
 | C 样片 | 已渲染 | `out/maskriver-style-test.mp4`（15.06s），抽帧 `out/review-style/contact-sheet.png` |
 | D 正片前半 | 已实现 | `src/scenes/Scene1Problem.tsx`、`Scene2Workflow.tsx`、`Scene3Walkthrough.tsx` |
 | E 正片后半 | 已实现 | `Scene4Streaming.tsx`、`Scene5Recovery.tsx`、`Scene6Closing.tsx` |
-| F 声音 | AUDIO PENDING（已生成，未做人工听感验收） | `public/audio/narration.mp3`（Piper `zh_CN-huayan-medium`，35 条，260.04s，−16 LUFS） |
+| F 声音 | 技术 QC PASS；**HUMAN AUDIO REVIEW REQUIRED** | `public/audio/narration.mp3`（Piper `zh_CN-huayan-medium`，35 条，260.04s）；成片 AAC 48 kHz / −16.8 LUFS / TP −4.9 dBFS；试听包与清单见 `docs/audio-review.md` |
 | G 成片 | 完成（render #4） | `out/maskriver-demo-new.mp4`：260.054s / 7800 帧 / 30.91 MiB / sha256 f7b3a07b…5ff9 |
-| H 独立 QA | 第 1–3 轮完成；第 4 轮（事实修正复核）进行中 | `docs/visual-review.md`、`docs/qc-report.md`、`docs/evidence/` |
-| I 交付 | **完成** | 分支 `feat/remotion-video-v2`；提交 `bd93099`（工程与成片）+ `139dffa`（事实修正与重渲染）；PR https://github.com/haoyuehx/maskriver/pull/104（未合并） |
+| H 独立 QA | 第 1–4 轮完成（第 4 轮 85/100 PASS，无 P0/P1） | `docs/visual-review.md`、`docs/qc-report.md`、`docs/audio-review.md`、`docs/evidence/` |
+| I 交付 | PR OPEN，等待门禁 | 分支 `feat/remotion-video-v2`；内容提交 `bd93099`（工程与成片）+ `139dffa`（事实修正与重渲染）+ `bc6b4ed`（交付文档）；音轨人工试听提交随后加入；PR https://github.com/haoyuehx/maskriver/pull/104 |
 
 ## 渲染轮次
 
@@ -49,12 +49,21 @@ PHASE I — 完成（render #4 已交付并通过技术验收与第 4 轮视觉�
 - **GLM-5.3**（`opencode-go/glm-5.3`）：视觉导演，输出 `docs/visual-direction.md`；另做一次**纯文本**的事实/一致性审查（该模型在本部署中 `input: ["text"]`，**不能接收图片**）。
 - **视觉审查限制（必须如实记录）**：GLM-5.3 无法读取 PNG 帧，因此它的任何结论都不是"看过画面"的结论。实际看图由 `opencode-go/glm-5.3-flash`（同族、支持图片输入）执行，结论写入 `docs/visual-review.md` 并明确标注模型与证据路径。
 
-## 未解决问题 / 下一步
+## 最终状态（本次收尾）
 
-1. render #3 完成后重跑 `scripts/qc-video.mjs` 与 `scripts/collect-evidence.mjs`。
-2. 第 3 轮独立视觉复核（`glm-5.3-flash`，图像输入）；若仍有 P0/P1，按修复上限（三轮）记录并决定是否再渲染。
-3. GLM-5.3（纯文本）做一次事实/一致性审查，结论并入 `docs/visual-review.md`。
-4. 提交、推送 `feat/remotion-video-v2`、创建 PR（不合并，不覆盖官网旧视频）。
+- **视觉：** render #4，GLM-5.3-Flash 独立读图复核 85/100，PASS，无 P0/P1。
+- **事实：** GLM-5.3 纯文本审查发现的 1 处 P1（虚构判定态 REVIEW）与 2 处 P2 已在 render #4 修正；本轮再复核无 P0/P1。
+- **音轨：** 技术 QC 通过（AAC-LC 48 kHz 双声道，260.054 s，−16.8 LUFS，true peak −4.9 dBFS，35/35 cue 有语音、无削波、无 >10 s 异常静音）；**未做人工听感验收**，因此仍为 `HUMAN AUDIO REVIEW REQUIRED`，不报告 AUDIO PASS。
+- **保留 P2：** P2-A（096 s 邮箱省略号）、P2-B（176 s SAME TRANSACTION 提前）、P2-C（207/249 s 留白）、P2-D（044 s 审批卡 UNKNOWN 词汇复用）。四项均不影响技术事实与主线理解；修复需要再次完整渲染并重新审查，本轮保留已审查的 render #4，不以未复核的新渲染替代。
+- **样片：** `out/maskriver-style-test.mp4` 本地存在（15.06 s），未入库；不影响正式片，本轮不重做。
+- **网站：** 仍使用旧静音视频。新片替换方案见 `video/docs/website-handoff.md`；在人工听感确认前不覆盖 `website/public/media/*`。
+
+## 下一步（未完成，不由本 PR 冒充完成）
+
+1. 人工试听 `review/audio-review.mp3` 或完整 MP4，并按 `docs/audio-review.md` 填写 PASS/CONDITIONAL/FAIL。
+2. 若音轨需要修复，单独做音频重混与 QC；若保留，记录试听结论。
+3. PR #104 合并后，按 `docs/website-handoff.md` 执行网站替换（需用户确认）。
+4. 不修改 Go、v1.0.0 Tag、Release 资产或旧网站视频，直到网站替换步骤被授权。
 
 ## 交付状态（最终）
 

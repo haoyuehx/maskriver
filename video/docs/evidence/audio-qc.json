@@ -1,0 +1,643 @@
+{
+  "file": "out/maskriver-demo-new.mp4",
+  "sha256": "f7b3a07b20e26dbfbd28f2087eb5cf34976b98b02a7c53d6323213334b515ff9",
+  "durationSec": 260.054,
+  "audio": {
+    "codec": "aac",
+    "profile": "LC",
+    "sampleRate": 48000,
+    "channels": 2,
+    "channelLayout": "stereo",
+    "bitrate": 317374,
+    "durationSec": 260.054,
+    "integratedLufs": -16.8,
+    "loudnessRangeLu": 8.3,
+    "truePeakDbfs": -4.9,
+    "meanVolumeDb": -21.8,
+    "maxVolumeDb": -4.9
+  },
+  "speech": {
+    "segmentCount": 35,
+    "cueCount": 35,
+    "alignedCueCount": 35,
+    "maxStartDelaySec": 0.33,
+    "minTailMarginSec": 0.17,
+    "maxInterSpeechGapSec": 6.75,
+    "fastCueIds": [
+      35
+    ],
+    "segments": [
+      [
+        1.64,
+        5.93
+      ],
+      [
+        7.84,
+        11.8
+      ],
+      [
+        14.91,
+        19.26
+      ],
+      [
+        21.45,
+        24.47
+      ],
+      [
+        30.44,
+        34.57
+      ],
+      [
+        36.44,
+        41.03
+      ],
+      [
+        42.46,
+        47.43
+      ],
+      [
+        48.55,
+        52.46
+      ],
+      [
+        54.44,
+        58.48
+      ],
+      [
+        60.27,
+        62.61
+      ],
+      [
+        66.29,
+        70.79
+      ],
+      [
+        72.64,
+        75.59
+      ],
+      [
+        79.64,
+        83.89
+      ],
+      [
+        87.06,
+        91.23
+      ],
+      [
+        94.24,
+        97.42
+      ],
+      [
+        101.53,
+        105.6
+      ],
+      [
+        109.24,
+        114.71
+      ],
+      [
+        117.26,
+        120.22
+      ],
+      [
+        124.32,
+        128.78
+      ],
+      [
+        132.3,
+        137.43
+      ],
+      [
+        140.24,
+        144.29
+      ],
+      [
+        151.04,
+        154.89
+      ],
+      [
+        158.32,
+        163.38
+      ],
+      [
+        166.47,
+        172.2
+      ],
+      [
+        174.24,
+        178.79
+      ],
+      [
+        182.26,
+        186.45
+      ],
+      [
+        190.24,
+        194.91
+      ],
+      [
+        201.06,
+        203.69
+      ],
+      [
+        208.24,
+        212.15
+      ],
+      [
+        216.26,
+        220.15
+      ],
+      [
+        224.27,
+        228.59
+      ],
+      [
+        232.26,
+        236.54
+      ],
+      [
+        240.24,
+        244.03
+      ],
+      [
+        246.28,
+        248.85
+      ],
+      [
+        252.45,
+        255.22
+      ]
+    ]
+  },
+  "cues": [
+    {
+      "id": 1,
+      "start": 1.6,
+      "end": 7.2,
+      "speechStart": 1.64,
+      "speechEnd": 5.93,
+      "speechDuration": 4.28,
+      "startDelay": 0.04,
+      "tailMargin": 1.27,
+      "chars": 21,
+      "charsPerSec": 4.9,
+      "insideCue": true
+    },
+    {
+      "id": 2,
+      "start": 7.8,
+      "end": 14.2,
+      "speechStart": 7.84,
+      "speechEnd": 11.8,
+      "speechDuration": 3.95,
+      "startDelay": 0.04,
+      "tailMargin": 2.4,
+      "chars": 19,
+      "charsPerSec": 4.81,
+      "insideCue": true
+    },
+    {
+      "id": 3,
+      "start": 14.8,
+      "end": 21,
+      "speechStart": 14.91,
+      "speechEnd": 19.26,
+      "speechDuration": 4.35,
+      "startDelay": 0.11,
+      "tailMargin": 1.74,
+      "chars": 27,
+      "charsPerSec": 6.21,
+      "insideCue": true
+    },
+    {
+      "id": 4,
+      "start": 21.4,
+      "end": 24.8,
+      "speechStart": 21.45,
+      "speechEnd": 24.47,
+      "speechDuration": 3.02,
+      "startDelay": 0.05,
+      "tailMargin": 0.33,
+      "chars": 16,
+      "charsPerSec": 5.3,
+      "insideCue": true
+    },
+    {
+      "id": 5,
+      "start": 30.4,
+      "end": 35.6,
+      "speechStart": 30.44,
+      "speechEnd": 34.57,
+      "speechDuration": 4.13,
+      "startDelay": 0.04,
+      "tailMargin": 1.03,
+      "chars": 26,
+      "charsPerSec": 6.3,
+      "insideCue": true
+    },
+    {
+      "id": 6,
+      "start": 36.4,
+      "end": 41.6,
+      "speechStart": 36.44,
+      "speechEnd": 41.03,
+      "speechDuration": 4.58,
+      "startDelay": 0.04,
+      "tailMargin": 0.57,
+      "chars": 22,
+      "charsPerSec": 4.8,
+      "insideCue": true
+    },
+    {
+      "id": 7,
+      "start": 42.4,
+      "end": 47.6,
+      "speechStart": 42.46,
+      "speechEnd": 47.43,
+      "speechDuration": 4.97,
+      "startDelay": 0.06,
+      "tailMargin": 0.17,
+      "chars": 29,
+      "charsPerSec": 5.83,
+      "insideCue": true
+    },
+    {
+      "id": 8,
+      "start": 48.4,
+      "end": 53.6,
+      "speechStart": 48.55,
+      "speechEnd": 52.46,
+      "speechDuration": 3.91,
+      "startDelay": 0.15,
+      "tailMargin": 1.14,
+      "chars": 18,
+      "charsPerSec": 4.6,
+      "insideCue": true
+    },
+    {
+      "id": 9,
+      "start": 54.4,
+      "end": 59.6,
+      "speechStart": 54.44,
+      "speechEnd": 58.48,
+      "speechDuration": 4.04,
+      "startDelay": 0.04,
+      "tailMargin": 1.12,
+      "chars": 24,
+      "charsPerSec": 5.95,
+      "insideCue": true
+    },
+    {
+      "id": 10,
+      "start": 60.2,
+      "end": 64.4,
+      "speechStart": 60.27,
+      "speechEnd": 62.61,
+      "speechDuration": 2.34,
+      "startDelay": 0.07,
+      "tailMargin": 1.79,
+      "chars": 12,
+      "charsPerSec": 5.13,
+      "insideCue": true
+    },
+    {
+      "id": 11,
+      "start": 66.2,
+      "end": 72,
+      "speechStart": 66.29,
+      "speechEnd": 70.79,
+      "speechDuration": 4.5,
+      "startDelay": 0.09,
+      "tailMargin": 1.21,
+      "chars": 20,
+      "charsPerSec": 4.45,
+      "insideCue": true
+    },
+    {
+      "id": 12,
+      "start": 72.6,
+      "end": 79,
+      "speechStart": 72.64,
+      "speechEnd": 75.59,
+      "speechDuration": 2.95,
+      "startDelay": 0.04,
+      "tailMargin": 3.41,
+      "chars": 16,
+      "charsPerSec": 5.42,
+      "insideCue": true
+    },
+    {
+      "id": 13,
+      "start": 79.6,
+      "end": 86.4,
+      "speechStart": 79.64,
+      "speechEnd": 83.89,
+      "speechDuration": 4.25,
+      "startDelay": 0.04,
+      "tailMargin": 2.51,
+      "chars": 20,
+      "charsPerSec": 4.71,
+      "insideCue": true
+    },
+    {
+      "id": 14,
+      "start": 87,
+      "end": 93.6,
+      "speechStart": 87.06,
+      "speechEnd": 91.23,
+      "speechDuration": 4.17,
+      "startDelay": 0.06,
+      "tailMargin": 2.37,
+      "chars": 21,
+      "charsPerSec": 5.04,
+      "insideCue": true
+    },
+    {
+      "id": 15,
+      "start": 94.2,
+      "end": 100.6,
+      "speechStart": 94.24,
+      "speechEnd": 97.42,
+      "speechDuration": 3.18,
+      "startDelay": 0.04,
+      "tailMargin": 3.17,
+      "chars": 17,
+      "charsPerSec": 5.34,
+      "insideCue": true
+    },
+    {
+      "id": 16,
+      "start": 101.2,
+      "end": 108.6,
+      "speechStart": 101.53,
+      "speechEnd": 105.6,
+      "speechDuration": 4.07,
+      "startDelay": 0.33,
+      "tailMargin": 3,
+      "chars": 20,
+      "charsPerSec": 4.91,
+      "insideCue": true
+    },
+    {
+      "id": 17,
+      "start": 109.2,
+      "end": 116.6,
+      "speechStart": 109.24,
+      "speechEnd": 114.71,
+      "speechDuration": 5.47,
+      "startDelay": 0.04,
+      "tailMargin": 1.89,
+      "chars": 26,
+      "charsPerSec": 4.75,
+      "insideCue": true
+    },
+    {
+      "id": 18,
+      "start": 117.2,
+      "end": 123.6,
+      "speechStart": 117.26,
+      "speechEnd": 120.22,
+      "speechDuration": 2.95,
+      "startDelay": 0.06,
+      "tailMargin": 3.38,
+      "chars": 14,
+      "charsPerSec": 4.74,
+      "insideCue": true
+    },
+    {
+      "id": 19,
+      "start": 124.2,
+      "end": 131.6,
+      "speechStart": 124.32,
+      "speechEnd": 128.78,
+      "speechDuration": 4.46,
+      "startDelay": 0.12,
+      "tailMargin": 2.82,
+      "chars": 21,
+      "charsPerSec": 4.71,
+      "insideCue": true
+    },
+    {
+      "id": 20,
+      "start": 132.2,
+      "end": 139.6,
+      "speechStart": 132.3,
+      "speechEnd": 137.43,
+      "speechDuration": 5.12,
+      "startDelay": 0.1,
+      "tailMargin": 2.17,
+      "chars": 20,
+      "charsPerSec": 3.9,
+      "insideCue": true
+    },
+    {
+      "id": 21,
+      "start": 140.2,
+      "end": 148.6,
+      "speechStart": 140.24,
+      "speechEnd": 144.29,
+      "speechDuration": 4.05,
+      "startDelay": 0.04,
+      "tailMargin": 4.31,
+      "chars": 24,
+      "charsPerSec": 5.92,
+      "insideCue": true
+    },
+    {
+      "id": 22,
+      "start": 151,
+      "end": 157.6,
+      "speechStart": 151.04,
+      "speechEnd": 154.89,
+      "speechDuration": 3.85,
+      "startDelay": 0.04,
+      "tailMargin": 2.71,
+      "chars": 21,
+      "charsPerSec": 5.46,
+      "insideCue": true
+    },
+    {
+      "id": 23,
+      "start": 158.2,
+      "end": 165.6,
+      "speechStart": 158.32,
+      "speechEnd": 163.38,
+      "speechDuration": 5.06,
+      "startDelay": 0.12,
+      "tailMargin": 2.22,
+      "chars": 24,
+      "charsPerSec": 4.74,
+      "insideCue": true
+    },
+    {
+      "id": 24,
+      "start": 166.2,
+      "end": 173.6,
+      "speechStart": 166.47,
+      "speechEnd": 172.2,
+      "speechDuration": 5.73,
+      "startDelay": 0.27,
+      "tailMargin": 1.4,
+      "chars": 24,
+      "charsPerSec": 4.19,
+      "insideCue": true
+    },
+    {
+      "id": 25,
+      "start": 174.2,
+      "end": 181.6,
+      "speechStart": 174.24,
+      "speechEnd": 178.79,
+      "speechDuration": 4.55,
+      "startDelay": 0.04,
+      "tailMargin": 2.81,
+      "chars": 20,
+      "charsPerSec": 4.4,
+      "insideCue": true
+    },
+    {
+      "id": 26,
+      "start": 182.2,
+      "end": 189.6,
+      "speechStart": 182.26,
+      "speechEnd": 186.45,
+      "speechDuration": 4.19,
+      "startDelay": 0.06,
+      "tailMargin": 3.15,
+      "chars": 22,
+      "charsPerSec": 5.25,
+      "insideCue": true
+    },
+    {
+      "id": 27,
+      "start": 190.2,
+      "end": 198.6,
+      "speechStart": 190.24,
+      "speechEnd": 194.91,
+      "speechDuration": 4.67,
+      "startDelay": 0.04,
+      "tailMargin": 3.69,
+      "chars": 27,
+      "charsPerSec": 5.78,
+      "insideCue": true
+    },
+    {
+      "id": 28,
+      "start": 201,
+      "end": 207.6,
+      "speechStart": 201.06,
+      "speechEnd": 203.69,
+      "speechDuration": 2.63,
+      "startDelay": 0.06,
+      "tailMargin": 3.91,
+      "chars": 14,
+      "charsPerSec": 5.32,
+      "insideCue": true
+    },
+    {
+      "id": 29,
+      "start": 208.2,
+      "end": 215.6,
+      "speechStart": 208.24,
+      "speechEnd": 212.15,
+      "speechDuration": 3.91,
+      "startDelay": 0.04,
+      "tailMargin": 3.45,
+      "chars": 27,
+      "charsPerSec": 6.91,
+      "insideCue": true
+    },
+    {
+      "id": 30,
+      "start": 216.2,
+      "end": 223.6,
+      "speechStart": 216.26,
+      "speechEnd": 220.15,
+      "speechDuration": 3.89,
+      "startDelay": 0.06,
+      "tailMargin": 3.45,
+      "chars": 19,
+      "charsPerSec": 4.89,
+      "insideCue": true
+    },
+    {
+      "id": 31,
+      "start": 224.2,
+      "end": 231.6,
+      "speechStart": 224.27,
+      "speechEnd": 228.59,
+      "speechDuration": 4.32,
+      "startDelay": 0.07,
+      "tailMargin": 3.01,
+      "chars": 22,
+      "charsPerSec": 5.09,
+      "insideCue": true
+    },
+    {
+      "id": 32,
+      "start": 232.2,
+      "end": 239.6,
+      "speechStart": 232.26,
+      "speechEnd": 236.54,
+      "speechDuration": 4.28,
+      "startDelay": 0.06,
+      "tailMargin": 3.06,
+      "chars": 22,
+      "charsPerSec": 5.14,
+      "insideCue": true
+    },
+    {
+      "id": 33,
+      "start": 240.2,
+      "end": 245,
+      "speechStart": 240.24,
+      "speechEnd": 244.03,
+      "speechDuration": 3.79,
+      "startDelay": 0.04,
+      "tailMargin": 0.97,
+      "chars": 18,
+      "charsPerSec": 4.75,
+      "insideCue": true
+    },
+    {
+      "id": 34,
+      "start": 246.2,
+      "end": 251.8,
+      "speechStart": 246.28,
+      "speechEnd": 248.85,
+      "speechDuration": 2.58,
+      "startDelay": 0.08,
+      "tailMargin": 2.95,
+      "chars": 13,
+      "charsPerSec": 5.05,
+      "insideCue": true
+    },
+    {
+      "id": 35,
+      "start": 252.4,
+      "end": 257.4,
+      "speechStart": 252.45,
+      "speechEnd": 255.22,
+      "speechDuration": 2.77,
+      "startDelay": 0.05,
+      "tailMargin": 2.18,
+      "chars": 20,
+      "charsPerSec": 7.22,
+      "insideCue": true
+    }
+  ],
+  "checks": {
+    "hasAac48kStereo": true,
+    "audioDurationMatchesVideoWithin100ms": true,
+    "loudnessWithinMinus20ToMinus12Lufs": true,
+    "truePeakBelowMinus1Dbfs": true,
+    "noSampleClipping": true,
+    "everyCueHasSpeech": true,
+    "everySpeechInsideItsCue": true,
+    "noUnexpectedGapOver10s": true
+  },
+  "limitations": [
+    "Technical measurements only; no subjective listening was performed by this script.",
+    "Pronunciation, prosody, naturalness, misreadings and sync with the picture require a human listener."
+  ]
+}

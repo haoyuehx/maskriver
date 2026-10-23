@@ -50,6 +50,16 @@ subtitles/zh-CN.srt      外挂字幕（与画面烧录字幕同源）
 - 视觉审查：`docs/visual-review.md`；技术验收：`docs/qc-report.md`
 - 素材与许可：`docs/asset-sources.md`
 
+## 音轨与人工验收
+
+成片含 AAC-LC 48 kHz 旁白（Piper `zh_CN-huayan-medium`，35 条）。技术 QC 已通过：
+−16.8 LUFS、True Peak −4.9 dBFS、35/35 cue 有语音、无削波。**尚未做人工听感验收**，
+因此状态是 `HUMAN AUDIO REVIEW REQUIRED`，不能报告 AUDIO PASS。
+
+- 精简试听包：`review/audio-review.mp3`（52.9 s）
+- 逐项试听清单：`docs/audio-review.md`
+- 原始测量：`docs/evidence/audio-qc.json`
+
 ## 事实边界（片中已声明）
 
 - 五步工作流：scan → mask（dry-run 预览）→ approve（Ed25519 绑定计划）→ apply → validate。

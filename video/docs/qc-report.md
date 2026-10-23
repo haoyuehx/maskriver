@@ -13,7 +13,7 @@
 | 分辨率 | 1920 × 1080 |
 | 帧率 | 30/1 |
 | 视频编码 | H.264 High，pixel format `yuvj420p`（与仓库现有 `website/public/media/maskriver-demo.mp4` 一致），码率 ≈ 672 kbps |
-| 音频编码 | AAC-LC，48 kHz，2 声道，≈ 317 kbps，时长 260.054 s |
+| 音频编码 | AAC-LC，48 kHz，2 声道，≈ 317 kbps，时长 260.054 s；源旁白为单声道 MP3 |
 | 字幕 | 画面烧录简体中文（35 条）+ 外挂 `video/subtitles/zh-CN.srt`（35 条，末条结束 257.4 s，起始 252.4 s） |
 
 ## 2. 命令
@@ -40,8 +40,10 @@ ffmpeg -i out/maskriver-demo-new.mp4 -map 0:a -af volumedetect -f null -      # 
 | 完整解码 | PASS（`ffmpeg -v error -i … -f null -` 无输出、退出码 0） |
 | 黑屏段（blackdetect d=0.4 pix_th=0.06） | 无 |
 | 长冻结（freezedetect n=0.0005 d=2.0） | 无 |
-| 音轨存在 | PASS（AAC） |
-| 音轨电平 | mean −21.9 dB，max −4.9 dB（无削波） |
+| 音轨存在 | PASS（AAC-LC 48 kHz 双声道） |
+| 综合响度 / 真峰值 | −16.8 LUFS / −4.9 dBFS（LRA 8.3 LU；无削波） |
+| 语音覆盖 | PASS — 35/35 条字幕 cue 的窗口内均检测到语音，无越界；最短尾部余量 0.17 s |
+| 异常静音 | 无 >10 s；最大语音间静音 6.75 s（2:24–2:31 场景转场） |
 | 字幕文件 | `subtitles/zh-CN.srt`，35 条，时间轴与 `src/data/script.ts` 同源生成 |
 | 场景时长 | 750 / 1200 / 2550 / 1500 / 1350 / 450 帧，合计 7800（`src/MaskRiverVideo.tsx` 的 `SCENES` 与 `docs/storyboard.md` 一致） |
 
@@ -61,9 +63,28 @@ ffmpeg -i out/maskriver-demo-new.mp4 -map 0:a -af volumedetect -f null -      # 
 `docs/evidence/` 下 26 张按叙事节拍抽取的全分辨率帧 + `contact-sheet-final.png`，覆盖：
 品牌收束、五步各相位、概念工作区六章、流水线全景与事务特写、批次日志与故障/恢复、片尾定版。
 
-## 6. 已知限制（不隐藏）
+## 6. 音轨技术验收与人工听感状态
 
-1. **音频状态：AUDIO PENDING**。旁白由本地 Piper TTS（`zh_CN-huayan-medium`）合成，已并入成片并有可听电平；但未做人工听感验收，自然度低于专业配音，不能报告 AUDIO PASS。
+技术数据来自 `scripts/qc-audio.mjs`，原始 JSON 为 `docs/evidence/audio-qc.json`。
+
+| 检查 | 实测 |
+|---|---|
+| 编码 / 采样率 / 声道 | AAC-LC / 48 kHz / 2（源旁白单声道） |
+| 综合响度 / LRA / True Peak | −16.8 LUFS / 8.3 LU / −4.9 dBFS |
+| 平均 / 最大样本电平 | −21.8 dB / −4.9 dB（无削波） |
+| 语音段 / 字幕 cue | 35 / 35 |
+| 越界语音 | 无 |
+| 最大语音起点延迟 / 最小尾部余量 | 0.33 s / 0.17 s |
+| 最大语音间静音 | 6.75 s（场景转场） |
+| 异常长静音（>10 s） | 无 |
+
+**这些数值不等于听感 PASS。** 发音、自然度、机械断句、英文缩写读音和“配音是否与画面相符”
+必须由人耳判断。试听包与逐项清单见 `docs/audio-review.md`；当前状态是
+**HUMAN AUDIO REVIEW REQUIRED**，不是 AUDIO PASS。
+
+## 7. 已知限制（不隐藏）
+
+1. **音频听感：HUMAN AUDIO REVIEW REQUIRED**。旁白由本地 Piper TTS（`zh_CN-huayan-medium`）合成，已并入成片并完成技术 QC；未做人工听感验收，自然度低于专业配音，不能报告 AUDIO PASS。cue 7 在生成时做过 1.18× 时间压缩，cue 35 的语速偏快（约 7.22 字/秒），已列入人工试听重点。
 2. **视觉审查模型限制**：任务指定的 `opencode-go/glm-5.3` 在本部署中 `input: ["text"]`，**无法读取图片**（已用 PNG 探测复现）。图像审查由同族、支持图片的 `glm-5.3-flash` 在独立上下文中执行，记录见 `docs/visual-review.md`；GLM-5.3 只做纯文本一致性审查。
 3. **四轮渲染记录**：render #1（79/100，2×P1）→ render #2（82/100，2×P1）→ render #3（85/100 PASS）→ render #4（修复纯文本审查发现的 1 处屏上事实错误 + 2 处不精确后重渲染，见 `docs/visual-review.md` 的 Round 4 处置与复核）。
 4. `yuvj420p` 为全范围 JPEG 采样；与仓库既有视频一致，主流播放器可正常解码。
