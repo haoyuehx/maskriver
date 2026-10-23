@@ -8,7 +8,7 @@ MaskRiver 的静态产品展示网站，面向比赛评委、开发者和数据�
 - Vite 7
 - 手写 CSS 设计系统（深色科技感、响应式、`prefers-reduced-motion`）
 - Lucide 图标
-- Playwright 端到端测试
+- Playwright 五档视口端到端测试（1920 / 1440 / 768 / 390 / 360）
 
 ## 开发
 
