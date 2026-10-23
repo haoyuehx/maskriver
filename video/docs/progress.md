@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-PHASE I — 交付（render #4 已产出并通过技术验收；第 4 轮视觉复核进行中；分支已提交，推送因网络受阻待重试）
+PHASE I — 完成（render #4 已交付并通过技术验收与第 4 轮视觉复核；分支已推送，PR #104 已创建，未合并）
 
 ## 环境（实测）
 
@@ -32,7 +32,7 @@ PHASE I — 交付（render #4 已产出并通过技术验收；第 4 轮视觉�
 | F 声音 | AUDIO PENDING（已生成，未做人工听感验收） | `public/audio/narration.mp3`（Piper `zh_CN-huayan-medium`，35 条，260.04s，−16 LUFS） |
 | G 成片 | 完成（render #4） | `out/maskriver-demo-new.mp4`：260.054s / 7800 帧 / 30.91 MiB / sha256 f7b3a07b…5ff9 |
 | H 独立 QA | 第 1–3 轮完成；第 4 轮（事实修正复核）进行中 | `docs/visual-review.md`、`docs/qc-report.md`、`docs/evidence/` |
-| I 交付 | 提交完成，推送受阻待重试 | 分支 `feat/remotion-video-v2`，提交 `bd93099` + 事实修正提交 |
+| I 交付 | **完成** | 分支 `feat/remotion-video-v2`；提交 `bd93099`（工程与成片）+ `139dffa`（事实修正与重渲染）；PR https://github.com/haoyuehx/maskriver/pull/104（未合并） |
 
 ## 渲染轮次
 
@@ -55,3 +55,21 @@ PHASE I — 交付（render #4 已产出并通过技术验收；第 4 轮视觉�
 2. 第 3 轮独立视觉复核（`glm-5.3-flash`，图像输入）；若仍有 P0/P1，按修复上限（三轮）记录并决定是否再渲染。
 3. GLM-5.3（纯文本）做一次事实/一致性审查，结论并入 `docs/visual-review.md`。
 4. 提交、推送 `feat/remotion-video-v2`、创建 PR（不合并，不覆盖官网旧视频）。
+
+## 交付状态（最终）
+
+| 项 | 状态 |
+|---|---|
+| Remotion 工程可构建（`npm ci` + `npm run typecheck`） | PASS |
+| 15 s 风格样片真实渲染 | PASS（`out/maskriver-style-test.mp4`，15.06 s，未入库） |
+| 六幕全部实现 | PASS（750+1200+2550+1500+1350+450 = 7800 帧） |
+| 完整 MP4 生成 | PASS（`out/maskriver-demo-new.mp4`，sha256 `f7b3a07b…5ff9`） |
+| 可完整解码 / 无黑屏 / 无长冻结 | PASS |
+| 时长 3–5 分钟 | PASS（260.054 s） |
+| 中文字体与字幕 | PASS（Noto Sans SC 渲染正常；35 条烧录字幕 + 外部 SRT） |
+| 产品内容准确性 | PASS（4 轮评审 + 1 轮文本事实审查；1 处事实错误已修复） |
+| 无真实敏感信息 | PASS（全合成数据；无凭证/DSN/密钥） |
+| 无软件版本号 / 里程碑 / Issue-PR 编号 | PASS |
+| 独立视觉审查 | PASS（85/100，无 P0/P1；模型限制已记录） |
+| 音轨 | **AUDIO PENDING**（已生成并混入，未人工听感验收） |
+| 不影响 Go 项目与网站 | PASS（仅新增 `video/**`） |
