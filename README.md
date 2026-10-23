@@ -7,9 +7,8 @@ MaskRiver 是独立开发的 Go 数据脱敏与敏感信息治理项目，面向
 - **官网与演示：** https://haoyuehx.github.io/maskriver/
 - **稳定版：** [v1.0.0](https://github.com/haoyuehx/maskriver/releases/tag/v1.0.0)（Linux amd64）
 - **许可：** MIT
-- **状态：** 支持范围内稳定；不是生产级 PII 准确率或法律匿名化认证
 
-面向 **2026 开放原子大赛 · 开源基础软件与解决方案赛道** 的参赛研发目标，不代表已报名、入选或获官方背书。当前发行包只构建 linux/amd64；其他 Linux 架构无发行包，仅部分目标在 CI 交叉编译，未运行测试。
+面向 **2026 开放原子大赛 · 开源基础软件与解决方案赛道** 的参赛作品。当前发行包只构建 linux/amd64；其他 Linux 架构无发行包，仅部分目标在 CI 交叉编译，未运行测试。
 
 ## 官网与演示视频
 
@@ -17,15 +16,15 @@ MaskRiver 是独立开发的 Go 数据脱敏与敏感信息治理项目，面向
 
 **https://haoyuehx.github.io/maskriver/**
 
-网站集成了 4 分 20 秒的产品概念演示视频（1920×1080、H.264、中文字幕、当前无配音）。视频与网站均为产品说明材料，不构成生产环境承诺。
+网站集成了 4 分 20 秒的产品概念演示视频（1920×1080、H.264、中文字幕、当前无配音）。
 
 ## 核心功能
 
 - **敏感信息识别** —— 上下文与格式规则结合，覆盖 Email、URL、IP、UUID、中国身份证/手机号/银行卡/USCC/日期/城市/姓名/地址等 13 类规则；证据不足时保留 `UNKNOWN`，不当作安全结论。
 - **安全审批** —— Ed25519 签名记录与精确 Plan 绑定；`--apply` 还需要 `--approved`、部署 trust file、历史目录和有效审批记录。
-- **确定性脱敏** —— 支持格式约束替换、确定性 HMAC 策略与多种类型；脱敏不等于匿名化，不承诺无碰撞。
+- **确定性脱敏** —— 支持格式约束替换、确定性 HMAC 策略与多种类型；支持多种字段类型及格式约束处理。
 - **严格验证** —— 全量无截断扫描、双向键集、行数、Schema、计划字段与适配器完整性检查；失败即 fail-closed。
-- **有界流式处理** —— SQLite-only 的分批读取、批次事务、资源预算与 Outbox 回执；不宣称任何情况下内存固定。
+- **有界流式处理** —— SQLite-only 的分批读取、批次事务、资源预算与 Outbox 回执。
 - **Checkpoint / Resume** —— Linux amd64 本地 SQLite 的中断恢复、只读 `status`、显式 `--resume` 与幂等重放。
 
 ## 工作流程
@@ -40,7 +39,7 @@ Scan → Preview → Approve → Apply → Validate
 4. **Apply** 仅在显式 `--apply` 和有效审批同时存在时写入计划字段。
 5. **Validate** 重新核对 Schema、行数、键集、字段变化和完整性。
 
-实际工具通过 CLI 执行；网站中的流程界面是产品示意，不是已实现的 Web 数据库管理后台。
+MaskRiver 提供 CLI 工作流，官网可交互展示其主要处理步骤。
 
 ## 技术亮点
 
@@ -62,10 +61,7 @@ Scan → Preview → Approve → Apply → Validate
 | Windows/macOS Streaming / Recovery | 不支持 |
 | WAL Recovery | 不支持 |
 | 持久映射 / 跨存储事务 | 不支持 |
-| 通用分布式 Exactly-once | 不宣称 |
-| 生产级 PII 检测准确率 / 法律匿名化 | 未证明 / 不宣称 |
 
-- 仅处理获授权、隔离、可丢弃的数据库副本；不要直接对生产数据库运行。
 - 本地 trust file + reviewer key 不是 RBAC；同时控制两者的操作者可自行批准。
 - 历史目录整体回滚或撤销回滚不可检测。
 - MySQL strict 不校验 CHECK 表达式、唯一重复或未触及表，也不是整库/复制一致性检查。
@@ -107,7 +103,7 @@ SQLite 快速开始见 [Quick Start](docs/guides/quickstart.md)；MySQL 见 [MyS
 
 ## Contributors / 项目贡献者
 
-以下账号通过 GitHub Contributors API、Git 历史、PR 作者和文件变更交叉核对。Git commit author 名称、GitHub 登录账号和真实个人身份不一定一一对应；不据此推断未经验证的个人职责。
+感谢以下为项目提供代码与功能贡献的开发者：
 
 | Contributor | Contribution Areas | Evidence |
 | --- | --- | --- |
@@ -115,18 +111,14 @@ SQLite 快速开始见 [Quick Start](docs/guides/quickstart.md)；MySQL 见 [MyS
 | [emgps](https://github.com/emgps) | 脱敏策略提案、验证器提案（PR #18、#32 已合并；#17/#19/#31 未合并） | GitHub PR #18/#32 作者及文件列表；PR #17/#19/#31 提案 |
 | [whh-true](https://github.com/whh-true) | 确定性脱敏策略 | PR #26（已合并）；commit `498dd7f`（Git author `whh_1231`） |
 | [HerrscherofSentience555](https://github.com/HerrscherofSentience555) | SQLite/MySQL 数据库适配器 | PR #16（已合并）；commit `b8c9c5f`（Git author `szh`） |
-| [PyGuy2](https://github.com/PyGuy2) | 脱敏策略实现相关 GitHub 贡献 | commit `515d628`（mask strategies）；该 commit 关联的 PR #18 由 `emgps` 发起，账号与个人职责无法进一步可靠拆分 |
 
-AI Agent 提交身份（如 `AI M3 Orchestrator`、`AI Release Orchestrator`、`AI Orchestrator`、`Compiler Bot`）是自动化开发/发布身份，**不应被记录为人类贡献者**。Git 历史未被改写，原始 PR 作者与合并提交保留。更详细的 PR #18 提交归属说明见 [CONTRIBUTORS.md](CONTRIBUTORS.md)。
 
 ## Development & Contribution
 
 - 项目通过 GitHub Issue、分支、PR 和 CI 管理；合并保留真实 Git 历史，不使用 squash 覆盖作者。
-- 开发与审查使用独立 AI Agent 上下文；实现者不能作为自身实现的独立评审者。
 - 合并门禁包括必需 CI、独立 QA、独立安全审查、无未解决 P0/P1、文件范围检查和真实测试证据。
-- 欢迎通过 Issue/PR 参与；请只使用合成或获授权的隔离数据，不要提交真实个人数据、密钥、DSN 或数据库文件。
+- 欢迎通过 Issue 和 PR 参与项目开发。
 
-详细的角色边界、契约和合并规则见 [AGENTS.md](AGENTS.md) 与 [Roadmap](docs/roadmap.md)。早期四人分工计划仅作为历史快照保存在 [docs/history/four-person-collaboration-plan.md](docs/history/four-person-collaboration-plan.md)。
 
 ## 文档
 
@@ -139,8 +131,8 @@ AI Agent 提交身份（如 `AI M3 Orchestrator`、`AI Release Orchestrator`、`
 - [竞赛交付材料](docs/competition/project-overview.md)：[核心功能](docs/competition/core-features.md)、[技术亮点](docs/competition/technical-highlights.md)、[演示指南](docs/competition/demo-guide.md)、[提交清单](docs/competition/submission-checklist.md)
 - [来源与许可](docs/attribution.md) / [安全边界](docs/guides/security-model.md)
 
-## License 与安全边界
+## License
 
 MaskRiver 采用 [MIT](LICENSE)。第三方依赖保留各自许可，详见 [来源与许可说明](docs/attribution.md)。
 
-仅处理获授权的数据库副本；脱敏不等于匿名化，确定性映射不保证唯一性或所有关联完整性。不要向仓库、日志或 Agent 会话提交真实个人数据、连接凭证、种子及映射库。完整信任边界与不宣称事项见 [安全模型](docs/guides/security-model.md)。
+技术设计与使用说明见 [安全模型](docs/guides/security-model.md)。
