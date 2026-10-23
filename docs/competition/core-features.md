@@ -14,4 +14,4 @@
 
 ## 支持范围
 
-SQLite 支持完整核心 CLI 和指定 Linux 环境中的 Streaming/Recovery；MySQL 8.0.46 支持核心 CLI 工作流。详细功能说明见项目文档。
+SQLite 支持完整核心 CLI，并在 Linux amd64 的本地 SQLite 环境支持 Streaming/Recovery；MySQL 8.0.46 支持核心 CLI 工作流。详细功能说明见项目文档。

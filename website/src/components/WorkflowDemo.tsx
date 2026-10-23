@@ -13,7 +13,7 @@ export default function WorkflowDemo() {
       <div className="section-heading">
         <span className="section-kicker">CORE WORKFLOW</span>
         <h2 id="workflow-title">五个步骤，把一次脱敏变成可追踪的任务</h2>
-        <p>点击任意步骤查看它解决的问题。点击任意步骤查看对应的处理过程与关键能力。</p>
+        <p>点击任意步骤，查看它解决的问题、处理过程与关键能力。</p>
       </div>
       <div className="workflow-shell">
         <div className="workflow-tabs" role="tablist" aria-label="MaskRiver 五步流程">

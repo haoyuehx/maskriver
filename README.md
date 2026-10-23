@@ -22,7 +22,7 @@ MaskRiver 是独立开发的 Go 数据脱敏与敏感信息治理项目，面向
 
 - **敏感信息识别** —— 上下文与格式规则结合，覆盖 Email、URL、IP、UUID、中国身份证/手机号/银行卡/USCC/日期/城市/姓名/地址等 13 类规则；证据不足时保留 `UNKNOWN`，不当作安全结论。
 - **安全审批** —— Ed25519 签名记录与精确 Plan 绑定；`--apply` 还需要 `--approved`、部署 trust file、历史目录和有效审批记录。
-- **确定性脱敏** —— 支持格式约束替换、确定性 HMAC 策略与多种类型；支持多种字段类型及格式约束处理。
+- **确定性脱敏** —— 支持格式约束替换与确定性 HMAC 策略，覆盖文本、数字、日期等多种字段类型。
 - **严格验证** —— 全量无截断扫描、双向键集、行数、Schema、计划字段与适配器完整性检查；失败即 fail-closed。
 - **有界流式处理** —— SQLite-only 的分批读取、批次事务、资源预算与 Outbox 回执。
 - **Checkpoint / Resume** —— Linux amd64 本地 SQLite 的中断恢复、只读 `status`、显式 `--resume` 与幂等重放。
@@ -107,18 +107,14 @@ SQLite 快速开始见 [Quick Start](docs/guides/quickstart.md)；MySQL 见 [MyS
 
 | Contributor | Contribution Areas | Evidence |
 | --- | --- | --- |
-| [haoyuehx](https://github.com/haoyuehx) | 核心 CLI 与 Runner、数据库适配器集成、检测/脱敏集成、验证、Streaming/Recovery、文档与发布、展示网站 | 317 个 Git 提交；PR #35–#99 的主要作者；`cmd/`、`internal/`、`docs/`、`website/` 主要变更 |
-| [emgps](https://github.com/emgps) | 脱敏策略提案、验证器提案（PR #18、#32 已合并；#17/#19/#31 未合并） | GitHub PR #18/#32 作者及文件列表；PR #17/#19/#31 提案 |
-| [whh-true](https://github.com/whh-true) | 确定性脱敏策略 | PR #26（已合并）；commit `498dd7f`（Git author `whh_1231`） |
-| [HerrscherofSentience555](https://github.com/HerrscherofSentience555) | SQLite/MySQL 数据库适配器 | PR #16（已合并）；commit `b8c9c5f`（Git author `szh`） |
-
+| [haoyuehx](https://github.com/haoyuehx) | 核心 CLI 与 Runner、数据库适配器集成、Streaming/Recovery、文档、发布与展示网站 | 主要 Git 提交与 PR；`cmd/`、`internal/`、`docs/`、`website/` |
+| [emgps](https://github.com/emgps) | 脱敏策略与验证器提案 | PR #18、#32（已合并） |
+| [whh-true](https://github.com/whh-true) | 确定性脱敏策略 | PR #26（已合并）；commit `498dd7f` |
+| [HerrscherofSentience555](https://github.com/HerrscherofSentience555) | SQLite/MySQL 数据库适配器 | PR #16（已合并）；commit `b8c9c5f` |
 
 ## Development & Contribution
 
-- 项目通过 GitHub Issue、分支、PR 和 CI 管理；合并保留真实 Git 历史，不使用 squash 覆盖作者。
-- 合并门禁包括必需 CI、独立 QA、独立安全审查、无未解决 P0/P1、文件范围检查和真实测试证据。
-- 欢迎通过 Issue 和 PR 参与项目开发。
-
+项目通过 GitHub Issue、Pull Request 和 CI 管理开发与验收。欢迎通过 Issue 和 PR 参与。
 
 ## 文档
 
@@ -134,5 +130,3 @@ SQLite 快速开始见 [Quick Start](docs/guides/quickstart.md)；MySQL 见 [MyS
 ## License
 
 MaskRiver 采用 [MIT](LICENSE)。第三方依赖保留各自许可，详见 [来源与许可说明](docs/attribution.md)。
-
-技术设计与使用说明见 [安全模型](docs/guides/security-model.md)。
