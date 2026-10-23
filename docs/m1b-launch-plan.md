@@ -1,11 +1,13 @@
-# M1-B 跨平台开发与 PR 集成
+# M1-B 跨平台开发与 PR 集成（历史计划）
+
+> **历史快照。** 当前贡献者与 v1.0.0 状态见 [README](../README.md#contributors--项目贡献者)。
 
 本文件取代旧的本机 Agent 启动方案。#2、#3、#4 属旧设备执行管理事项，不再作为产品开发依赖；不要求恢复任何旧 worktree、模型会话或补丁缓存，也不授权删除它们。
 
 ## 开发入口
 
-1. 四位成员各自 clone，安装 `go.mod` 要求的 Go 版本；Windows、Linux、macOS 均可。
-2. 认领 #5～#8 中对应模块，记录基线 SHA，创建个人功能分支。无需四人同时开始或使用相同目录。
+1. 贡献者各自 clone，安装 `go.mod` 要求的 Go 版本；Windows、Linux、macOS 均可。
+2. 认领 #5～#8 中对应模块，记录基线 SHA，创建个人功能分支。无需所有参与者同时开始或使用相同目录。
 3. 阅读 [contracts.md](contracts.md) 与 [parallel-tasks.md](parallel-tasks.md)，保持 `m1a-v1`；共享契约、依赖及跨模块调整先协调。
 4. 用合成数据实现和测试，提交功能分支，创建关联 Issue 的 PR。尽量一 PR 一模块。
 

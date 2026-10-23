@@ -37,4 +37,4 @@ MPL-2.0 是文件级义务：修改/分发受覆盖驱动文件须保留 MPL 与
 - 单批 InnoDB 事务；DDL 会隐式提交，因此 schema 仅由环境工具在空实例创建。受影响行数/乐观比较/commit 不确定性须 adapter 测试。
 - [PR #30](https://github.com/haoyuehx/maskriver/pull/30) 的隔离 MySQL 8.0.46 CI 已执行并通过真实 `TestMySQLAdapter`：元数据、typed 值、分页、乐观事务及九种有界 CN 格式替换的真实 SQL 回读。详情见 [验收运行](https://github.com/haoyuehx/maskriver/actions/runs/38243891955)。这不代表完整 CLI workflow、生产部署或其他 MySQL 版本已验证。旧本机初始化权限问题不阻塞 CI，见 test-environment.md。
 
-当前 CLI 仍未导入 DB adapter；SQLite/MySQL 适配器已通过隔离业务测试，独立 CLI 的 `scan/mask/validate` 端到端路径仍属 #9/#11。
+当前 CLI 已导入 SQLite/MySQL 适配器；MySQL 8.0.46 CLI 端到端由 M3-2/PR #93 验证，其他版本仍未验证。

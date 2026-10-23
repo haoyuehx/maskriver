@@ -1,40 +1,83 @@
 # MaskRiver
 
-An independently developed Go data masking and sensitive-data governance project. `v1.0.0` is stable within its supported scope: Linux amd64 SQLite and MySQL 8.0.46 M1 workflows, plus SQLite-only bounded streaming and local transactional recovery. It is not a claim of production PII accuracy, legal anonymisation, MySQL recovery, or universal platform support.
+**安全、可验证、可恢复的数据脱敏工具。**
 
-面向 **2026 开放原子大赛 · 开源基础软件与解决方案赛道** 的独立 Go 项目。
-这是参赛研发目标，不代表已报名、入选或获官方背书。
+MaskRiver 是独立开发的 Go 数据脱敏与敏感信息治理项目，面向开发、测试与数据共享场景。它把敏感字段识别、只读预览、Ed25519 审批、执行脱敏、严格验证与本地故障恢复组织成一条可追踪的 CLI 工作流。
 
-MaskRiver 是独立研发的 Go 数据脱敏与敏感信息治理工具，面向企业开发、测试与数据共享场景：自动发现敏感数据，提供安全、确定性的脱敏策略，数据库适配器与 CLI 支持 SQLite 与 MySQL 8.0.46，并提供数据完整性校验。
+- **官网与演示：** https://haoyuehx.github.io/maskriver/
+- **稳定版：** [v1.0.0](https://github.com/haoyuehx/maskriver/releases/tag/v1.0.0)（Linux amd64）
+- **许可：** MIT
+- **状态：** 支持范围内稳定；不是生产级 PII 准确率或法律匿名化认证
 
-> **`v1.0.0` 是支持范围内的稳定版：Linux amd64、SQLite 与 MySQL 8.0.46 M1 工作流，SQLite-only streaming/recovery。** 详见 [v1.0.0 发行说明](docs/releases/v1.0.0.md) 与 [验收记录](docs/releases/v1.0.0-acceptance.md)。
->
-> 支持范围仅限授权、隔离、可弃置的副本。MySQL Recovery、Windows/macOS Streaming/Recovery、WAL Recovery、跨存储 Mapping 原子性、通用 exactly-once、真实断电持久性、生产级检测准确率和法律意义上的匿名化均未验证。M3-2 的 MySQL CLI 证据仅限 pinned 8.0.46 CI；历史 `v0.2.1-preview` / `v0.2.0-preview.1` 保持可访问，旧资产的能力边界不因新版本扩大。
+面向 **2026 开放原子大赛 · 开源基础软件与解决方案赛道** 的参赛研发目标，不代表已报名、入选或获官方背书。当前发行包只构建 linux/amd64；其他 Linux 架构无发行包，仅部分目标在 CI 交叉编译，未运行测试。
 
-## 快速开始
+## 官网与演示视频
 
-请使用 `go.mod` 指定的 Go 工具链；以下构建和单元测试无需连接生产数据库。
+产品展示网站提供可交互的产品介绍、五步流程、Streaming 与 Recovery 演示：
 
-```sh
-go run ./cmd/maskriver --help
-go run ./cmd/maskriver --version
-go test ./...
-go vet ./...
-go build -o bin/maskriver ./cmd/maskriver
+**https://haoyuehx.github.io/maskriver/**
+
+网站集成了 4 分 20 秒的产品概念演示视频（1920×1080、H.264、中文字幕、当前无配音）。视频与网站均为产品说明材料，不构成生产环境承诺。
+
+## 核心功能
+
+- **敏感信息识别** —— 上下文与格式规则结合，覆盖 Email、URL、IP、UUID、中国身份证/手机号/银行卡/USCC/日期/城市/姓名/地址等 13 类规则；证据不足时保留 `UNKNOWN`，不当作安全结论。
+- **安全审批** —— Ed25519 签名记录与精确 Plan 绑定；`--apply` 还需要 `--approved`、部署 trust file、历史目录和有效审批记录。
+- **确定性脱敏** —— 支持格式约束替换、确定性 HMAC 策略与多种类型；脱敏不等于匿名化，不承诺无碰撞。
+- **严格验证** —— 全量无截断扫描、双向键集、行数、Schema、计划字段与适配器完整性检查；失败即 fail-closed。
+- **有界流式处理** —— SQLite-only 的分批读取、批次事务、资源预算与 Outbox 回执；不宣称任何情况下内存固定。
+- **Checkpoint / Resume** —— Linux amd64 本地 SQLite 的中断恢复、只读 `status`、显式 `--resume` 与幂等重放。
+
+## 工作流程
+
+```text
+Scan → Preview → Approve → Apply → Validate
 ```
 
-`scan`、`mask`、`validate`、`approve`、`revoke` 支持明确限定的 **SQLite 多表** 与 **MySQL 8.0.46** 合成测试工作流。SQLite 必须提供两个各自存在且不同的绝对路径文件；MySQL 使用 `--dialect mysql` 和两个指向不同数据库的 DSN（连接后按 `@@server_uuid`+`DATABASE()` 拒绝同一物理库，包括 unix/tcp 或地址别名），默认只读。MySQL streaming/recovery 未实现并被明确拒绝；非法配置或未获批准的写入一律拒绝。
-`mask` 默认 Dry Run。写入需要三者同时成立：`--approved`（操作者声明）、`--apply`（写意图）和一条由 `approve` 独立签发并绑定当前 Plan 的 Ed25519 审批记录；前两者单独或组合都不充分。`apply` 只从部署预置 trust file 加载可信公钥，不接收审核私钥；`revoke` 撤销已有记录。Preview 由驱动级 SQL Spy 与文件树 SHA256 证明零写入。
+1. **Scan** 抽取有界样本并分类字段。
+2. **Preview** 只读生成计划，不写入目标副本。
+3. **Approve** 由独立进程签发绑定计划的 Ed25519 审批记录。
+4. **Apply** 仅在显式 `--apply` 和有效审批同时存在时写入计划字段。
+5. **Validate** 重新核对 Schema、行数、键集、字段变化和完整性。
 
-严格的 `validate --strict` 现在要求全量扫描和适配器完整性检查：SQLite 使用 `quick_check` + 数据库级 FK 检查，MySQL 8.0.46 使用全行解析的 `CHECK TABLE ... QUICK` + 触及计划表的 FK orphan 检查，任一失败即 fail closed。MySQL strict 不校验 CHECK 约束表达式、唯一重复或未触及表，也不是整库/复制一致性检查。
+实际工具通过 CLI 执行；网站中的流程界面是产品示意，不是已实现的 Web 数据库管理后台。
 
-可选的 M2 路径使用 `--streaming`、独立 `--budget-file` 和同事务 Outbox 回执。恢复需要先显式 `init-outbox`、`init-recovery`，然后以 `--streaming --apply --resume --run-id <32-hex>` 继续；`status` 只读。已提交批次通过确定性重算校验后跳过，未提交后缀必须仍等于源值；目标外部修改、错误 Key、快照漂移和 `commit_unknown` 均 fail closed。恢复不改变“批次事务不等于整库原子性”的既有边界。
-可复现路径见 `cmd/maskriver/approval_e2e_test.go` 的 `TestE2EPlanIssueNewProcessApply`（子进程签发与加载），以及 `cmd/maskriver/main_test.go` 的 `TestCLIMultiTableWorkflow` 与 `TestCLIRealSQLiteWorkflow`。
-直接运行编译后的二进制可观察原始退出码；`go run` 会包装子进程退出状态。
+## 技术亮点
 
-### 发行包快速开始（linux/amd64）
+- 冻结的 `pkg/contracts`（`APIRevision=m1a-v1`）与 SQLite/MySQL 适配器。
+- SQLite 完整 M1 流程；MySQL 8.0.46 的 Scan/Preview/Approve/Apply/strict Validate 已在隔离 CI 中真实执行。
+- MySQL 同一物理库拒绝基于 `@@server_uuid` + `DATABASE()`，而非仅比较 DSN 文本。
+- SQLite `quick_check` + 数据库级 FK 检查；MySQL `CHECK TABLE ... QUICK` + 可见 FK orphan 检查。
+- `m2-stream-v1` Outbox 与 `m2-recovery-v1` Checkpoint/Resume；批事务不等于整库原子性。
+- 真实 SQLite/MySQL E2E、隔离 MySQL 8.0.46 CI、Ubuntu race、Windows/macOS 非流式 M1 测试。
+
+## 支持范围与限制
+
+| 能力 | 状态 |
+| --- | --- |
+| SQLite M1 CLI（多表、审批、验证） | 支持 |
+| MySQL 8.0.46 M1 CLI | 支持（隔离 CI 验证） |
+| SQLite Streaming / Outbox / Checkpoint / Resume | 支持（Linux amd64、rollback journal、`synchronous=FULL`） |
+| MySQL Streaming / Recovery | 不支持 |
+| Windows/macOS Streaming / Recovery | 不支持 |
+| WAL Recovery | 不支持 |
+| 持久映射 / 跨存储事务 | 不支持 |
+| 通用分布式 Exactly-once | 不宣称 |
+| 生产级 PII 检测准确率 / 法律匿名化 | 未证明 / 不宣称 |
+
+- 仅处理获授权、隔离、可丢弃的数据库副本；不要直接对生产数据库运行。
+- 本地 trust file + reviewer key 不是 RBAC；同时控制两者的操作者可自行批准。
+- 历史目录整体回滚或撤销回滚不可检测。
+- MySQL strict 不校验 CHECK 表达式、唯一重复或未触及表，也不是整库/复制一致性检查。
+- 其他 MySQL 版本、Windows/macOS MySQL 运行时未验证。
+
+## 安装与 Quick Start
+
+从 [v1.0.0 Release](https://github.com/haoyuehx/maskriver/releases/tag/v1.0.0) 下载 Linux amd64 包，先验证归档 SHA-256：
 
 ```sh
+curl -LO https://github.com/haoyuehx/maskriver/releases/download/v1.0.0/maskriver-v1.0.0-linux-amd64.tar.gz
+curl -LO https://github.com/haoyuehx/maskriver/releases/download/v1.0.0/SHA256SUMS
 sha256sum -c SHA256SUMS
 tar -xzf maskriver-v1.0.0-linux-amd64.tar.gz
 cd maskriver-v1.0.0-linux-amd64
@@ -42,56 +85,62 @@ cd maskriver-v1.0.0-linux-amd64
 ./maskriver --help
 ```
 
-v0.2.1-preview 的资产与 SHA-256 见 [Release 页](https://github.com/haoyuehx/maskriver/releases/tag/v0.2.1-preview)；v0.2.0-preview.1 的历史验收见 [验收记录](docs/releases/v0.2.0-preview.1-acceptance.md)；最终 Tag、资产 SHA-256 与发布后下载复核记录在 GitHub Release 验收评论中。只对授权、隔离、可丢弃的 SQLite/MySQL 副本运行。仅构建和发布 linux/amd64；其他 Linux 架构未构建、未测试。
+从源码构建：
 
-## 四人跨平台协作
+```sh
+go build -o bin/maskriver ./cmd/maskriver
+go test ./...
+go vet ./...
+```
 
-团队成员各自 clone 仓库、认领 Issue、通过分支和 PR 交付；不要求固定设备、AI 工具或共用工作树。建议按当前 M1 收尾任务而不是按已经完成的组件再次分工：
+SQLite 快速开始见 [Quick Start](docs/guides/quickstart.md)；MySQL 见 [MySQL 教程](docs/guides/mysql.md)。
 
-| 角色（待认领） | 当前主责 | 修改边界 |
+## 验证与测试证据
+
+- 最终 `main` CI：Ubuntu/Windows/macOS 格式、测试、vet；Ubuntu race；隔离 MySQL 8.0.46 fixture/adapter/CLI；确定性发行包；bench 与 phase3-stress。
+- M3-1：strict 完整性、Writer NULL 语义、审批时钟偏差；独立 Architecture/Security/QA PASS。
+- M3-2：真实 MySQL CLI E2E；独立 Architecture/Security/QA PASS。
+- M3-4：345 个生成式检测 case（210 正/135 负）与 5×100 脱敏不变量；仅合成评测，不是生产准确率。
+- v1.0.0 最终验收：独立 Review PASS，无未解决 P0/P1；发行资产在公开下载后复核 SHA-256。
+
+证据入口：[Feature Matrix](docs/feature-matrix.md)、[测试计划](docs/test-plan.md)、[M3 验收](docs/m3/acceptance-matrix.md)、[v1.0.0 验收](docs/releases/v1.0.0-acceptance.md)。
+
+## Contributors / 项目贡献者
+
+以下账号通过 GitHub Contributors API、Git 历史、PR 作者和文件变更交叉核对。Git commit author 名称、GitHub 登录账号和真实个人身份不一定一一对应；不据此推断未经验证的个人职责。
+
+| Contributor | Contribution Areas | Evidence |
 | --- | --- | --- |
-| A · Main/集成协调（建议组长） | #9：Config、Plan、Runner、CLI、合并与发布协调 | `cmd/maskriver/**`、`internal/config/**`、`internal/runner/**`、`internal/history/**` |
-| B · 数据库/事务 | SQLite 快照、SQL Spy、只读/写入/回滚和 MySQL 适配器回归 | `internal/db/**` |
-| C · 检测/脱敏 | UNKNOWN 与策略门禁、格式约束、映射一致性和合成负例 | `internal/detect/**`、`internal/mask/**` |
-| D · 验证/QA | 验证器、真实端到端回归、#11 独立验收报告 | `internal/verify/**`、`tests/**`；审查时只读 |
+| [haoyuehx](https://github.com/haoyuehx) | 核心 CLI 与 Runner、数据库适配器集成、检测/脱敏集成、验证、Streaming/Recovery、文档与发布、展示网站 | 317 个 Git 提交；PR #35–#99 的主要作者；`cmd/`、`internal/`、`docs/`、`website/` 主要变更 |
+| [emgps](https://github.com/emgps) | 脱敏策略提案、验证器提案（PR #18、#32 已合并；#17/#19/#31 未合并） | GitHub PR #18/#32 作者及文件列表；PR #17/#19/#31 提案 |
+| [whh-true](https://github.com/whh-true) | 确定性脱敏策略 | PR #26（已合并）；commit `498dd7f`（Git author `whh_1231`） |
+| [HerrscherofSentience555](https://github.com/HerrscherofSentience555) | SQLite/MySQL 数据库适配器 | PR #16（已合并）；commit `b8c9c5f`（Git author `szh`） |
+| [PyGuy2](https://github.com/PyGuy2) | 脱敏策略实现相关 GitHub 贡献 | commit `515d628`（mask strategies）；该 commit 关联的 PR #18 由 `emgps` 发起，账号与个人职责无法进一步可靠拆分 |
 
-公共契约 `pkg/contracts`、CI、根文档及跨模块修改由 A 统一协调。非作者交叉审核：D 审 A/B，B 审 C，C 审 D；不得自审自批。具体 PR 依赖与验收标准见 [Roadmap](docs/roadmap.md) 和 [AGENTS.md](AGENTS.md)。
+AI Agent 提交身份（如 `AI M3 Orchestrator`、`AI Release Orchestrator`、`AI Orchestrator`、`Compiler Bot`）是自动化开发/发布身份，**不应被记录为人类贡献者**。Git 历史未被改写，原始 PR 作者与合并提交保留。更详细的 PR #18 提交归属说明见 [CONTRIBUTORS.md](CONTRIBUTORS.md)。
 
-CI 包括 Ubuntu/Windows/macOS 的测试与 vet、Ubuntu race，以及隔离 MySQL 8.0.46 的实际 `TestMySQLAdapter` 和 `TestMySQLCLIWorkflow`（真实 CLI Scan→Preview→Approve→Apply→Validate）。MySQL 证据仅限该 pinned 镜像；未运行或 SKIP 的测试仍需如实记录。
-## 产品路线图
+## Development & Contribution
 
-- **M1-B 已交付：** 数据库适配器（#5、#10）、检测（#6）、脱敏（#7、#12）和验证器（#8），有真实数据库或有界 fake Reader 测试证据；各组件不等于完整产品。
-- **M1-C 已关闭：** [#9](https://github.com/haoyuehx/maskriver/issues/9) 的 AC 已由独立上下文签署（[验收报告](docs/issue9-acceptance-report.md)）。SQLite 多表 CLI、签名审批记录、SQL Spy、静态门禁和批次故障回归已有真实测试；`--strict` 与 MySQL 8.0.46 CLI 已由 M3-1/M3-2 补齐，MySQL recovery 仍未实现。
-- **M1-D 已裁定 ACCEPT WITH RESTRICTIONS：** [#11](https://github.com/haoyuehx/maskriver/issues/11) 独立安全验收已完成，P0=0、P1=0——原 P1（第三方许可/署名）由 PR #58 修复并经第二独立上下文复核；六条 P2 仍开放。`v0.2.0-preview.1` 的发行包已按实际链接集合生成 NOTICE、随包完整许可文本、MPL-2.0 源码获取说明与 SBOM；历史 M1 报告中的限制不因新版本而消失。
-- **M2 已交付（本地 SQLite 预览）：** [#13](https://github.com/haoyuehx/maskriver/issues/13) 提供有界 Streaming、事务 Outbox 与资源预算；[#14](https://github.com/haoyuehx/maskriver/issues/14) 提供 `m2-recovery-v1` Checkpoint、只读 Status、显式 Resume 与幂等故障恢复。MySQL/Windows/WAL 恢复、跨库映射与通用 exactly-once 仍不支持。
-- 完整阶段划分见 [Roadmap](docs/roadmap.md)。
+- 项目通过 GitHub Issue、分支、PR 和 CI 管理；合并保留真实 Git 历史，不使用 squash 覆盖作者。
+- 开发与审查使用独立 AI Agent 上下文；实现者不能作为自身实现的独立评审者。
+- 合并门禁包括必需 CI、独立 QA、独立安全审查、无未解决 P0/P1、文件范围检查和真实测试证据。
+- 欢迎通过 Issue/PR 参与；请只使用合成或获授权的隔离数据，不要提交真实个人数据、密钥、DSN 或数据库文件。
+
+详细的角色边界、契约和合并规则见 [AGENTS.md](AGENTS.md) 与 [Roadmap](docs/roadmap.md)。早期四人分工计划仅作为历史快照保存在 [docs/history/four-person-collaboration-plan.md](docs/history/four-person-collaboration-plan.md)。
 
 ## 文档
 
+- [产品展示网站](https://haoyuehx.github.io/maskriver/) / [网站源码](website/)
 - [操作指南与教程](docs/guides/README.md)
-- [M3 进度与验收](docs/m3/progress.md)
-- [架构设计](docs/architecture.md)
-- [Roadmap](docs/roadmap.md)
-- [测试计划](docs/test-plan.md)
-- [协作与安全边界](AGENTS.md)
-- [成员职责与可选 AI 工具](docs/agents.md)
-- [初始化验收记录](docs/bootstrap-validation.md)
-- [M1-A 共享契约](docs/contracts.md)、[冻结报告](docs/m1a-freeze-report.md)
-- [驱动决策](docs/database-drivers.md)、[测试环境](docs/test-environment.md)
-- [四模块开发任务](docs/parallel-tasks.md)、[可选工作树](docs/worktree-preflight.md)
-- [历史收尾报告](docs/closeout-report.md)、[M1-B 跨平台 PR 流程](docs/m1b-launch-plan.md)
+- [架构设计](docs/architecture.md) / [共享契约](docs/contracts.md)
+- [Feature Matrix](docs/feature-matrix.md) / [测试计划](docs/test-plan.md)
+- [v1.0.0 发行说明](docs/releases/v1.0.0.md) / [验收记录](docs/releases/v1.0.0-acceptance.md)
+- [M3 进度](docs/m3/progress.md) / [验收矩阵](docs/m3/acceptance-matrix.md)
+- [竞赛交付材料](docs/competition/project-overview.md)：[核心功能](docs/competition/core-features.md)、[技术亮点](docs/competition/technical-highlights.md)、[演示指南](docs/competition/demo-guide.md)、[提交清单](docs/competition/submission-checklist.md)
+- [来源与许可](docs/attribution.md) / [安全边界](docs/guides/security-model.md)
 
-## 来源与许可
+## License 与安全边界
 
-MaskRiver 采用 [MIT](LICENSE)。本项目独立研发：不是任何其他仓库的 Fork，不共享其 Git 历史，未复制其源码、词典、配置或测试数据。
-第三方依赖保留各自许可，详见 [来源与许可说明](docs/attribution.md)。
-若将来确实改编或复用第三方代码、文档或测试，必须先在该说明中保留其版权、许可与来源标注。
+MaskRiver 采用 [MIT](LICENSE)。第三方依赖保留各自许可，详见 [来源与许可说明](docs/attribution.md)。
 
-## 安全提示
-
-仅处理获授权的数据库副本；脱敏不等于匿名化。确定性映射可能遭受猜测攻击，也不自动保证唯一性或所有关联完整性。
-不要向仓库、日志或 Agent 会话提交真实个人数据、连接凭证、种子及映射库。
-
-- **审批信任边界**：可信公钥来自部署预置 trust file，`apply` 只加载公钥；同一操作者同时控制 trust file 与审核私钥时本工具无法阻止，这不是 RBAC。`ReviewerID` 是自填标签，不是已认证身份。
-- **`null` 策略端到端拒绝**：Preview 与 Apply 都在打开 Writer 前拒绝“非 NULL → NULL”，因为验证器把该变化判为冲突证据，此类写入永远无法通过严格验证。M3-1 起 `internal/db` 写入层也拒绝该组合（`ErrUnsafe`）。
-- **`--strict`（M3-1 起）**：严格验证强制全量无截断扫描（正数 `RowLimit` 被拒绝），并要求源/目标适配器提供并通过对每张计划表的数据库完整性检查（SQLite `quick_check`/数据库级 `foreign_key_check`；MySQL 严格完整性尚未实现并 fail closed）；缺少该能力 fail closed。普通验证保留有界语义。
+仅处理获授权的数据库副本；脱敏不等于匿名化，确定性映射不保证唯一性或所有关联完整性。不要向仓库、日志或 Agent 会话提交真实个人数据、连接凭证、种子及映射库。完整信任边界与不宣称事项见 [安全模型](docs/guides/security-model.md)。

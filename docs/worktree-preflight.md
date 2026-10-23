@@ -1,6 +1,6 @@
 # 可选工作树与本地隔离
 
-项目标准流程是四位成员各自 clone、个人功能分支、PR 与统一 CI，见 [AGENTS.md](../AGENTS.md)。不要求 Native worktree、特定路径或 Pi。
+项目标准流程是贡献者各自 clone、个人功能分支、PR 与统一 CI，见 [AGENTS.md](../AGENTS.md)。早期“四人”表述是历史计划，不是团队人数。不要求 Native worktree、特定路径或 Pi。
 
 如个人选择 Git worktree 或获授权的 AI 并行工具：
 

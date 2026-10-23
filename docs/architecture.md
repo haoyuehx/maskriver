@@ -2,7 +2,7 @@
 
 ## 状态与原则
 
-当前已有 CLI 骨架、Main-owned `pkg/contracts` 与合成驱动测试环境；业务适配器/引擎仍待实现。正式冻结接口以 [contracts.md](contracts.md) 为准，不可据此宣称已支持数据库业务或流式处理。
+本文件保留 M1-A 契约基线与早期设计；当前实现、支持范围和验收状态以 [Feature Matrix](feature-matrix.md) 与 [v1.0.0 发行说明](releases/v1.0.0.md) 为准。正式冻结接口见 [contracts.md](contracts.md)。
 MaskRiver 是原生 Go 设计：不沿用其他语言生态的对象模型或 ORM 抽象，直接基于 `database/sql` 与显式接口组合。
 第一阶段优先可验证的串行有界分页；第二阶段才引入高性能并发与恢复。
 
@@ -43,7 +43,7 @@ cmd/maskriver → config → runner
 6. 批次事务保证该批原子性，非整库原子性；返回已提交批次范围，失败不能称全局回滚。暂不自动重试已部分提交的全表，防止二次脱敏。
 7. 验证使用脱敏前源快照及固定 Plan，不重新扫描脱敏结果推断应验证哪些列。
 
-SQLite/MySQL 计划各自实现 `database/sql` 适配。驱动已固定 modernc.org/sqlite v1.60.1（BSD-3-Clause）与 github.com/go-sql-driver/mysql v1.10.1（MPL-2.0），选择与约束见 database-drivers.md。SQLite 与隔离 MySQL 8.0.46 合成 driver fixture 已实际通过（见 test-environment.md 的 PR CI 证据）；业务 adapters 均未实现，fixture 不能替代真实适配器验收。
+SQLite/MySQL 计划各自实现 `database/sql` 适配。驱动已固定 modernc.org/sqlite v1.60.1（BSD-3-Clause）与 github.com/go-sql-driver/mysql v1.10.1（MPL-2.0），选择与约束见 database-drivers.md。SQLite 与隔离 MySQL 8.0.46 fixture 已实际通过；业务适配器与 CLI 后续已实现，见 Feature Matrix。fixture 本身仍不能替代真实适配器验收。
 
 ## 确定性与完整性
 
@@ -63,7 +63,7 @@ SQLite/MySQL 计划各自实现 `database/sql` 适配。驱动已固定 modernc.
 - Dry Run 必须对文件系统与数据库都零持久写入，并用文件哈希快照加连接 spy 证明，而不是只统计写入行数。
 - 校验目标由脱敏前固定的 Plan 决定，不通过重扫已脱敏数据来推断应校验哪些列。
 - 覆盖不完整（无键、抽样截断、缺表、能力不足）一律不得 `PASS`；`strict` 模式对 `Warning` 也判失败。
-- 这些约定当前仍属设计约束，尚未全部实现。
+- 这些约定已在 v1.0.0 支持范围内实现；超出范围的 MySQL Recovery、WAL、持久映射等仍不支持。
 
 ## 第二阶段
 
