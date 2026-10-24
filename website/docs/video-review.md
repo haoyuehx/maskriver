@@ -44,3 +44,22 @@
 - 视频作为静态媒体随站点部署：13.3 MB 远低于 GitHub Pages 单文件 100 MB 限制和仓库常见容量边界，比外部对象存储更少依赖。
 - 站点不自动播放；点击封面后才加载 MP4，并提供原生 `controls` 不可用时的自定义控制、加载/错误状态和直接打开 MP4 的备用链接。
 - 媒体 URL 通过 `VITE_VIDEO_URL`、`VITE_POSTER_URL`、`VITE_CAPTIONS_URL` 可配置。
+
+---
+
+## 2026-10-24 — v2 integration (audio approval pending)
+
+The website media integration is prepared on a branch, not published until the
+human audio review is complete.
+
+- New MP4: `public/media/maskriver-demo-v2.mp4`
+  - SHA-256: `f7b3a07b20e26dbfbd28f2087eb5cf34976b98b02a7c53d6323213334b515ff9`
+  - 260.054 s · 1920×1080 · 30 fps · H.264 + AAC-LC 48 kHz stereo
+  - 35 burned Chinese captions + optional 35-cue WebVTT
+- New poster: `public/media/maskriver-demo-v2-poster.png` (23.0 s frame, 1920×1080).
+- The external VTT is **default off** so mobile and desktop do not show burned and
+  external captions at the same time. The player button is labelled as an
+  optional external subtitle track.
+- Old silent media remains in `public/media/` for rollback.
+- Human listening: **HUMAN AUDIO REVIEW REQUIRED**. Technical audio QC is not a
+  listening result and does not authorize publishing the new voice track.

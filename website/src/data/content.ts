@@ -13,10 +13,10 @@ export const MYSQL_DOC =
 export const SECURITY_DOC =
   'https://github.com/haoyuehx/maskriver/blob/main/docs/guides/security-model.md';
 const mediaBase = `${import.meta.env.BASE_URL}media/`;
-export const VIDEO_URL = import.meta.env.VITE_VIDEO_URL ?? `${mediaBase}maskriver-demo.mp4`;
-export const POSTER_URL = import.meta.env.VITE_POSTER_URL ?? `${mediaBase}poster.png`;
+export const VIDEO_URL = import.meta.env.VITE_VIDEO_URL ?? `${mediaBase}maskriver-demo-v2.mp4`;
+export const POSTER_URL = import.meta.env.VITE_POSTER_URL ?? `${mediaBase}maskriver-demo-v2-poster.png`;
 export const CAPTIONS_URL =
-  import.meta.env.VITE_CAPTIONS_URL ?? `${mediaBase}maskriver-demo.zh.vtt`;
+  import.meta.env.VITE_CAPTIONS_URL ?? `${mediaBase}maskriver-demo-v2.zh.vtt`;
 
 export const nav = [
   { href: '#top', label: '首页' },

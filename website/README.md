@@ -28,9 +28,11 @@ npm test
 
 ## 媒体
 
-- `public/media/maskriver-demo.mp4`：交付的 4:20 H.264 视频，13.3 MB，无音轨。
-- `public/media/maskriver-demo.zh.vtt`：由交付 SRT 转换的字幕。
-- `public/media/poster.png`、`public/og-image.png`：项目原创 SVG 生成的封面/分享图。
+- `public/media/maskriver-demo-v2.mp4`：新版 4:20 H.264 + AAC 中文配音视频，30.9 MB，画面烧录字幕。
+- `public/media/maskriver-demo-v2.zh.vtt`：新版 35 条外挂字幕，默认关闭，避免与烧录字幕叠加。
+- `public/media/maskriver-demo-v2-poster.png`：从新版视频 23.0 s 抽取的封面。
+- `public/media/maskriver-demo.mp4`：旧版无配音视频，保留用于回滚。
+- `public/og-image.png`：项目原创分享图。
 
 媒体 URL 可配置：
 
