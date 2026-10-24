@@ -30,9 +30,7 @@ export default function VideoPlayer() {
   const [duration, setDuration] = useState(260);
   const [volume, setVolume] = useState(0.85);
   const [muted, setMuted] = useState(false);
-  const [captions, setCaptions] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 560px)').matches,
-  );
+  const [captions, setCaptions] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [error, setError] = useState(false);
 
@@ -134,7 +132,7 @@ export default function VideoPlayer() {
               <span className="poster-copy">
                 <span className="poster-label">MASK RIVER · PRODUCT FILM</span>
                 <span className="poster-title">安全审批 · 可验证处理 · 故障恢复</span>
-                <span className="poster-meta">04:20 · 1920×1080 · 中文画面字幕 · 无配音</span>
+                <span className="poster-meta">04:20 · 1920×1080 · 中文配音 · 烧录字幕</span>
               </span>
               <span className="big-play" aria-hidden="true">
                 <Play size={30} fill="currentColor" />
@@ -223,7 +221,7 @@ export default function VideoPlayer() {
                 type="button"
                 className={captions ? 'is-active' : ''}
                 onClick={toggleCaptions}
-                aria-label={captions ? '关闭中文字幕' : '打开中文字幕'}
+                aria-label={captions ? '关闭外挂字幕' : '打开外挂字幕（画面已含）'}
                 aria-pressed={captions}
               >
                 <Captions size={18} />
@@ -246,8 +244,8 @@ export default function VideoPlayer() {
         </div>
       </div>
       <div className="video-notes">
-        <span><span className="dot teal" /> 画面内已含中文字幕，可切换外挂字幕</span>
-        <span><span className="dot amber" /> 视频为无配音视觉版；中文 SRT 随站点提供</span>
+        <span><span className="dot teal" /> 画面已含烧录字幕；外挂字幕默认关闭，可手动开启</span>
+        <span><span className="dot amber" /> 中文配音 · AAC 48 kHz · 音量可调</span>
         <a href={VIDEO_URL} target="_blank" rel="noreferrer">直接打开 MP4 <ExternalLink size={13} aria-hidden="true" /></a>
       </div>
     </section>
