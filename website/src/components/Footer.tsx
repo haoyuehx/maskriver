@@ -1,6 +1,6 @@
 import { Github } from 'lucide-react';
 import Logo from './Logo';
-import { CHECKSUMS, DOCS, GITHUB, RELEASE } from '../data/content';
+import { CHECKSUMS, DOCS, GITHUB, RELEASE, VERSION } from '../data/content';
 
 export default function Footer() {
   return (
@@ -21,7 +21,7 @@ export default function Footer() {
         <div className="footer-col">
           <span className="footer-title">资源</span>
           <a href={DOCS} target="_blank" rel="noreferrer">文档</a>
-          <a href={RELEASE} target="_blank" rel="noreferrer">v1.0.0 Release</a>
+          <a href={RELEASE} target="_blank" rel="noreferrer">{VERSION} Release</a>
           <a href={CHECKSUMS} target="_blank" rel="noreferrer">SHA256SUMS</a>
           <a href={`${GITHUB}/blob/main/LICENSE`} target="_blank" rel="noreferrer">MIT License</a>
         </div>

@@ -12,7 +12,7 @@ MaskRiver 是独立开发的 Go 数据脱敏与敏感信息治理工具，面向
 
 支持 SQLite 完整流程；MySQL 8.0.46 的 CLI 流程已在隔离 CI 中真实验证。Linux amd64 上支持 SQLite-only 的有界 Streaming、Outbox、Checkpoint 与 Resume。
 
-发布：`v1.0.0`（Linux amd64）。官网：https://haoyuehx.github.io/maskriver/ 。
+发布：`v1.0.1`（Linux amd64）。官网：https://haoyuehx.github.io/maskriver/ 。
 
 ## 开发方式
 

@@ -1,6 +1,6 @@
 # 内容事实核对
 
-网站文案以仓库 `README.md`、`docs/feature-matrix.md`、`docs/m3/*`、`docs/guides/*` 与 `docs/releases/v1.0.0.md` 为依据，未把计划中或未验证的能力写成已交付。
+网站文案以仓库 `README.md`、`docs/feature-matrix.md`、`docs/m3/*`、`docs/guides/*` 与 `docs/releases/v1.0.1.md` 为依据，未把计划中或未验证的能力写成已交付。
 
 | 网站表述 | 依据 |
 |---|---|
@@ -12,7 +12,7 @@
 | 脱敏不等于匿名化；不保证无碰撞/不可关联 | `docs/guides/security-model.md`、`README.md` |
 | 检测评测为合成/生成式，不证明生产 PII 准确率 | `docs/m3/detection-evaluation.md`、PR #95 |
 | Strict 验证：SQLite quick/FK；MySQL CHECK TABLE + 可见 FK | `internal/verify/verify.go`、`internal/db/integrity.go`、M3-1/M3-2 文档 |
-| 下载与文档链接 | `v1.0.0` Release `420303798`、`docs/guides/*` |
+| 下载与文档链接 | `v1.0.1` Release、`docs/guides/*` |
 | 架构图组件 | `internal/db`、`internal/detect`、`internal/mask`、`internal/verify`、`internal/runner`、`internal/history` |
 
 ## 明确不写入网站的内容

@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Check, Copy, Download, ExternalLink, FileText, Github, ShieldCheck, Terminal } from 'lucide-react';
-import { CHECKSUMS, DOWNLOAD, DOCS, GITHUB, MYSQL_DOC, QUICKSTART, RELEASE, SECURITY_DOC, SQLITE_DOC } from '../data/content';
+import { CHECKSUMS, DOWNLOAD, DOCS, GITHUB, MYSQL_DOC, QUICKSTART, RELEASE, SECURITY_DOC, SQLITE_DOC, VERSION } from '../data/content';
 
 const command = `curl -LO ${DOWNLOAD}
 curl -LO ${CHECKSUMS}
 sha256sum -c SHA256SUMS
-tar -xzf maskriver-v1.0.0-linux-amd64.tar.gz
-cd maskriver-v1.0.0-linux-amd64
+tar -xzf maskriver-${VERSION}-linux-amd64.tar.gz
+cd maskriver-${VERSION}-linux-amd64
 ./maskriver --version`;
 
 export default function GetStarted() {
@@ -31,7 +31,7 @@ export default function GetStarted() {
           <p>下载 Linux amd64 发行包，验证 SHA-256，然后阅读 Quick Start。MySQL 路径需要两个指向不同数据库的 DSN。</p>
           <div className="start-actions">
             <a className="button button-primary" href={DOWNLOAD}>
-              <Download size={17} /> 下载 v1.0.0
+              <Download size={17} /> 下载 {VERSION}
             </a>
             <a className="button button-secondary" href={QUICKSTART} target="_blank" rel="noreferrer">
               <FileText size={17} /> Quick Start
@@ -58,7 +58,7 @@ export default function GetStarted() {
           </div>
           <pre><code>{command}</code></pre>
           <div className="command-foot">
-            <span>v1.0.0 · linux/amd64</span>
+            <span>{VERSION} · linux/amd64</span>
             <a href={RELEASE} target="_blank" rel="noreferrer">Release notes <ExternalLink size={12} /></a>
           </div>
         </div>

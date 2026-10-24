@@ -1,9 +1,8 @@
 export const GITHUB = 'https://github.com/haoyuehx/maskriver';
-export const RELEASE = 'https://github.com/haoyuehx/maskriver/releases/tag/v1.0.0';
-export const DOWNLOAD =
-  'https://github.com/haoyuehx/maskriver/releases/download/v1.0.0/maskriver-v1.0.0-linux-amd64.tar.gz';
-export const CHECKSUMS =
-  'https://github.com/haoyuehx/maskriver/releases/download/v1.0.0/SHA256SUMS';
+export const VERSION = 'v1.0.1';
+export const RELEASE = `https://github.com/haoyuehx/maskriver/releases/tag/${VERSION}`;
+export const DOWNLOAD = `https://github.com/haoyuehx/maskriver/releases/download/${VERSION}/maskriver-${VERSION}-linux-amd64.tar.gz`;
+export const CHECKSUMS = `https://github.com/haoyuehx/maskriver/releases/download/${VERSION}/SHA256SUMS`;
 export const DOCS = 'https://github.com/haoyuehx/maskriver/tree/main/docs/guides';
 export const QUICKSTART =
   'https://github.com/haoyuehx/maskriver/blob/main/docs/guides/quickstart.md';
