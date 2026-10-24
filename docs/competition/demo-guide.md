@@ -6,7 +6,7 @@
 2. 首屏阅读产品定位；点击“观看演示”播放当前 4:20 视频。
 3. 在 Core Workflow 中依次点击 Scan / Preview / Approve / Apply / Validate。
 4. 查看 Streaming 与 Recovery 示意；点击“模拟中断”再“恢复执行”，观察批次、Outbox 和验证状态。
-5. 在 Get Started 下载 v1.0.0、验证 SHA-256、打开 Quick Start / SQLite / MySQL 文档。
+5. 在 Get Started 下载 v1.0.1、验证 SHA-256、打开 Quick Start / SQLite / MySQL 文档。
 
 ## CLI（合成/隔离副本）
 
@@ -24,4 +24,4 @@ MySQL 使用 `--dialect mysql` 与两个数据库 DSN；具体命令见 [MySQL �
 
 ## 视频
 
-当前视频是无配音视觉版，画面含中文字幕；后续最终视频由用户单独提供。网站视频区域已集成，但本轮不修改视频文件、封面、字幕或播放器。
+官网当前仍使用旧的无配音视觉版，画面含中文字幕。新版 4:20 中文配音成片已制作并合并，但尚待用户试听确认，因此本轮不替换官网视频、封面、字幕或播放器。

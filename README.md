@@ -5,7 +5,7 @@
 MaskRiver 是独立开发的 Go 数据脱敏与敏感信息治理项目，面向开发、测试与数据共享场景。它把敏感字段识别、只读预览、Ed25519 审批、执行脱敏、严格验证与本地故障恢复组织成一条可追踪的 CLI 工作流。
 
 - **官网与演示：** https://haoyuehx.github.io/maskriver/
-- **稳定版：** [v1.0.0](https://github.com/haoyuehx/maskriver/releases/tag/v1.0.0)（Linux amd64）
+- **稳定版：** [v1.0.1](https://github.com/haoyuehx/maskriver/releases/tag/v1.0.1)（Linux amd64）
 - **许可：** MIT
 
 面向 **2026 开放原子大赛 · 开源基础软件与解决方案赛道** 的参赛作品。当前发行包只构建 linux/amd64；其他 Linux 架构无发行包，仅部分目标在 CI 交叉编译，未运行测试。
@@ -69,14 +69,14 @@ MaskRiver 提供 CLI 工作流，官网可交互展示其主要处理步骤。
 
 ## 安装与 Quick Start
 
-从 [v1.0.0 Release](https://github.com/haoyuehx/maskriver/releases/tag/v1.0.0) 下载 Linux amd64 包，先验证归档 SHA-256：
+从 [v1.0.1 Release](https://github.com/haoyuehx/maskriver/releases/tag/v1.0.1) 下载 Linux amd64 包，先验证归档 SHA-256：
 
 ```sh
-curl -LO https://github.com/haoyuehx/maskriver/releases/download/v1.0.0/maskriver-v1.0.0-linux-amd64.tar.gz
-curl -LO https://github.com/haoyuehx/maskriver/releases/download/v1.0.0/SHA256SUMS
+curl -LO https://github.com/haoyuehx/maskriver/releases/download/v1.0.1/maskriver-v1.0.1-linux-amd64.tar.gz
+curl -LO https://github.com/haoyuehx/maskriver/releases/download/v1.0.1/SHA256SUMS
 sha256sum -c SHA256SUMS
-tar -xzf maskriver-v1.0.0-linux-amd64.tar.gz
-cd maskriver-v1.0.0-linux-amd64
+tar -xzf maskriver-v1.0.1-linux-amd64.tar.gz
+cd maskriver-v1.0.1-linux-amd64
 ./maskriver --version
 ./maskriver --help
 ```
@@ -97,9 +97,10 @@ SQLite 快速开始见 [Quick Start](docs/guides/quickstart.md)；MySQL 见 [MyS
 - M3-1：strict 完整性、Writer NULL 语义、审批时钟偏差；独立 Architecture/Security/QA PASS。
 - M3-2：真实 MySQL CLI E2E；独立 Architecture/Security/QA PASS。
 - M3-4：345 个生成式检测 case（210 正/135 负）与 5×100 脱敏不变量；仅合成评测，不是生产准确率。
+- v1.0.1：WAL 目标拒绝修复；release binary 黑盒验证拒绝写入且主文件/行不变；发行资产公开下载后复核 SHA-256。
 - v1.0.0 最终验收：独立 Review PASS，无未解决 P0/P1；发行资产在公开下载后复核 SHA-256。
 
-证据入口：[Feature Matrix](docs/feature-matrix.md)、[测试计划](docs/test-plan.md)、[M3 验收](docs/m3/acceptance-matrix.md)、[v1.0.0 验收](docs/releases/v1.0.0-acceptance.md)。
+证据入口：[Feature Matrix](docs/feature-matrix.md)、[测试计划](docs/test-plan.md)、[M3 验收](docs/m3/acceptance-matrix.md)、[v1.0.1 验收](docs/releases/v1.0.1-acceptance.md)。
 
 ## Contributors / 项目贡献者
 
@@ -122,6 +123,7 @@ SQLite 快速开始见 [Quick Start](docs/guides/quickstart.md)；MySQL 见 [MyS
 - [操作指南与教程](docs/guides/README.md)
 - [架构设计](docs/architecture.md) / [共享契约](docs/contracts.md)
 - [Feature Matrix](docs/feature-matrix.md) / [测试计划](docs/test-plan.md)
+- [v1.0.1 发行说明](docs/releases/v1.0.1.md) / [验收记录](docs/releases/v1.0.1-acceptance.md)
 - [v1.0.0 发行说明](docs/releases/v1.0.0.md) / [验收记录](docs/releases/v1.0.0-acceptance.md)
 - [M3 进度](docs/m3/progress.md) / [验收矩阵](docs/m3/acceptance-matrix.md)
 - [竞赛交付材料](docs/competition/project-overview.md)：[核心功能](docs/competition/core-features.md)、[技术亮点](docs/competition/technical-highlights.md)、[演示指南](docs/competition/demo-guide.md)、[提交清单](docs/competition/submission-checklist.md)

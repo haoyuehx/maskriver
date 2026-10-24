@@ -1,5 +1,5 @@
 import { ArrowRight, Github, Play, ShieldCheck } from 'lucide-react';
-import { GITHUB } from '../data/content';
+import { GITHUB, VERSION } from '../data/content';
 
 export default function Hero() {
   return (
@@ -9,7 +9,7 @@ export default function Hero() {
       <div className="hero-copy">
         <div className="eyebrow">
           <span className="status-dot" aria-hidden="true" />
-          Open source · v1.0.0
+          Open source · {VERSION}
           <span className="eyebrow-divider" />
           Linux amd64
         </div>

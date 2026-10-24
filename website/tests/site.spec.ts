@@ -121,6 +121,6 @@ test('video poster loads the real MP4 and playback advances', async ({ page }) =
 
 test('links to the real release and repository are present', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('a[href*="releases/download/v1.0.0/maskriver-v1.0.0-linux-amd64.tar.gz"]').first()).toBeVisible();
+  await expect(page.locator('a[href*="releases/download/v1.0.1/maskriver-v1.0.1-linux-amd64.tar.gz"]').first()).toBeVisible();
   await expect(page.locator('footer a[href="https://github.com/haoyuehx/maskriver"]')).toBeVisible();
 });

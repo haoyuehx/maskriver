@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Github, Menu, X } from 'lucide-react';
 import Logo from './Logo';
-import { GITHUB, nav } from '../data/content';
+import { GITHUB, VERSION, nav } from '../data/content';
 
 export default function Navigation() {
   const [open, setOpen] = useState(false);
@@ -31,7 +31,7 @@ export default function Navigation() {
       <div className="nav-inner">
         <a href="#top" className="nav-brand" aria-label="MaskRiver 首页" onClick={() => setOpen(false)}>
           <Logo />
-          <span className="version-pill">v1.0.0</span>
+          <span className="version-pill">{VERSION}</span>
         </a>
         <nav className="nav-links" aria-label="主导航">
           {nav.map((item) => (
