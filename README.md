@@ -126,7 +126,7 @@ SQLite 快速开始见 [Quick Start](docs/guides/quickstart.md)；MySQL 见 [MyS
 - [v1.0.1 发行说明](docs/releases/v1.0.1.md) / [验收记录](docs/releases/v1.0.1-acceptance.md)
 - [v1.0.0 发行说明](docs/releases/v1.0.0.md) / [验收记录](docs/releases/v1.0.0-acceptance.md)
 - [M3 进度](docs/m3/progress.md) / [验收矩阵](docs/m3/acceptance-matrix.md)
-- [竞赛交付材料](docs/competition/project-overview.md)：[核心功能](docs/competition/core-features.md)、[技术亮点](docs/competition/technical-highlights.md)、[演示指南](docs/competition/demo-guide.md)、[提交清单](docs/competition/submission-checklist.md)
+- [竞赛交付材料](docs/competition/project-overview.md)：[核心功能](docs/competition/core-features.md)、[技术亮点](docs/competition/technical-highlights.md)、[演示指南](docs/competition/demo-guide.md)、[提交清单](docs/competition/submission-checklist.md)、[最终验收](docs/competition/final-acceptance.md)
 - [来源与许可](docs/attribution.md) / [安全边界](docs/guides/security-model.md)
 
 ## License
