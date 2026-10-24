@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Release-binary smoke test for MaskRiver v0.2.0-preview.1.
+"""Release-binary smoke test for a MaskRiver release package.
 
 Runs the extracted release binary (not `go run`) against synthetic, disposable
 SQLite databases. It exercises M1 scan/preview/approve/apply/validate and the
@@ -30,6 +30,17 @@ def run(binary, args, expect=0):
     proc = subprocess.run([binary] + args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if proc.returncode != expect:
         raise SystemExit(f"FAIL: {' '.join(args)} exit={proc.returncode} want={expect}\n{proc.stdout}")
+    return proc.stdout
+
+
+def run_fail(binary, args, fragment):
+    proc = subprocess.run([binary] + args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if proc.returncode == 0:
+        raise SystemExit(f"FAIL: command unexpectedly succeeded: {' '.join(args)}\n{proc.stdout}")
+    if fragment.lower() not in proc.stdout.lower():
+        raise SystemExit(
+            f"FAIL: refusal did not contain {fragment!r}: {' '.join(args)}\n{proc.stdout}"
+        )
     return proc.stdout
 
 
@@ -144,6 +155,33 @@ def main():
         raise SystemExit("FAIL: source changed during M1 workflow")
     if emails(source) == emails(target_m1):
         raise SystemExit("FAIL: M1 target was not masked")
+
+    print("== WAL target refusal (v1.0.1 fail-closed regression) ==")
+    target_wal = os.path.join(work, "target-wal.db")
+    shutil.copyfile(source, target_wal)
+    wal_db = sqlite3.connect(target_wal)
+    try:
+        mode = wal_db.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+    finally:
+        wal_db.close()
+    if str(mode).lower() != "wal":
+        raise SystemExit(f"FAIL: could not switch target to WAL: {mode!r}")
+    wal_common = [target_wal if x == target_m1 else x for x in common]
+    wal_plan = [target_wal if x == target_m1 else x for x in plan]
+    run(binary, ["scan"] + wal_common)
+    run(binary, ["mask"] + wal_plan + ["--key-file", key_file])
+    run(binary, ["approve"] + wal_plan + review)
+    wal_before = sha256(target_wal)
+    run_fail(
+        binary,
+        ["mask"] + wal_plan + ["--key-file", key_file] + review[:4] + ["--approved", "--apply"],
+        "operation refused or incomplete",
+    )
+    if sha256(target_wal) != wal_before:
+        raise SystemExit("FAIL: refused WAL apply modified the target main file")
+    if emails(target_wal) != emails(source):
+        raise SystemExit("FAIL: refused WAL apply changed target rows")
+    print("WAL target refused before write; target main file and rows unchanged")
 
     print("== M2 streaming baseline and recovery schema ==")
     target_m2 = os.path.join(work, "target-m2.db")
