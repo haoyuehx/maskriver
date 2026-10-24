@@ -175,7 +175,7 @@ def main():
     run_fail(
         binary,
         ["mask"] + wal_plan + ["--key-file", key_file] + review[:4] + ["--approved", "--apply"],
-        "incomplete coverage",
+        "operation refused or incomplete",
     )
     if sha256(target_wal) != wal_before:
         raise SystemExit("FAIL: refused WAL apply modified the target main file")
