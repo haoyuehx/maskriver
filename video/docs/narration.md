@@ -1,3 +1,5 @@
+> **历史 Remotion TTS 旁白记录。** 官网终版使用项目负责人剪映配音；终版听感结论见 `docs/audio-review.md` 与 `docs/competition/final-video-qc.md`。
+
 # MaskRiver 产品演示片 · 旁白稿（Narration）
 
 单一事实源：`src/data/script.ts`（`CUES`）。字幕 `subtitles/zh-CN.srt` 由

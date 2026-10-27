@@ -89,5 +89,5 @@ jobs:
           done
           test "$code" = "200"
           grep -q 'MaskRiver' /tmp/site.html
-          test "$(curl -sS -o /dev/null -w '%{http_code}' --http1.1 -r 0-1023 "$base/media/maskriver-demo.mp4")" = "206"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' --http1.1 -r 0-1023 "$base/media/maskriver-demo-v2.mp4")" = "206"
           test "$(curl -sS -o /dev/null -w '%{http_code}' --http1.1 "$base/og-image.png")" = "200"

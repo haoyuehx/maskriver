@@ -44,3 +44,24 @@
 - 视频作为静态媒体随站点部署：13.3 MB 远低于 GitHub Pages 单文件 100 MB 限制和仓库常见容量边界，比外部对象存储更少依赖。
 - 站点不自动播放；点击封面后才加载 MP4，并提供原生 `controls` 不可用时的自定义控制、加载/错误状态和直接打开 MP4 的备用链接。
 - 媒体 URL 通过 `VITE_VIDEO_URL`、`VITE_POSTER_URL`、`VITE_CAPTIONS_URL` 可配置。
+
+---
+
+## 2026-10-27 — final Jianying video accepted for website integration
+
+The website media integration uses the project owner's final Jianying export. The
+project lead listened to and approved the voice track; the technical checks below
+are separate from that user-provided listening conclusion.
+
+- Final MP4: `public/media/maskriver-demo-v2.mp4`
+  - SHA-256: `44bc2418a34c003451ad2db2570e3e1dca78e597612c4e7051795887642c24c8`
+  - 260.018 s · 1920×1080 · 30 fps · H.264 Main + AAC-LC 44.1 kHz stereo
+  - 35 burned Chinese captions + optional 35-cue WebVTT
+  - Jianying export committed by the project owner; project lead confirmed the final voice track after listening.
+- New poster: `public/media/maskriver-demo-v2-poster.png` (23.0 s frame, 1920×1080).
+- The external VTT is **default off** so mobile and desktop do not show burned and
+  external captions at the same time. The player button is labelled as an
+  optional external subtitle track.
+- Old silent media remains in `public/media/` for rollback.
+- Human listening: **PASS — project lead confirmed the final Jianying voice track after listening (user-provided conclusion, not an agent listening test).**
+- Final technical QC is recorded in `docs/competition/final-video-qc.md` and the video PR.

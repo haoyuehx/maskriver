@@ -1,8 +1,9 @@
 # 官网新视频替换方案（待人工听感确认后执行）
 
-**当前状态：未替换。** `https://haoyuehx.github.io/maskriver/` 仍使用旧的无配音
-`website/public/media/maskriver-demo.mp4`。本文件只定义下一轮的执行步骤，不授权在本轮
-覆盖官网媒体，也不声称新版已经上线。
+**当前状态：终版已准备，待 PR #109 合并与 Pages 部署。** 项目负责人已完成剪映中文配音并试听确认；
+候选文件为 `website/public/media/maskriver-demo-v2.mp4`（SHA-256
+`44bc2418a34c003451ad2db2570e3e1dca78e597612c4e7051795887642c24c8`）。在部署成功前，
+线上仍是旧的无配音视频。
 
 ## 当前线上事实（本轮实际检查）
 

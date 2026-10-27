@@ -1,16 +1,36 @@
 # MaskRiver 演示片 · 音轨人工试听包
 
-**状态：HUMAN AUDIO REVIEW REQUIRED（尚未人工试听，不能报告 AUDIO PASS）**
+> **FINAL STATUS (2026-10-27):** The project lead completed the final Jianying
+> Chinese voice track, listened to it, and confirmed it for the final demo. This
+> is a user-provided listening conclusion; no Agent listened to the track. The
+> final file is `website/public/media/maskriver-demo-v2.mp4`, SHA-256
+> `44bc2418a34c003451ad2db2570e3e1dca78e597612c4e7051795887642c24c8`.
+> Final technical QC is in `docs/competition/final-video-qc.md`; the original
+> Remotion measurements below remain historical.
+
+**状态：FINAL USER REVIEW COMPLETED — PASS（项目负责人，2026-10-27）**
 
 本文件把**已实测的技术数据**与**必须由人耳判断的听感问题**分开记录。自动化检查
 只能证明“有音轨、时长对、电平正常、每一条字幕窗口内都有语音”，不能证明发音正确、
 语气自然或与画面听感匹配。
 
-## 试听材料
+## 终版文件（2026-10-27）
+
+| 项 | 值 |
+|---|---|
+| 文件 | `website/public/media/maskriver-demo-v2.mp4` |
+| SHA-256 | `44bc2418a34c003451ad2db2570e3e1dca78e597612c4e7051795887642c24c8` |
+| 时长 / 规格 | 260.018 s · 1920×1080 · 30 fps · H.264 Main + AAC-LC 44.1 kHz stereo |
+| 人工听感 | **PASS — 项目负责人试听并确认可用于正式演示（用户提供的结论）** |
+| 技术 QC | `docs/competition/final-video-qc.md` |
+
+以下为原始 Remotion TTS 音轨的历史试听包，不是终版剪映配音：
+
+## 历史 Remotion 试听材料（非终版）
 
 | 项 | 路径 / 值 |
 |---|---|
-| 完整成片（含画面与烧录字幕） | `video/out/maskriver-demo-new.mp4` |
+| 历史 Remotion 成片 | `video/out/maskriver-demo-new.mp4` |
 | 精简试听包（52.944 s，正片节选，不改变原音） | `video/review/audio-review.mp3` |
 | 试听包 SHA-256 | `d9d4480c67f80f2026df9dfeef2bcf308049f11c557e7921160c9702b03adc2c` |
 | 技术测量原始数据 | `docs/evidence/audio-qc.json` |
@@ -74,21 +94,19 @@ TTS 生成元数据（`out/narration/narration.json`，本地生成记录）显�
 | 11 | 是否有不正常的长静默或突然截断 | 全片 |
 | 12 | 是否愿意让它作为比赛演示片的正式旁白 | 全片 |
 
-## 听感结论（待填写）
+## 终版听感结论（用户提供）
 
-- [ ] PASS — 可作为正式比赛演示片音轨
-- [ ] CONDITIONAL — 可上线但需记录具体瑕疵与后续修复
-- [ ] FAIL — 存在必须修复的误读、截断、严重失真或明显错位
+- [x] **PASS** — 项目负责人已在剪映完成终版中文配音，试听并确认可用于正式演示。
+- [ ] CONDITIONAL
+- [ ] FAIL
 
-具体问题与时间点：
+具体问题与时间点：无阻断问题。该结论由用户提供，不由 Agent 冒充听感审核。
 
-```
-（由人工试听者填写；不要用技术 QC 数据代替本结论）
-```
+历史 Remotion TTS 的原始试听清单保留在本文档中，不改变其历史状态。
 
 ## 已知边界
 
-- 本文件没有声称任何 AI 模型“听过”音轨；技术脚本不解码语义。
-- 未做真人配音、声音克隆或专业录音棚混音。
-- 试听包是节选，不能替代完整 4:20 成片的听感验收。
+- 本文件没有声称任何 AI 模型“听过”音轨；终版结论由项目负责人提供。
+- 终版由项目负责人使用剪映制作；不是 Agent 重新渲染或重新配音。
+- 历史试听包是原始 Remotion 音轨节选，不代表终版剪映音轨。
 - 音频若需修改，优先只重混音轨并使用新的 QC；若改动字幕或旁白窗口，必须重新渲染并重新抽帧/评审。
