@@ -245,7 +245,7 @@ export default function VideoPlayer() {
       </div>
       <div className="video-notes">
         <span><span className="dot teal" /> 画面已含烧录字幕；外挂字幕默认关闭，可手动开启</span>
-        <span><span className="dot amber" /> 中文配音 · AAC 48 kHz · 音量可调</span>
+        <span><span className="dot amber" /> 中文配音 · AAC 44.1 kHz · 音量可调</span>
         <a href={VIDEO_URL} target="_blank" rel="noreferrer">直接打开 MP4 <ExternalLink size={13} aria-hidden="true" /></a>
       </div>
     </section>

@@ -52,14 +52,15 @@
 The website media integration is prepared on a branch, not published until the
 human audio review is complete.
 
-- New MP4: `public/media/maskriver-demo-v2.mp4`
-  - SHA-256: `f7b3a07b20e26dbfbd28f2087eb5cf34976b98b02a7c53d6323213334b515ff9`
-  - 260.054 s · 1920×1080 · 30 fps · H.264 + AAC-LC 48 kHz stereo
+- Final MP4: `public/media/maskriver-demo-v2.mp4`
+  - SHA-256: `44bc2418a34c003451ad2db2570e3e1dca78e597612c4e7051795887642c24c8`
+  - 260.018 s · 1920×1080 · 30 fps · H.264 Main + AAC-LC 44.1 kHz stereo
   - 35 burned Chinese captions + optional 35-cue WebVTT
+  - Jianying export committed by the project owner; project lead confirmed the final voice track after listening.
 - New poster: `public/media/maskriver-demo-v2-poster.png` (23.0 s frame, 1920×1080).
 - The external VTT is **default off** so mobile and desktop do not show burned and
   external captions at the same time. The player button is labelled as an
   optional external subtitle track.
 - Old silent media remains in `public/media/` for rollback.
-- Human listening: **HUMAN AUDIO REVIEW REQUIRED**. Technical audio QC is not a
-  listening result and does not authorize publishing the new voice track.
+- Human listening: **PASS — project lead confirmed the final Jianying voice track after listening (user-provided conclusion, not an agent listening test).**
+- Final technical QC is recorded in `docs/competition/final-video-qc.md` and the video PR.
