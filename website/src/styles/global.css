@@ -618,13 +618,6 @@ video::cue { background: #04101ce8; color: #fff; font-family: var(--sans); font-
   .video-controls button:nth-last-child(1) { display: grid; }
 }
 
-/* The v2 poster art includes the logo, tagline and chips. Below 1360px the
-   bottom overlay label would collide with those burned-in chips; keep only the
-   runtime metadata there. */
-@media (max-width: 1360px) {
-  .poster-label { display: none; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

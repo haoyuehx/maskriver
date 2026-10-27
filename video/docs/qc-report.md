@@ -1,3 +1,5 @@
+> **历史 Remotion 成片 QC。** 官网终版是项目负责人的剪映导出（260.018 s / AAC 44.1 kHz）；终版实测见 `docs/competition/final-video-qc.md`。
+
 # MaskRiver 演示片 · 技术验收（QC Report）
 
 全部数值来自本机实测，命令与工具见下。原始 JSON：`docs/evidence/qc-report.json`（由 `scripts/qc-video.mjs` 生成，`out/qc-report.json` 同内容）。

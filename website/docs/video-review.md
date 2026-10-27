@@ -47,10 +47,11 @@
 
 ---
 
-## 2026-10-24 — v2 integration (audio approval pending)
+## 2026-10-27 — final Jianying video accepted for website integration
 
-The website media integration is prepared on a branch, not published until the
-human audio review is complete.
+The website media integration uses the project owner's final Jianying export. The
+project lead listened to and approved the voice track; the technical checks below
+are separate from that user-provided listening conclusion.
 
 - Final MP4: `public/media/maskriver-demo-v2.mp4`
   - SHA-256: `44bc2418a34c003451ad2db2570e3e1dca78e597612c4e7051795887642c24c8`

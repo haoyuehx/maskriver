@@ -1,3 +1,5 @@
+> **历史 Remotion 工程记录。** 官网最终使用项目负责人在剪映完成的终版中文配音；终版文件与验收见 `docs/competition/final-video-qc.md`，不要用本页原始 TTS 状态代表终版。
+
 # MaskRiver 演示片 · 执行进度（Progress）
 
 > 若会话上下文中断，从这里恢复。只记录**实际发生**的事情与实际生成的文件。
