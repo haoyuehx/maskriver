@@ -440,14 +440,21 @@ const cnCompoundSurnames = "|欧阳|司马|上官|诸葛|令狐|慕容|皇甫|�
 // place name is a stronger competing claim than a surname+shape guess and would
 // otherwise produce a known false positive such as 成都 under a name column,
 // which stays Unknown. The rule requires name column context, and it still does
-// not exclude every ordinary word that starts with a listed surname
-// (李子/白天/石头 are documented limitations, see the synthetic evaluation).
+// not distinguish every real name from an ordinary word. A small set of
+// high-confidence ordinary two-character words is deliberately left Unknown;
+// a real person with the same written name needs review rather than an
+// automatic sensitive classification.
+const cnAmbiguousOrdinaryWords = "|李子|白天|石头|王府|林业|高铁|周末|马路|"
+
 func cnPersonNameMatch(v contracts.Value, _ string) bool {
 	s, ok := text(v)
 	if !ok {
 		return false
 	}
 	if cnGeographicNameAllowed(s) {
+		return false
+	}
+	if cnNameInList(cnAmbiguousOrdinaryWords, s) {
 		return false
 	}
 	runes := []rune(s)

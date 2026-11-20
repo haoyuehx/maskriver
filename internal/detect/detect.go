@@ -51,7 +51,7 @@ func New() contracts.Detector {
 		{id: "cn_postal_code", match: cnPostalCodeMatch, contexts: []string{"postal", "postcode", "zip", "邮编", "邮政编码"}, excludeContexts: []string{"order", "transaction", "订单", "交易", "流水"}, requiresContext: true},
 		{id: "cn_uscc", match: cnUSCCMatch, contexts: []string{"uscc", "统一社会信用代码", "社会信用代码"}},
 		{id: "cn_city", match: cnCityMatch, contexts: []string{"city", "province", "region", "城市", "省", "省份", "地区", "自治区", "所在地"}, requiresContext: true},
-		{id: "cn_person_name", match: cnPersonNameMatch, contexts: []string{"name", "姓名", "名字", "人名", "联系人"}, requiresContext: true},
+		{id: "cn_person_name", match: cnPersonNameMatch, contexts: []string{"name", "姓名", "名字", "人名", "联系人"}, excludeContexts: []string{"product", "department", "商品", "产品", "部门"}, requiresContext: true},
 		{id: "cn_address", match: cnAddressMatch, contexts: []string{"address", "addr", "street", "地址", "住址", "详址"}, excludeContexts: []string{"email", "mail", "ip", "url", "uri", "link", "website", "site", "web"}, requiresContext: true},
 	}}
 }
