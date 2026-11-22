@@ -49,8 +49,14 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 func run(args []string, stdout, stderr io.Writer) int {
 	state := &outputState{}
 	code := execute(args, stdout, stderr, state)
-	if state.json && !state.emitted {
-		emitValidateJSON(stdout, failedValidateJSONReport(state.strict))
+	if state.json && !state.attempted {
+		state.attempted = true
+		if err := emitValidateJSON(stdout, failedValidateJSONReport(state.strict)); err != nil {
+			fmt.Fprintln(stderr, "validate: report output failed")
+			if code == 0 {
+				return 1
+			}
+		}
 	}
 	return code
 }
@@ -347,8 +353,11 @@ func execute(args []string, stdout, stderr io.Writer, state *outputState) int {
 			// The human summary is still produced, but it is a diagnostic in JSON
 			// mode: stderr keeps it and stdout carries the single report object.
 			fmt.Fprint(stderr, summary)
-			emitValidateJSON(stdout, validateJSONFromReport(report, strict, passed))
-			state.emitted = true
+			state.attempted = true
+			if err := emitValidateJSON(stdout, validateJSONFromReport(report, strict, passed)); err != nil {
+				fmt.Fprintln(stderr, "validate: report output failed")
+				return 1
+			}
 		} else {
 			fmt.Fprint(stdout, summary)
 		}

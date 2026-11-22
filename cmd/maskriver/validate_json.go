@@ -33,14 +33,14 @@ const (
 	validateStatusError = "error"
 )
 
-// outputState records the output contract one invocation asked for and whether it
-// has been satisfied yet. It is per invocation, so the recursive help call in
-// main.go never inherits a JSON requirement.
+// outputState records the output contract one invocation asked for and whether a
+// report write has been attempted. It is per invocation, so the recursive help
+// call in main.go never inherits a JSON requirement.
 type outputState struct {
 	// json is true once the validate command accepted --format json.
 	json bool
-	// emitted is true once the report object reached stdout.
-	emitted bool
+	// attempted prevents retrying a potentially partial JSON write.
+	attempted bool
 	// strict is the --strict value the verdict is computed with, recorded so an
 	// error report can state the setting it failed under.
 	strict bool
@@ -115,16 +115,23 @@ func failedValidateJSONReport(strict bool) validateJSONReport {
 	}
 }
 
-// emitValidateJSON writes exactly one JSON object followed by a newline. The
-// struct is fixed, so encoding can not fail; a write failure is not retried,
-// because writing a second object to the same stream would break the one-object
-// contract the caller already promised.
-func emitValidateJSON(w io.Writer, report validateJSONReport) {
+// emitValidateJSON writes one JSON object followed by a newline. The caller must
+// return a nonzero exit code on a failed or short write; retrying could append a
+// second object to an already partially written stream.
+func emitValidateJSON(w io.Writer, report validateJSONReport) error {
 	raw, err := json.Marshal(report)
 	if err != nil {
-		return
+		return err
 	}
-	_, _ = w.Write(append(raw, '\n'))
+	message := append(raw, '\n')
+	n, err := w.Write(message)
+	if err != nil {
+		return err
+	}
+	if n != len(message) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
 
 // issueStatusName spells a contract status, so the report never depends on the

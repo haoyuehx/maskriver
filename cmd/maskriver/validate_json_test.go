@@ -118,7 +118,9 @@ func TestValidateJSONReportShape(t *testing.T) {
 	}
 
 	var raw bytes.Buffer
-	emitValidateJSON(&raw, validateJSONFromReport(report, true, false))
+	if err := emitValidateJSON(&raw, validateJSONFromReport(report, true, false)); err != nil {
+		t.Fatal(err)
+	}
 	object := decodeSingleJSONObject(t, raw.Bytes())
 	requireKeys(t, "report", object,
 		"schema_version", "status", "complete", "strict", "coverage", "issues")
@@ -172,10 +174,12 @@ func TestValidateJSONReportShape(t *testing.T) {
 	// Non-strict mode is recorded as the setting it was, and a passing report
 	// carries an always-present empty issue array rather than null.
 	var passing bytes.Buffer
-	emitValidateJSON(&passing, validateJSONFromReport(
+	if err := emitValidateJSON(&passing, validateJSONFromReport(
 		contracts.ValidationReport{Coverage: contracts.Coverage{Complete: true, Tables: 1, Columns: 1, Rows: 1}},
 		false, true,
-	))
+	)); err != nil {
+		t.Fatal(err)
+	}
 	clean := decodeSingleJSONObject(t, passing.Bytes())
 	if clean["status"] != validateStatusPass || clean["strict"] != false {
 		t.Fatalf("clean report status/strict=%v/%v, want pass/false", clean["status"], clean["strict"])
@@ -364,4 +368,67 @@ func TestCLIValidateJSONUsageRefusals(t *testing.T) {
 	}
 	assertNoSecrets(t, f, "json stdout", out.String())
 	assertNoSecrets(t, f, "json stderr", errOut.String())
+}
+
+// brokenJSONWriter simulates a destination that rejects the report or accepts
+// only part of it. Its error text must never be included in diagnostics.
+type brokenJSONWriter struct {
+	short bool
+	calls int
+}
+
+func (w *brokenJSONWriter) Write(p []byte) (int, error) {
+	w.calls++
+	if w.short {
+		return len(p) / 2, nil
+	}
+	return 0, errors.New("SENSITIVE_WRITER_ERROR_SENTINEL")
+}
+
+// An automated acceptance run must not be told validation succeeded unless its
+// machine-readable verdict was actually delivered. A partial write must not be
+// retried, since that could produce concatenated or corrupted JSON.
+func TestCLIValidateJSONOutputFailureIsNonzero(t *testing.T) {
+	f := newE2EFixture(t, e2eOneTable...)
+	scopes := []string{"people.email"}
+	f.run(t, 0, f.approveArgs(scopes...)...)
+	f.run(t, 0, f.applyArgs(scopes...)...)
+	args := append([]string{"validate"}, f.planArgs(scopes...)...)
+	args = append(args, "--key-file", f.keyFile, "--strict", "--format", "json")
+
+	for _, tt := range []struct {
+		name  string
+		short bool
+	}{
+		{name: "writer error"},
+		{name: "short write", short: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			writer := &brokenJSONWriter{short: tt.short}
+			var errOut bytes.Buffer
+			if code := run(args, writer, &errOut); code != 1 {
+				t.Fatalf("report write failed but exit=%d, want 1", code)
+			}
+			if writer.calls != 1 {
+				t.Fatalf("report write attempted %d times, want exactly 1", writer.calls)
+			}
+			if !strings.Contains(errOut.String(), "validate: report output failed") {
+				t.Fatalf("missing sanitized write error: %q", errOut.String())
+			}
+			if strings.Contains(errOut.String(), "SENSITIVE_WRITER_ERROR_SENTINEL") {
+				t.Fatalf("writer error text leaked into stderr: %q", errOut.String())
+			}
+		})
+	}
+
+	// Early configuration refusal also attempts to emit one error object. Its
+	// failure must preserve the existing nonzero exit and avoid a second write.
+	writer := &brokenJSONWriter{}
+	var errOut bytes.Buffer
+	if code := run([]string{"validate", "--format", "json"}, writer, &errOut); code != 2 {
+		t.Fatalf("config refusal exit=%d, want 2", code)
+	}
+	if writer.calls != 1 {
+		t.Fatalf("error report write attempted %d times, want exactly 1", writer.calls)
+	}
 }
