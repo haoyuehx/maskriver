@@ -51,3 +51,89 @@ func TestCnPersonNameIssue112SparseSampleStaysUnknown(t *testing.T) {
 		t.Fatalf("sparse name sample classified: %#v", r)
 	}
 }
+
+func TestCnPersonNameIssue112PersonRolesOverrideEntityContext(t *testing.T) {
+	for _, tc := range []struct{ column, value string }{
+		{"department_manager_name", "王明"},
+		{"department_contact_name", "李小明"},
+		{"product_owner_name", "王芳"},
+		{"product_manager_name", "陈大文"},
+		{"department_manager_full_name", "王明"},
+		{"department_contact_first_name", "李小明"},
+		{"product_owner_full_name", "王芳"},
+		{"product_manager_display_name", "陈大文"},
+		{"department_head_name", "王明"},
+		{"department_director_name", "李小明"},
+		{"product_assignee_name", "王芳"},
+		{"department_supervisor_name", "陈大文"},
+		{"产品经理姓名", "张伟"},
+		{"部门负责人姓名", "王明"},
+		{"部门联系人", "李小明"},
+		{"部门员工名字", "王明"},
+		{"产品经理名字", "张伟"},
+		{"部门人名", "王明"},
+		{"产品负责人人名", "李小明"},
+	} {
+		t.Run(tc.column, func(t *testing.T) {
+			r := cnDetect(t, tc.column, 1, tc.value)
+			if r.Sensitivity != contracts.Sensitive || r.RuleID != "cn_person_name" {
+				t.Fatalf("person-role column must classify as a name: %#v", r)
+			}
+		})
+	}
+	for _, tc := range []struct{ column, value string }{
+		{"product_name", "王明"},
+		{"department_name", "张伟"},
+		{"employee_department_name", "李小明"},
+		{"manager_product_name", "陈大文"},
+		{"owner_product_name", "王芳"},
+		{"员工部门姓名", "李小明"},
+		{"经理产品姓名", "陈大文"},
+		{"员工部门名字", "王明"},
+		{"员工产品名字", "张伟"},
+	} {
+		t.Run(tc.column, func(t *testing.T) {
+			r := cnDetect(t, tc.column, 1, tc.value)
+			if r.Sensitivity != contracts.Unknown {
+				t.Fatalf("entity-name column must remain unknown: %#v", r)
+			}
+		})
+	}
+}
+
+func TestCnPersonNameIssue112PersonRolesAtProductionThreshold(t *testing.T) {
+	// Twenty distinct synthetic samples exercise the default MinSamples=20
+	// and MinRatio=.9 gates. Eighteen are name-shaped; two are ordinary words.
+	values := []string{
+		"王明", "李小明", "张伟", "刘洋", "陈静", "杨帆", "赵磊", "黄敏", "吴强",
+		"周杰", "徐亮", "孙晨", "马超", "朱琳", "胡军", "郭伟", "何芳", "罗敏",
+		"普通文本", "测试词语",
+	}
+	for _, column := range []string{
+		"department_manager_name", "product_owner_name", "部门负责人姓名", "部门联系人",
+		"department_manager_full_name", "department_contact_first_name",
+		"product_owner_full_name", "product_manager_display_name",
+		"department_head_name", "department_director_name", "product_assignee_name",
+		"部门员工名字", "产品经理名字",
+		"部门人名", "产品负责人人名",
+	} {
+		t.Run(column, func(t *testing.T) {
+			r := cnDetect(t, column, 0, values...)
+			if r.Sensitivity != contracts.Sensitive || r.RuleID != "cn_person_name" {
+				t.Fatalf("default-threshold person field must remain sensitive: %#v", r)
+			}
+		})
+	}
+	for _, column := range []string{
+		"product_name", "department_name", "employee_department_name",
+		"manager_product_name", "owner_product_name",
+		"员工部门姓名", "经理产品姓名", "员工部门名字", "员工产品名字",
+	} {
+		t.Run(column, func(t *testing.T) {
+			r := cnDetect(t, column, 0, values...)
+			if r.Sensitivity != contracts.Unknown {
+				t.Fatalf("default-threshold entity name must remain unknown: %#v", r)
+			}
+		})
+	}
+}
