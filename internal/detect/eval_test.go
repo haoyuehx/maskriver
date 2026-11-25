@@ -25,8 +25,8 @@ import (
 // bounded rule deliberately does not cover; they are counted as false negatives
 // so recall is not inflated), and confusing negatives (near-miss or ambiguous
 // values; a false positive is reported rather than hidden). Ordinary words that
-// start with a listed surname (李子/白天/石头) are included as negatives so the
-// cn_person_name false positives they cause are measured, not hidden.
+// start with a listed surname (李子/白天/石头) are included as negatives so
+// changes in cn_person_name precision remain visible.
 
 // evalSample is one labeled (value, column) observation.
 type evalSample struct {

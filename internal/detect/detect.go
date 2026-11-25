@@ -51,7 +51,7 @@ func New() contracts.Detector {
 		{id: "cn_postal_code", match: cnPostalCodeMatch, contexts: []string{"postal", "postcode", "zip", "邮编", "邮政编码"}, excludeContexts: []string{"order", "transaction", "订单", "交易", "流水"}, requiresContext: true},
 		{id: "cn_uscc", match: cnUSCCMatch, contexts: []string{"uscc", "统一社会信用代码", "社会信用代码"}},
 		{id: "cn_city", match: cnCityMatch, contexts: []string{"city", "province", "region", "城市", "省", "省份", "地区", "自治区", "所在地"}, requiresContext: true},
-		{id: "cn_person_name", match: cnPersonNameMatch, contexts: []string{"name", "姓名", "名字", "人名", "联系人"}, requiresContext: true},
+		{id: "cn_person_name", match: cnPersonNameMatch, contexts: []string{"name", "姓名", "名字", "人名", "联系人"}, excludeContexts: []string{"product", "department", "商品", "产品", "部门"}, requiresContext: true},
 		{id: "cn_address", match: cnAddressMatch, contexts: []string{"address", "addr", "street", "地址", "住址", "详址"}, excludeContexts: []string{"email", "mail", "ip", "url", "uri", "link", "website", "site", "web"}, requiresContext: true},
 	}}
 }
@@ -203,7 +203,7 @@ type rule struct {
 }
 
 func (r rule) matchesContext(tokens []string) bool {
-	if r.hasExcludedContext(tokens) {
+	if r.hasExcludedContext(tokens) && (r.id != "cn_person_name" || !cnHasPersonRoleContext(tokens)) {
 		return false
 	}
 	for _, keyword := range r.contexts {
@@ -219,6 +219,57 @@ func (r rule) matchesContext(tokens []string) bool {
 				return true
 			}
 		}
+	}
+	return false
+}
+
+// Product and department names are not person fields, but columns such as
+// product_owner_name or 部门负责人姓名 explicitly name a person. Only a role
+// qualifying "name", optionally separated by person-name modifiers such as
+// "full" or "first" (or immediately preceding a Chinese name suffix),
+// overrides the entity exclusion: employee_department_name and 员工部门名字
+// describe a department, not an employee's name.
+func cnHasPersonRoleContext(tokens []string) bool {
+	for _, token := range tokens {
+		if strings.HasSuffix(token, "联系人") || strings.HasSuffix(token, "人名") {
+			return true
+		}
+		for _, suffix := range []string{"姓名", "名字"} {
+			if !strings.HasSuffix(token, suffix) {
+				continue
+			}
+			prefix := strings.TrimSuffix(token, suffix)
+			for _, role := range []string{"负责人", "联系人", "经理", "员工", "主管", "主任", "领导", "责任人"} {
+				if strings.HasSuffix(prefix, role) {
+					return true
+				}
+			}
+		}
+	}
+	for i := 1; i < len(tokens); i++ {
+		if tokens[i] != "name" {
+			continue
+		}
+		j := i - 1
+		for j >= 0 && cnIsNameModifier(tokens[j]) {
+			j--
+		}
+		if j < 0 {
+			continue
+		}
+		switch tokens[j] {
+		case "owner", "manager", "contact", "employee", "leader", "staff", "person",
+			"head", "director", "supervisor", "assignee", "lead", "representative", "operator", "admin", "agent":
+			return true
+		}
+	}
+	return false
+}
+
+func cnIsNameModifier(token string) bool {
+	switch token {
+	case "full", "first", "last", "display", "legal", "preferred", "given", "middle", "family":
+		return true
 	}
 	return false
 }

@@ -229,14 +229,13 @@ func TestCnPersonNameDeclinesGeographicAlias(t *testing.T) {
 	}
 }
 
-func TestCnPersonNameSurnameLeadingWordsDocumented(t *testing.T) {
-	// These ordinary words start with listed surnames (李/白/石) and satisfy the
-	// two-Han shape, so they remain measured false positives under a name column.
-	// The synthetic evaluation counts them rather than hiding them.
+func TestCnPersonNameSurnameLeadingWordsStayUnknown(t *testing.T) {
+	// These ordinary words can satisfy the surname and Han shape, but the
+	// competing lexical evidence means an automatic name decision is unsafe.
 	for _, value := range []string{"李子", "白天", "石头"} {
 		r := cnDetect(t, "name", 1, value)
-		if r.Sensitivity != contracts.Sensitive || r.RuleID != "cn_person_name" {
-			t.Fatalf("documented surname-leading ambiguity changed: %#v", r)
+		if r.Sensitivity != contracts.Unknown {
+			t.Fatalf("surname-leading ordinary word classified: %#v", r)
 		}
 	}
 }
