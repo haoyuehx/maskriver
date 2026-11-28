@@ -137,9 +137,22 @@ func (*validator) Validate(ctx context.Context, source, target contracts.Reader,
 			continue
 		}
 		cols := plannedColumns(plan)
+		var untouched []contracts.ColumnRef
+		if req.Strict {
+			selected := make(map[string]bool, len(cols))
+			for _, name := range cols {
+				selected[name] = true
+			}
+			for _, col := range srcSchema.Columns {
+				if !selected[col.Ref.Column] {
+					cols = append(cols, col.Ref.Column)
+					untouched = append(untouched, col.Ref)
+				}
+			}
+		}
 		src := newCursor(source, plan.Table, cols, plan.PrimaryKey, req.RowLimit)
 		dst := newCursor(target, plan.Table, cols, plan.PrimaryKey, req.RowLimit)
-		scanned, err := compareRows(ctx, &src, &dst, plan, &report)
+		scanned, err := compareRows(ctx, &src, &dst, plan, untouched, &report)
 		if err != nil {
 			if ctx.Err() != nil {
 				return report, ctx.Err()
@@ -640,7 +653,7 @@ func compareKeys(a, b []contracts.Value) (int, bool) {
 	return 0, true
 }
 
-func compareRows(ctx context.Context, src, dst *cursor, plan contracts.TablePlan, report *contracts.ValidationReport) (int64, error) {
+func compareRows(ctx context.Context, src, dst *cursor, plan contracts.TablePlan, untouched []contracts.ColumnRef, report *contracts.ValidationReport) (int64, error) {
 	var verified int64
 	left, hasLeft, err := src.next(ctx)
 	if err != nil {
@@ -692,6 +705,16 @@ func compareRows(ctx context.Context, src, dst *cursor, plan contracts.TablePlan
 						addIssue(report, contracts.Issue{
 							Status: contracts.Fail, Code: contracts.UnchangedValue,
 							Column: col.Column, Count: 1,
+						})
+					}
+				}
+				for _, col := range untouched {
+					a, aOK := left[col.Column]
+					b, bOK := right[col.Column]
+					if !aOK || !bOK || a.Kind() != b.Kind() || a != b {
+						addIssue(report, contracts.Issue{
+							Status: contracts.Fail, Code: contracts.ConflictingEvidence,
+							Column: col, Count: 1,
 						})
 					}
 				}
