@@ -2,6 +2,7 @@ package verify
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"strings"
@@ -9,6 +10,35 @@ import (
 
 	"github.com/haoyuehx/maskriver/pkg/contracts"
 )
+
+// projectionReader models adapters that return only explicitly requested columns.
+// This ensures strict verification actually requests the unplanned columns.
+type projectionReader struct {
+	*fakeReader
+	requested bool
+}
+
+func (r *projectionReader) Page(ctx context.Context, req contracts.PageRequest) (contracts.Page, error) {
+	for _, name := range req.Columns {
+		if name == "name" {
+			r.requested = true
+		}
+	}
+	page, err := r.fakeReader.Page(ctx, req)
+	if err != nil {
+		return page, err
+	}
+	for i, row := range page.Rows {
+		projected := make(contracts.Row, len(req.Columns))
+		for _, name := range req.Columns {
+			if value, ok := row[name]; ok {
+				projected[name] = value
+			}
+		}
+		page.Rows[i] = projected
+	}
+	return page, nil
+}
 
 func TestStrictUnplannedColumns(t *testing.T) {
 	ref, schema := peopleTable(), peopleSchema() // no UNIQUE constraints
@@ -32,9 +62,13 @@ func TestStrictUnplannedColumns(t *testing.T) {
 			src, dst := newFakeReader(), newFakeReader()
 			src.addTable(ref, schema, []contracts.Row{tc.src})
 			dst.addTable(ref, schema, []contracts.Row{tc.dst})
-			rep, err := New().Validate(context.Background(), src, dst, contracts.ValidateRequest{Plan: peoplePlan(), Strict: true})
+			ps, pd := &projectionReader{fakeReader: src}, &projectionReader{fakeReader: dst}
+			rep, err := New().Validate(context.Background(), ps, pd, contracts.ValidateRequest{Plan: peoplePlan(), Strict: true})
 			if err != nil || rep.Passed(true) != tc.pass {
 				t.Fatalf("strict pass=%v, expected=%v, err=%v, issues=%v", rep.Passed(true), tc.pass, err, rep.Issues)
+			}
+			if !ps.requested || !pd.requested {
+				t.Fatal("strict reader did not request the unplanned column")
 			}
 			if !tc.pass && !hasIssue(rep, contracts.ConflictingEvidence) {
 				t.Fatalf("expected safe conflict evidence: %v", rep.Issues)
@@ -46,6 +80,10 @@ func TestStrictUnplannedColumns(t *testing.T) {
 				if strings.Contains(strings.ToLower(issue.Column.Column), "secret") {
 					t.Fatal("report leaked field value")
 				}
+			}
+			encoded, err := json.Marshal(rep)
+			if err != nil || strings.Contains(string(encoded), "original-secret") || strings.Contains(string(encoded), "tampered") || strings.Contains(string(encoded), "preserved") {
+				t.Fatalf("report JSON includes raw data or cannot marshal: %v", err)
 			}
 		})
 	}
