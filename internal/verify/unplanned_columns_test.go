@@ -46,9 +46,9 @@ func TestStrictUnplannedColumns(t *testing.T) {
 	original := contracts.Row{"id": key, "email": textV("original-secret"), "name": textV("preserved")}
 	masked := contracts.Row{"id": key, "email": textV("redacted"), "name": textV("preserved")}
 	for _, tc := range []struct {
-		name string
+		name     string
 		src, dst contracts.Row
-		pass bool
+		pass     bool
 	}{
 		{"unchanged", original, masked, true},
 		{"changed", original, contracts.Row{"id": key, "email": textV("redacted"), "name": textV("tampered")}, false},
