@@ -205,8 +205,35 @@ func (e *Engine) Preview(ctx context.Context, req contracts.PreviewRequest) (con
 	// Preview is Apply's dry run, so the same whole-plan static capability gate
 	// runs here: a plan that can not be applied is refused before any row is
 	// read.
-	if err := e.preflight(ctx, req.Plan); err != nil {
+	uniqueEmail, err := e.preflightPlan(ctx, req.Plan, true)
+	if err != nil {
 		return report, err
+	}
+	if uniqueEmail {
+		report.PlanID = req.Plan.ID
+		if req.LimitPerTable < 0 {
+			return report, contracts.ErrInvalid
+		}
+		readLimit := maxUniqueEmailRows
+		if req.LimitPerTable > 0 && req.LimitPerTable < readLimit {
+			readLimit = req.LimitPerTable
+			n, err := e.source.Count(ctx, req.Plan.Tables[0].Table)
+			if err != nil {
+				return report, err
+			}
+			// A transaction-wide uniqueness proof cannot be sampled. Refuse
+			// before reading values rather than exceed the caller's preview cap.
+			if n > int64(readLimit) {
+				return report, contracts.ErrIncomplete
+			}
+		}
+		changes, err := e.uniqueEmailChanges(ctx, req.Plan, readLimit)
+		if err != nil {
+			return report, err
+		}
+		report.RowsRead = int64(len(changes))
+		report.Coverage = contracts.Coverage{Complete: true, Tables: 1, Columns: 1, Rows: report.RowsRead}
+		return report, nil
 	}
 	// No Writer is opened, even for nonempty preview.
 	coverage, err := e.visit(ctx, req.Plan, int64(req.LimitPerTable), 0, func(contracts.RowChange) error { return nil })
@@ -234,28 +261,45 @@ func (e *Engine) Preview(ctx context.Context, req contracts.PreviewRequest) (con
 // changed row from being overwritten silently, but neither makes the source or
 // target snapshot immutable for the length of the run.
 func (e *Engine) preflight(ctx context.Context, plan contracts.Plan) error {
+	// Streaming/recovery retain the original UNIQUE refusal. Only the legacy
+	// single-transaction path can opt in to the bounded email exception.
+	_, err := e.preflightPlan(ctx, plan, false)
+	return err
+}
+
+func (e *Engine) preflightPlan(ctx context.Context, plan contracts.Plan, allowUniqueEmail bool) (bool, error) {
+	allowUniqueEmail = allowUniqueEmail && e.uniqueEmailEnabled
 	if err := plan.ValidateShape(); err != nil {
-		return err
+		return false, err
 	}
 	if err := e.checkPlan(ctx, plan); err != nil {
-		return err
+		return false, err
 	}
 	schemas, err := e.describePlanTables(ctx, plan)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := e.checkPlanBinding(plan, schemas); err != nil {
-		return err
+		return false, err
 	}
+	uniqueEmail := false
 	for _, table := range plan.Tables {
 		if err := ctx.Err(); err != nil {
-			return err
+			return false, err
 		}
-		if err := e.checkTableCapabilities(ctx, table, schemas[table.Table.Table]); err != nil {
-			return err
+		schema := schemas[table.Table.Table]
+		unique := modifiedUnique(table, schema)
+		if unique && allowUniqueEmail {
+			if err := e.checkUniqueEmailScope(ctx, plan, schema); err != nil {
+				return false, err
+			}
+			uniqueEmail = true
+		}
+		if err := e.checkTableCapabilitiesMode(ctx, table, schema, uniqueEmail); err != nil {
+			return false, err
 		}
 	}
-	return e.checkIncomingReferences(ctx, plan)
+	return uniqueEmail, e.checkIncomingReferences(ctx, plan)
 }
 
 // describePlanTables requires a complete live description of every planned
@@ -339,7 +383,7 @@ func (e *Engine) checkPlanBinding(plan contracts.Plan, schemas map[string]contra
 //
 // UNIQUE: masking is deterministic but not proven collision-free, so a modified
 // column inside a unique index or constraint can collide and break it. Refuse
-// with ErrUnsafe.
+// with ErrUnsafe except for the separately checked bounded SQLite email path.
 // CHECK: the masked value may violate a CHECK expression that mentions the
 // column, and this gate does not evaluate SQL expressions. Refuse with
 // ErrUnsupported.
@@ -353,6 +397,10 @@ func (e *Engine) checkPlanBinding(plan contracts.Plan, schemas map[string]contra
 // only makes SQLite maintain that index, and no value can violate it, so plain
 // indexes are allowed rather than refused.
 func (e *Engine) checkTableCapabilities(ctx context.Context, table contracts.TablePlan, schema contracts.TableSchema) error {
+	return e.checkTableCapabilitiesMode(ctx, table, schema, false)
+}
+
+func (e *Engine) checkTableCapabilitiesMode(ctx context.Context, table contracts.TablePlan, schema contracts.TableSchema, uniqueEmail bool) error {
 	modified := make(map[string]bool, len(table.Columns))
 	for _, col := range table.Columns {
 		modified[col.Column.Column] = true
@@ -375,7 +423,7 @@ func (e *Engine) checkTableCapabilities(ctx context.Context, table contracts.Tab
 	}
 	for _, unique := range schema.Unique {
 		for _, name := range unique {
-			if modified[name] {
+			if modified[name] && !uniqueEmail {
 				return contracts.ErrUnsafe
 			}
 		}
@@ -385,7 +433,7 @@ func (e *Engine) checkTableCapabilities(ctx context.Context, table contracts.Tab
 			continue
 		}
 		for _, name := range index.Columns {
-			if modified[name] {
+			if modified[name] && !uniqueEmail {
 				return contracts.ErrUnsafe
 			}
 		}
@@ -543,8 +591,37 @@ func (e *Engine) Apply(ctx context.Context, req contracts.ApplyRequest) (contrac
 	if err := e.checkApproval(ctx, req.Plan); err != nil {
 		return report, err
 	}
-	if err := e.preflight(ctx, req.Plan); err != nil {
+	uniqueEmail, err := e.preflightPlan(ctx, req.Plan, true)
+	if err != nil {
 		return report, err
+	}
+	if uniqueEmail {
+		// Retain all checked candidates, then pass them to the existing Writer
+		// as ONE batch. A request smaller than the table refuses before opening
+		// the Writer; it must never commit a successful prefix of a UNIQUE run.
+		changes, err := e.uniqueEmailChanges(ctx, req.Plan, req.BatchSize)
+		if err != nil {
+			return report, err
+		}
+		opts, err := e.cfg.DatabaseOptions(false)
+		if err != nil {
+			return report, err
+		}
+		openWriter := e.openWriter
+		if openWriter == nil {
+			openWriter = db.OpenWriter
+		}
+		run := &applyRun{engine: e, report: &report, batch: req.BatchSize}
+		run.open = func(ctx context.Context) (contracts.Writer, error) { return openWriter(ctx, opts) }
+		run.beforeCommit = func(ctx context.Context) error {
+			return e.checkUniqueEmailCommit(ctx, req.Plan, len(changes))
+		}
+		defer run.close()
+		if _, err := run.writeBatch(ctx, req.Plan.Tables[0], 1, changes); err != nil {
+			return report, err
+		}
+		report.Complete = true
+		return report, nil
 	}
 	// Full dry run completes and proves the target matches source over every
 	// planned row and column BEFORE opening a Writer. Unknown/partial scans
@@ -583,7 +660,10 @@ type applyRun struct {
 	report *contracts.ApplyReport
 	open   func(context.Context) (contracts.Writer, error)
 	writer contracts.Writer
-	batch  int
+	// Used only by the bounded UNIQUE path, after all UPDATEs hold SQLite's
+	// writer lock and before the single transaction may commit.
+	beforeCommit func(context.Context) error
+	batch        int
 }
 
 func (r *applyRun) close() {
@@ -746,6 +826,12 @@ func (r *applyRun) writeBatch(ctx context.Context, table contracts.TablePlan, or
 			err = contracts.ErrConflict
 		}
 		return false, err
+	}
+	if r.beforeCommit != nil {
+		if err := r.beforeCommit(ctx); err != nil {
+			_ = rollbackBounded(tx)
+			return false, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		if errors.Is(err, contracts.ErrCommitUnknown) {

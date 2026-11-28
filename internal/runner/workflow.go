@@ -35,6 +35,9 @@ type Engine struct {
 	// deliberately independent from approvals so a legacy record can never
 	// authorize the streaming path.
 	streamingApprovals StreamingApprovalQuery
+	// uniqueEmailEnabled opts only the legacy runner into Issue #113's bounded
+	// SQLite single-column UNIQUE path. CLI and streaming keep refusing it.
+	uniqueEmailEnabled bool
 }
 
 // OpenForApply opens the same readers as Open after letting SQLite recover a
