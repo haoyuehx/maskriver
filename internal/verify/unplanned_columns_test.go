@@ -18,6 +18,12 @@ type projectionReader struct {
 	requested bool
 }
 
+type strictBoundedReader struct{ *boundedReader }
+
+func (r *strictBoundedReader) IntegrityCheck(ctx context.Context, table contracts.TableRef) error {
+	return r.boundedReader.Reader.(integrityChecker).IntegrityCheck(ctx, table)
+}
+
 func (r *projectionReader) Page(ctx context.Context, req contracts.PageRequest) (contracts.Page, error) {
 	for _, name := range req.Columns {
 		if name == "name" {
@@ -104,7 +110,7 @@ func TestStrictUnplannedColumnsAcrossPages(t *testing.T) {
 	src, dst := newFakeReader(), newFakeReader()
 	src.addTable(ref, schema, originals)
 	dst.addTable(ref, schema, masked)
-	bs, bt := &boundedReader{Reader: src}, &boundedReader{Reader: dst}
+	bs, bt := &strictBoundedReader{&boundedReader{Reader: src}}, &strictBoundedReader{&boundedReader{Reader: dst}}
 	rep, err := New().Validate(context.Background(), bs, bt, contracts.ValidateRequest{Plan: peoplePlan(), Strict: true})
 	if err != nil || rep.Passed(true) || !hasIssue(rep, contracts.ConflictingEvidence) ||
 		rep.Coverage.Rows != int64(len(originals)) || bs.calls < 2 || bt.calls < 2 ||
